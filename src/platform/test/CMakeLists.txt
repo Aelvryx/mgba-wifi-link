@@ -38,7 +38,8 @@ if(BUILD_SUITE)
 			target_compile_definitions(test-${TEST_NAME} PRIVATE
 				GBA_LINK_TEST_ROM_PATH="${PROJECT_SOURCE_DIR}/tools/gba-link-test-rom/fixtures/gba-link-test.gba")
 		endif()
-		if(TEST_NAME STREQUAL "gba-replicated-pair-spike")
+		if(TEST_NAME STREQUAL "gba-replicated-pair-spike" OR
+		   TEST_NAME STREQUAL "gba-replicated-pair")
 			target_compile_definitions(test-${TEST_NAME} PRIVATE
 				GBA_LINK_CONTINUOUS_ROM_PATH="${PROJECT_SOURCE_DIR}/tools/gba-link-test-rom/fixtures/gba-link-continuous.gba")
 		endif()

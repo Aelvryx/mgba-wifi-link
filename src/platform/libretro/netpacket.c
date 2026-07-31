@@ -64,48 +64,31 @@ static bool _beginProtocol(
 
 static void _clearPreAdmission(
     struct mLibretroNetpacketAdapter* adapter) {
-	memset(&adapter->preAdmission, 0,
-	    sizeof(adapter->preAdmission));
+	GBALinkCopiedQueueDeinit(&adapter->preAdmission);
 }
 
 static bool _queuePreAdmission(
     struct mLibretroNetpacketAdapter* adapter,
     const void* data, size_t size) {
-	if (!data || size > GBA_LINK_MAX_PACKET_SIZE ||
-	    adapter->preAdmission.size >=
-	        GBA_LINK_MAX_COPIED_PACKETS) {
-		return false;
-	}
-	size_t index =
-	    (adapter->preAdmission.readIndex +
-	     adapter->preAdmission.size) %
-	    GBA_LINK_MAX_COPIED_PACKETS;
-	struct GBALinkCopiedPacket* packet =
-	    &adapter->preAdmission.packets[index];
-	packet->generation = adapter->callbackGeneration;
-	packet->size = size;
-	memcpy(packet->data, data, size);
-	++adapter->preAdmission.size;
-	return true;
+	return GBALinkCopiedQueuePush(
+	    &adapter->preAdmission, adapter->callbackGeneration,
+	    data, size);
 }
 
 static bool _drainPreAdmission(
     struct mLibretroNetpacketAdapter* adapter) {
-	while (adapter->preAdmission.size) {
-		struct GBALinkCopiedPacket* packet =
-		    &adapter->preAdmission.packets[
-		        adapter->preAdmission.readIndex];
+	struct GBALinkCopiedPacket packet;
+	memset(&packet, 0, sizeof(packet));
+	while (GBALinkCopiedQueuePop(&adapter->preAdmission, &packet)) {
 		if (!GBALinkTransportQueueInbound(
 		        &adapter->transport,
 		        adapter->callbackGeneration,
-		        packet->data, packet->size)) {
+		        packet.data, packet.size)) {
+			GBALinkCopiedPacketDeinit(&packet);
 			_clearPreAdmission(adapter);
 			return false;
 		}
-		adapter->preAdmission.readIndex =
-		    (adapter->preAdmission.readIndex + 1) %
-		    GBA_LINK_MAX_COPIED_PACKETS;
-		--adapter->preAdmission.size;
+		GBALinkCopiedPacketDeinit(&packet);
 	}
 	_clearPreAdmission(adapter);
 	return true;
@@ -718,7 +701,7 @@ static void RETRO_CALLCONV _receive(
 		if (!_queuePreAdmission(
 		        &_adapter, data, size)) {
 			enum GBALinkReason reason =
-			    size > GBA_LINK_MAX_PACKET_SIZE
+			    size > GBA_LINK_TRANSPORT_MAX_PACKET_SIZE
 			        ? GBA_LINK_REASON_OVERSIZED_PACKET
 			        : GBA_LINK_REASON_QUEUE_EXHAUSTED;
 			_diagnostic(

@@ -23,7 +23,7 @@ struct FakeTransport {
 	unsigned diagnosticCalls;
 	enum GBALinkReason diagnosticReason;
 	size_t sentSize;
-	uint8_t sent[GBA_LINK_MAX_PACKET_SIZE];
+	uint8_t sent[GBA_LINK_TRANSPORT_MAX_PACKET_SIZE];
 };
 
 static bool _sendReliable(void* context, const void* data, size_t size, bool flush) {
@@ -186,6 +186,7 @@ M_TEST_DEFINE(pollCopiesInboundBeforeReturn) {
 	assert_int_equal(packet.generation, 1);
 	assert_int_equal(packet.size, 4);
 	assert_memory_equal(packet.data, expected, sizeof(expected));
+	GBALinkCopiedPacketDeinit(&packet);
 	assert_false(GBALinkTransportPopInbound(&transport, &packet));
 	GBALinkTransportDeinit(&transport);
 }
@@ -235,7 +236,7 @@ M_TEST_DEFINE(oversizedPacketsFailClosed) {
 	struct GBALinkTransport transport;
 	struct FakeTransport fake;
 	_init(&transport, &fake);
-	uint8_t packet[GBA_LINK_MAX_PACKET_SIZE + 1] = {0};
+	uint8_t packet[GBA_LINK_TRANSPORT_MAX_PACKET_SIZE + 1] = {0};
 	assert_false(GBALinkTransportQueueInbound(
 	    &transport, 1, packet, sizeof(packet)));
 	assert_int_equal(

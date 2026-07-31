@@ -688,9 +688,12 @@ bool GBALinkSessionUpdate(
 		return false;
 	}
 	struct GBALinkCopiedPacket copied;
+	memset(&copied, 0, sizeof(copied));
 	while (GBALinkTransportPopInbound(
 	           session->transport, &copied)) {
-		if (!_processCopiedPacket(session, &copied)) {
+		bool processed = _processCopiedPacket(session, &copied);
+		GBALinkCopiedPacketDeinit(&copied);
+		if (!processed) {
 			return false;
 		}
 		if (session->yieldInbound) {

@@ -46,23 +46,23 @@
 
 ## 6. Add protocol-v2 codec and attachment state machine
 
-- [ ] 6.1 Increment the exact protocol compatibility version and add explicit v2 runtime/capability negotiation without automatic downgrade.
-- [ ] 6.2 Add fixed-width codecs for replica manifest, replica chunk, replica-installed, session-ready policy, input batch, state check, and v2 detach messages.
-- [ ] 6.3 Validate canonical Booleans, roles, player ownership, payload lengths, reserved fields, packet sequence, snapshot generation, chunk relation, input frame, and state-check frame before exposing typed data.
-- [ ] 6.4 Start the attachment deadline at peer admission and capture each assigned-player bundle at the first quiescent boundary.
-- [ ] 6.5 Exchange and verify both authoritative bundles while retaining the original single core as the rollback source.
-- [ ] 6.6 Construct provisional P0/P1 pairs identically on both endpoints and acknowledge their bundle digests before observable attachment.
-- [ ] 6.7 Implement `SESSION_READY`/ack and the first input-window release so neither endpoint executes the pair one-sided.
-- [ ] 6.8 Add fault injection at every manifest, chunk, installation, and final-readiness send/receive boundary, including synchronous stop and queue exhaustion.
+- [x] 6.1 Increment the exact protocol compatibility version and add explicit v2 runtime/capability negotiation without automatic downgrade.
+- [x] 6.2 Add fixed-width codecs for replica manifest, replica chunk, replica-installed, session-ready policy, input batch, state check, and v2 detach messages.
+- [x] 6.3 Validate canonical Booleans, roles, player ownership, payload lengths, reserved fields, packet sequence, snapshot generation, chunk relation, input frame, and state-check frame before exposing typed data.
+- [x] 6.4 Start the attachment deadline at peer admission and capture each assigned-player bundle at the first quiescent boundary.
+- [x] 6.5 Exchange and verify both authoritative bundles while retaining the original single core as the rollback source.
+- [x] 6.6 Construct provisional P0/P1 pairs identically on both endpoints and acknowledge their bundle digests before observable attachment.
+- [x] 6.7 Implement `SESSION_READY`/ack and the first input-window release so neither endpoint executes the pair one-sided.
+- [x] 6.8 Add fault injection at every manifest, chunk, installation, and final-readiness send/receive boundary, including synchronous stop and queue exhaustion.
 
 ## 7. Promote the selected scheduler into `GBAReplicatedPair`
 
-- [ ] 7.1 Create a transport-independent pair module owning two cores, coordinator, lockstep drivers/users, logical assignments, frame number, and deterministic lifecycle.
-- [ ] 7.2 Move the selected spike scheduler into the pair module and delete the unselected production candidate while retaining comparative evidence.
-- [ ] 7.3 Add APIs to install authoritative P0/P1 bundles, set both frame inputs, run to the next common frame boundary, query role output, and stop safely.
-- [ ] 7.4 Ensure SIO mode changes and every MULTI transfer use only the local lockstep coordinator in protocol v2.
-- [ ] 7.5 Add per-frame deterministic state traces and local SIO transfer/word/wait counters for tests and diagnostics.
-- [ ] 7.6 Verify common SIO mode gating, completion ownership, player IDs, line state, receive words, busy clearing, and IRQ behavior against existing local-lockstep tests.
+- [x] 7.1 Create a transport-independent pair module owning two cores, coordinator, lockstep drivers/users, logical assignments, frame number, and deterministic lifecycle.
+- [x] 7.2 Move the selected spike scheduler into the pair module and delete the unselected production candidate while retaining comparative evidence.
+- [x] 7.3 Add APIs to install authoritative P0/P1 bundles, set both frame inputs, run to the next common frame boundary, query role output, and stop safely.
+- [x] 7.4 Ensure SIO mode changes and every MULTI transfer use only the local lockstep coordinator in protocol v2.
+- [x] 7.5 Add per-frame deterministic state traces and local SIO transfer/word/wait counters for tests and diagnostics.
+- [x] 7.6 Verify common SIO mode gating, completion ownership, player IDs, line state, receive words, busy clearing, and IRQ behavior against existing local-lockstep tests.
 
 ## 8. Implement frame-input synchronization
 

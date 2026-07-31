@@ -574,6 +574,7 @@ static struct GBASIOStartResult GBASIOLockstepDriverStart(struct GBASIODriver* d
 	_enqueueEvent(coordinator, &event, TARGET_SECONDARY);
 	GBASIOLockstepCoordinatorWaitOnPlayers(coordinator, player);
 	coordinator->transferActive = true;
+	++coordinator->transferStarts;
 	result.ownership = GBA_SIO_START_COMMON;
 	result.effectivePeerCount = effectivePeerCount;
 out:
@@ -1032,6 +1033,7 @@ void GBASIOLockstepCoordinatorWaitOnPlayers(struct GBASIOLockstepCoordinator* co
 	if (coordinator->nAttached < 2) {
 		return;
 	}
+	++coordinator->waitEvents;
 
 	_advanceCycle(coordinator, player);
 	mLOG(GBA_SIO, DEBUG, "Primary waiting for players to ack");
@@ -1069,6 +1071,8 @@ void GBASIOLockstepCoordinatorAckPlayer(struct GBASIOLockstepCoordinator* coordi
 	if (!coordinator->waiting) {
 		mLOG(GBA_SIO, DEBUG, "All players acked, waking primary");
 		if (coordinator->transferActive) {
+			++coordinator->transferCompletions;
+			coordinator->transferredWords += coordinator->nAttached;
 			int i;
 			for (i = 0; i < coordinator->nAttached; ++i) {
 				if (!coordinator->attachedPlayers[i]) {

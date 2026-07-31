@@ -45,6 +45,12 @@ struct GBASIOLockstepCoordinator {
 
 	uint16_t multiData[4];
 	uint32_t normalData[4];
+
+	/* Diagnostic-only counters; they are not part of emulated state. */
+	uint64_t transferStarts;
+	uint64_t transferCompletions;
+	uint64_t transferredWords;
+	uint64_t waitEvents;
 };
 
 struct GBASIOLockstepEvent {

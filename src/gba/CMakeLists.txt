@@ -21,6 +21,7 @@ set(SOURCE_FILES
 	memory.c
 	overrides.c
 	replica.c
+	replicated-pair.c
 	renderers/cache-set.c
 	renderers/common.c
 	renderers/gl.c
@@ -40,7 +41,9 @@ set(NETPLAY_FILES
 	sio/netplay/driver.c
 	sio/netplay/identity.c
 	sio/netplay/protocol.c
+	sio/netplay/protocol-v2.c
 	sio/netplay/session.c
+	sio/netplay/session-v2.c
 	sio/netplay/timeline.c
 	sio/netplay/transport.c)
 
@@ -66,9 +69,12 @@ set(TEST_FILES
 	test/netplay-identity.c
 	test/netplay-integration.c
 	test/netplay-protocol.c
+	test/netplay-protocol-v2.c
 	test/netplay-session.c
+	test/netplay-session-v2.c
 	test/netplay-transport.c
 	test/replica.c
+	test/replicated-pair.c
 	test/replicated-pair-spike.c
 	test/sio.c)
 

@@ -111,12 +111,12 @@
 
 ## 13. Qualify the exact Android release candidate
 
-- [ ] 13.1 Build and hash the exact arm64 release candidate from the reviewed head and install only that core on both devices.
-- [ ] 13.2 Run a 30-minute continuous-transfer session and verify at least 59 displayed/emulated FPS, matching state checks, normal audio delivery, frame-scaled packets, and serial throughput within five percent of local baseline.
+- [x] 13.1 Build and hash the exact arm64 release candidate from the reviewed head and install only that core on both devices.
+- [x] 13.2 Run a 30-minute continuous-transfer session and verify at least 59 displayed/emulated FPS, matching state checks, normal audio delivery, frame-scaled packets, and serial throughput within five percent of local baseline.
 - [ ] 13.3 Run fresh-connect, multiplayer entry, gameplay, idle, peer-stop, and clean-exit scenarios in Bomberman as the fast-entry commercial title.
 - [ ] 13.4 Run the equivalent Four Swords qualification and confirm the former linking-screen one-FPS collapse is absent.
 - [ ] 13.5 Capture p50/p95/max input rendezvous, negotiated delay, packet/byte rate, CPU, peak memory, temperature, throttling, audio behavior, and save persistence for both devices.
-- [ ] 13.6 Confirm normal RetroArch controls/configuration and user saves remain untouched outside the installed release core.
+- [x] 13.6 Confirm normal RetroArch controls/configuration and user saves remain untouched outside the installed release core.
 
 ## 14. Release and review hygiene
 

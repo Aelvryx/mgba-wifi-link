@@ -195,7 +195,21 @@ Only player zero SHALL initiate a network MULTI transfer. Its `GBASIODriver.star
 - **THEN** the network driver does not create a transfer sequence
 - **AND** player zero remains the sole cable-clock initiator
 - **AND** the write retains busy as an existing wait-for-primary condition plus committed secondary line and ID state
+- **AND** the driver records that secondary-wait condition independently from network transfer state
 - **AND** it creates no network completion event or IRQ until a valid remote primary start arrives
+
+#### Scenario: Secondary wait is interrupted by idle disconnect
+- **WHEN** player one is busy in the tracked wait-for-primary condition and transport stops before any remote START is accepted
+- **THEN** detach clears MULTI busy synchronously and removes the pending secondary wait
+- **AND** no SIO completion event is scheduled or executed
+- **AND** no SIO IRQ is raised
+- **AND** receive words and the existing communication-error bit remain unchanged
+- **AND** SIOCNT ready/slave/ID and RCNT SC immediately expose the characterized disconnected line state
+
+#### Scenario: Remote START consumes a secondary wait
+- **WHEN** a valid player-zero `TRANSFER_START` arrives while player one is in the tracked wait-for-primary condition
+- **THEN** that condition becomes the accepted network transaction
+- **AND** the normal immutable-cycle remote-start and completion path applies instead of idle-detach cleanup
 
 #### Scenario: Primary starts before joint mode readiness
 - **WHEN** player zero writes MULTI start while attached but joint MULTI readiness is not committed

@@ -106,3 +106,16 @@
 - [x] 9.6 Select and document production candidate-horizon cadence and per-operation deadline defaults from Linux/Android measurements, leaving host-leading single-flight order, local scheduler values, and protocol compatibility unchanged.
 - [x] 9.7 Document upstream/header pins, installation, host/join flow, required frontend version/callbacks, exact-ROM MVP policy, compatibility/determinism rules, frozen settings and serialization, diagnostics, timeout categories, observable attachment, topology/effective counts, idle-detach registers, START point-of-no-return, completion catch-up/decision and terminal guarantee, deferred transfer modes, abort-visible registers, and every exclusion.
 - [x] 9.8 Run strict OpenSpec validation and review every scenario in both capability specs against automated or recorded manual evidence before marking implementation complete.
+
+## 10. Address Independent Implementation Review
+
+- [x] 10.1 Reconcile the proposal, design, session specification, and MULTI-link specification so the attachment deadline begins at peer admission and secondary wait-for-primary teardown has a complete observable register transition.
+- [x] 10.2 Track player one's independent MULTI START wait separately from accepted/emitted network transfers; on idle detach clear its orphaned busy bit, restore disconnected SIOCNT/RCNT lines, preserve receive words and communication error, and raise no IRQ.
+- [x] 10.3 Add `clientIndependentStartThenDisconnectRestoresIdleLines` coverage for busy, completion scheduling, IRQ, words, error, ready/slave/ID, and RCNT SC, plus coverage that a later valid remote START consumes the pending wait into normal completion.
+- [x] 10.4 Start the production transport/session and attachment deadline immediately after peer admission, let the session own repeated quiescent snapshots, pause execution only when the snapshot succeeds, and remove the adapter's unbounded pre-session quiescence gate.
+- [x] 10.5 Add fake-libretro tests proving a scheduled completion may become quiescent before the deadline, permanently busy MULTI times out, no post-timeout `HELLO` is emitted, current callbacks/provisional packets are invalidated, and diagnostics identify attachment/quiescent rendezvous.
+- [x] 10.6 Reject noncanonical one-byte Boolean encodings for every wire Boolean and add focused codec vectors for `MODE_INTENT.deferred`, `MODE_COMMIT.jointlyReady`, and `COMPLETION_READY.hasDeferredMode`.
+- [x] 10.7 Correct the validation matrix to distinguish sampled packet trace lines from authoritative per-sender packet counts and report the verified total/rate.
+- [x] 10.8 Add CI that builds and runs the focused normal netplay suites and an ASan/UBSan configuration on the final review head.
+- [ ] 10.9 Move the checked-in test-ROM fixture out of a generated `build/` directory, add a reproducibility check against a freshly generated ROM, and keep project-only `.codex` helpers outside the eventual upstream-facing patch stack.
+- [ ] 10.10 Rebase the upstream-facing patch stack onto the selected current mGBA master, update `UPSTREAM.md`, split the header/common-SIO/protocol/driver/adapter/tests changes into reviewable commits, run strict OpenSpec plus normal and sanitizer validation, and record the final results.

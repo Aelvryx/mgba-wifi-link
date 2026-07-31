@@ -13,10 +13,11 @@ mGBA already models generic local GBA link-cable transfers, but its libretro cor
 - Complete each transfer through an explicit host-at-completion catch-up, client-ready, and authoritative-decision exchange; scope equal outcomes to healthy delivery of the final decision and define terminal-partition behavior.
 - Commit cable-visible mode readiness through a barrier so neither peer can observe a latency-delayed mode change in its emulated past.
 - Defer the blocking mode barrier for writes discovered after transfer START, allowing both peers to reach the immutable completion cycle before committing the deferred mode generation.
-- Attach only from quiescent SIO boundaries, sample both current local modes as the initial mode generation, and keep the client paused after its final acknowledgement until the host releases execution.
+- Start the attachment deadline when a peer is admitted, attach only from a subsequently accepted quiescent SIO boundary, sample both current local modes as the initial mode generation, and keep the client paused after its final acknowledgement until the host releases execution.
 - Separate local event scheduling from frame-oriented network execution grants and from attachment, mode, transfer-start, and transfer-completion hard barriers.
 - Audit common mGBA SIO dispatch so a driver that does not handle the active mode is observationally equivalent to having no network driver for that mode.
 - Define `TRANSFER_START` emission as the point after which its announced completion cycle is immutable, and complete every later success or recoverable failure at that cycle through a hardware-informed SIO transition.
+- Track player one's pre-transfer wait-for-primary START condition and synchronously restore disconnected idle lines on teardown so that an idle transport failure cannot leave MULTI busy without a completion path.
 - Freeze timing-sensitive configuration for every non-disconnected session state, reject both state creation and state loading throughout that lifetime, and fail closed on callback, queue, or send failures.
 - Keep attached-session topology separate from the effective participant count that common SIO uses for line state and the current transfer's timing.
 - Pause emulation only at required conservative synchronization boundaries, favoring correctness over latency for the first release.

@@ -86,7 +86,7 @@ Before acceptance, both peers SHALL match the exact wire-protocol version, requi
 - **THEN** the MVP handshake is rejected before cable attachment
 
 ### Requirement: Atomic session attachment
-The core SHALL attach the network SIO driver only through an acknowledged common attach barrier entered from quiescent local SIO boundaries. Before sending `HELLO`, each core SHALL pause at a boundary with no active or scheduled SIO completion, MULTI busy clear, and no reset or unload transition; it SHALL snapshot the current local SIO mode there. A pending ordinary no-driver/no-peer transfer SHALL finish before attachment or the attachment deadline SHALL fail. After bilateral `HELLO`, the host SHALL send `ACCEPT` with a nonzero session ID, assignments, selected policy, and attach cycle; the client SHALL install it and send `ACCEPT_ACK`; the host SHALL send `SESSION_READY` with the initial mode generation; and the client SHALL send `SESSION_READY_ACK`. Player zero SHALL not pass the attach cycle before receiving the final acknowledgement. After sending the acknowledgement, player one SHALL remain paused and SHALL not expose attachment to executing GBA software until the first valid post-attachment initial-mode commit or execution grant arrives.
+The core SHALL attach the network SIO driver only through an acknowledged common attach barrier entered from quiescent local SIO boundaries. Initial peer admission SHALL create and start the transport-neutral session and its attachment deadline before a quiescent snapshot is available. The session SHALL repeatedly request that snapshot while allowing a pre-existing ordinary transfer to finish. Before sending `HELLO`, each core SHALL pause precisely at a boundary with no active or scheduled SIO completion, MULTI busy clear, and no reset or unload transition; it SHALL snapshot the current local SIO mode there. The adapter SHALL not impose a separate unbounded quiescence preflight. A pending ordinary no-driver/no-peer transfer SHALL finish before attachment or the session-owned attachment deadline SHALL fail. After bilateral `HELLO`, the host SHALL send `ACCEPT` with a nonzero session ID, assignments, selected policy, and attach cycle; the client SHALL install it and send `ACCEPT_ACK`; the host SHALL send `SESSION_READY` with the initial mode generation; and the client SHALL send `SESSION_READY_ACK`. Player zero SHALL not pass the attach cycle before receiving the final acknowledgement. After sending the acknowledgement, player one SHALL remain paused and SHALL not expose attachment to executing GBA software until the first valid post-attachment initial-mode commit or execution grant arrives.
 
 #### Scenario: Atomic attachment completes
 - **WHEN** both peers complete `ACCEPT`, `ACCEPT_ACK`, `SESSION_READY`, and `SESSION_READY_ACK` for the same nonzero session ID and attach cycle and player one receives the first valid post-attachment host release
@@ -102,6 +102,19 @@ The core SHALL attach the network SIO driver only through an acknowledged common
 - **WHEN** attachment is requested while a local SIO completion event is scheduled or MULTI busy is set
 - **THEN** that core does not install the network driver over the pending transfer
 - **AND** it waits for the existing completion only until the attachment deadline
+- **AND** it sends `HELLO` only if a quiescent snapshot succeeds before that deadline
+
+#### Scenario: Pending completion becomes quiescent in time
+- **WHEN** a scheduled standalone SIO completion finishes before the admission-started attachment deadline
+- **THEN** the session accepts the first subsequent quiescent snapshot
+- **AND** the core pauses at that snapshot boundary and sends exactly one `HELLO`
+
+#### Scenario: SIO never becomes quiescent
+- **WHEN** MULTI remains busy or a completion remains pending through the admission-started attachment deadline
+- **THEN** attachment fails with a quiescent-rendezvous timeout diagnostic
+- **AND** no `HELLO` is sent after expiry
+- **AND** current-generation callbacks, transport queues, and provisional pre-admission packets are invalidated
+- **AND** emulation resumes with the cable detached
 
 #### Scenario: Both games already use MULTI
 - **WHEN** both quiescent rendezvous snapshots report MULTI before driver installation
@@ -209,7 +222,7 @@ Inbound and outbound copied queues SHALL be bounded. Inbound queue exhaustion, o
 - **AND** any still-current inconsistent generation is invalidated
 
 ### Requirement: Operation-specific bounded waits
-Handshake, attachment, mode barrier, transfer readiness, transfer commit, completion catch-up/readiness, completion-decision delivery, and graceful detach SHALL each have an independently configurable wall-clock deadline under a three-second safety ceiling. A wait SHALL flush queued output, poll receive, process the queue after every poll, yield between empty polls, and never continue indefinitely.
+Handshake, attachment, mode barrier, transfer readiness, transfer commit, completion catch-up/readiness, completion-decision delivery, and graceful detach SHALL each have an independently configurable wall-clock deadline under a three-second safety ceiling. The attachment deadline SHALL begin when the peer is admitted and SHALL include the pre-HELLO wait for a quiescent SIO snapshot. A wait SHALL flush queued output, poll receive, process the queue after every poll, yield between empty polls, and never continue indefinitely.
 
 #### Scenario: Required packet arrives before its operation deadline
 - **WHEN** the valid packet for the active wait arrives before that operation's deadline

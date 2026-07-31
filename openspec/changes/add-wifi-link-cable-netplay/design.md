@@ -95,7 +95,18 @@ This is an upstream-quality common fix with direct regression tests, not a netwo
 
 Frontend client ID zero is player zero and host. The host accepts at most one remote frontend client and assigns it player one. A local transport-generation token increments on every Netpacket start/stop and invalidates queued work from earlier transports.
 
-On Netpacket start, each core enters a handshake rendezvous at its next quiescent SIO boundary. Quiescent means no active or scheduled SIO completion, MULTI busy clear, and no reset or unload transition. A pending ordinary no-driver/no-peer transfer is allowed to finish before the rendezvous; failure to become quiescent expires the attachment deadline. The core pauses at that boundary, snapshots its current local SIO mode and local cycle, and only then sends `HELLO`. This prevents an old completion from reaching a newly installed driver and ensures a game already in MULTI does not depend on a future `setMode` callback.
+An attachment attempt begins when the client starts toward player zero or the host admits frontend client one. The libretro adapter immediately creates and starts the transport-neutral session at that admission point, which starts the attachment deadline before quiescence is available. The session then repeatedly requests a quiescent SIO snapshot while ordinary emulation remains able to complete any pre-existing standalone transfer. Quiescent means no active or scheduled SIO completion, MULTI busy clear, and no reset or unload transition. When the snapshot first succeeds, the session pauses the core at that precise boundary, records the current local SIO mode and local cycle, and only then sends `HELLO`. Failure to become quiescent expires the same session-owned attachment deadline, sends no `HELLO`, invalidates the transport generation and provisional queues, and leaves the cable detached. This prevents an old completion from reaching a newly installed driver and ensures a game already in MULTI does not depend on a future `setMode` callback.
+
+The adapter does not preflight quiescence or maintain a second rendezvous deadline. Its execution-blocking decision follows the session/driver pause raised by the accepted snapshot: emulation continues before the snapshot so an ordinary pending completion can run, then stops before any later instruction can cross the accepted rendezvous.
+
+```text
+peer admitted
+    -> create/start transport and session
+    -> start attachment deadline
+    -> repeatedly request quiescent snapshot while emulation may run
+    -> snapshot succeeds: pause at that SIO boundary
+    -> send HELLO
+```
 
 `HELLO` and any rejection before acceptance use header `session_id = 0`. `ACCEPT` also uses header session ID zero and carries the proposed nonzero session ID in its payload; the client installs that ID before sending `ACCEPT_ACK`. Every subsequent packet uses the nonzero session ID. Both peers send `HELLO`, allowing each to learn the other's content identity, determinism categories, and initial mode snapshot. The host does not accept until it has both identities and quiescent snapshots.
 
@@ -174,6 +185,8 @@ Session messages are `HELLO`, `ACCEPT`, `ACCEPT_ACK`, `SESSION_READY`, `SESSION_
 
 Runtime messages are `EXECUTION_GRANT`, `GRANT_ACK`, `MODE_INTENT`, `MODE_COMMIT`, `MODE_ACK`, `TRANSFER_START`, `TRANSFER_READY`, `TRANSFER_COMMIT`, `TRANSFER_ABORT`, `COMPLETION_CATCHUP`, `COMPLETION_READY`, `COMPLETION_DECISION`, and `COMPLETION_DECISION_ACK`. `TRANSFER_ABORT` carries the transfer sequence, immutable authoritative completion cycle, and a stable reason code. Completion messages carry both transfer and completion-barrier sequences; the decision carries the authoritative success/error outcome and the final acknowledgement confirms that player one installed that decision. All use reliable ordered delivery; latency-sensitive messages use the flush hint.
 
+Every one-byte Boolean field has a canonical wire encoding: zero is false and one is true. The decoder rejects any other byte before exposing typed packet data, including `MODE_INTENT.deferred`, `MODE_COMMIT.jointlyReady`, and `COMPLETION_READY.hasDeferredMode`.
+
 ### 8. Separate local scheduling, network grants, and hard barriers
 
 Three timing concepts remain independent:
@@ -249,7 +262,7 @@ Every MULTI start path is classified before it changes state:
 | Player zero starts while detached or before committed joint MULTI readiness | No network sequence or START; the characterized ordinary no-driver/no-peer start path runs with `effective_transfer_peer_count = 0`. |
 | An earlier mode barrier resolves to not-both-MULTI while host `start()` is waiting | No START; `start()` releases to the same ordinary no-peer path with effective count zero. |
 | Player zero starts while ready | Successful network completion, post-START erroneous completion, or reset/unload cancellation. |
-| Player one independently writes start | Existing non-initiating secondary wait behavior: busy remains set while waiting for a primary clock, but there is no network sequence, remote start, completion event, or IRQ created by the network driver, and committed slave line/ID state is retained. |
+| Player one independently writes start | Existing non-initiating secondary wait behavior: the driver explicitly records `secondary_wait_pending`; busy remains set while waiting for a primary clock, but there is no network sequence, remote start, completion event, or IRQ, and committed slave line/ID state is retained. A later accepted remote START consumes this condition into the normal network transaction. Idle detach clears it synchronously as described below. |
 | Either peer leaves MULTI after START emission | The intent is deferred without blocking progress, the transfer error-completes at its announced completion cycle, and the mode generation commits before the next grant. |
 | A scheduled remote START and CPU mode write share cycle `T` | The already-scheduled START event runs first; the CPU write is a post-START deferred intent and makes the outcome erroneous at `C`. |
 | A scheduled completion and CPU mode write share a virtual cycle | Existing `mTiming` ordering is frozen by test: the already-due completion runs before the subsequent register write creates a new mode intent. |
@@ -298,7 +311,7 @@ The ordinary pre-START no-driver/no-peer path is deliberately distinct. The pinn
 
 Reset and unload are different: they cancel pending events and tear down immediately because the reset/unloaded machine cannot observe a completion IRQ.
 
-An idle detach has no transfer completion and raises no SIO IRQ. At the detach barrier—or immediately on an abrupt local transport failure—the driver synchronously installs the hardware-characterized disconnected line state for SIOCNT ID/ready/slave and RCNT SC while busy is already clear. It preserves the communication-error flag and receive words because no transfer completed. Register reads immediately after detach must observe disconnected state without requiring a later SIOCNT write.
+An idle detach has no transfer completion and raises no SIO IRQ. At the detach barrier—or immediately on an abrupt local transport failure—the driver synchronously installs the hardware-characterized disconnected line state for SIOCNT ID/ready/slave and RCNT SC. Ordinarily busy is already clear. If player one instead has the explicitly tracked `secondary_wait_pending` condition—MULTI busy, no emitted or accepted network START, and no scheduled SIO completion—the detach path clears busy synchronously before removing the driver. It clears only that orphaned wait: receive words and the communication-error flag are preserved, no completion event is created or run, and no SIO IRQ is raised. An accepted/emitted network START never uses this shortcut and retains its immutable-cycle completion semantics. Register reads immediately after detach must observe disconnected state without requiring a later SIOCNT write.
 
 ### 12. Use operation-specific bounded waits and transport generations
 
@@ -317,7 +330,7 @@ Separate configurable deadlines cover:
 - completion-decision delivery;
 - graceful detach.
 
-Defaults are selected from spike measurements and each remains below a three-second safety ceiling. Tests inject a fake monotonic clock and configure each deadline independently. User messages can say “link timed out,” while logs identify the operation and generation.
+The attachment deadline begins at initial peer admission and includes the entire wait for a quiescent snapshot as well as the later attach barrier. There is no unbounded adapter-owned pre-session interval. Defaults are selected from spike measurements and each remains below a three-second safety ceiling. Tests inject a fake monotonic clock and configure each deadline independently. User messages can say “link timed out,” while logs identify the operation and generation.
 
 The production defaults selected from localhost and two-device Wi-Fi
 qualification are:
@@ -353,10 +366,10 @@ Testing proceeds in layers:
 
 - The Phase 0 spike proves current RetroArch lifecycle and Android installation before production architecture.
 - Common SIO tests compare every unsupported mode with an otherwise identical no-driver core and characterize error-completion registers.
-- Codec tests and fuzzing cover all messages, sizes, fields, and independent counters.
-- Atomic-session tests cover quiescent rendezvous, initial mode snapshots, bilateral HELLO, final-ack pause, every interrupted handshake edge, policy/profile mismatch, frozen settings, duplicates, transport generations, bounded-queue failures, and operation-specific deadlines.
+- Codec tests and fuzzing cover all messages, sizes, fields, canonical Boolean bytes, and independent counters.
+- Atomic-session tests cover the admission-started quiescent rendezvous deadline, pending completion becoming quiescent before expiry, permanently busy timeout without `HELLO`, initial mode snapshots, bilateral HELLO, final-ack pause, every interrupted handshake edge, policy/profile mismatch, frozen settings, duplicates, transport generations, provisional/copy-queue invalidation, bounded-queue failures, and operation-specific deadlines.
 - Grant and mode tests vary delivery latency around fixed logical events and prove host-leading single-flight order, non-blocking deferred transfer intents, frozen START/mode tie ordering, identical committed cycles, and identical host observations.
-- Two-core driver tests cover every baud, separate topology/effective counts, the complete start-state table, start/ready/commit/abort/catch-up/decision barriers, client progress from `T` to `C`, normal common completion, immutable post-START cycles, terminal final-message outcomes, idle detach cleanup, and IRQ counts.
+- Two-core driver tests cover every baud, separate topology/effective counts, the complete start-state table, start/ready/commit/abort/catch-up/decision barriers, client progress from `T` to `C`, normal common completion, immutable post-START cycles, terminal final-message outcomes, ordinary idle detach and secondary-wait detach cleanup, and IRQ counts.
 - A redistributable GBA test ROM records player IDs, mode readiness, words, timing, errors, and IRQs.
 - Deterministic trace replay and fault injection vary delivery latency/jitter, delay/duplicate messages, and stop at every poll/barrier phase.
 - Linux localhost, real LAN, and Android Wi-Fi qualification follow, with commercial ROMs used only for manual smoke tests.

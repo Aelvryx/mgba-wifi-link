@@ -168,6 +168,26 @@ static void _deinitFixture(struct PairFixture* fixture) {
 	}
 }
 
+static void _recapturePlayer(
+		struct PairFixture* fixture, unsigned player) {
+	GBAReplicaPayloadDeinit(&fixture->payloads[player]);
+	GBAReplicaBundleDeinit(&fixture->bundles[player]);
+	assert_true(GBAReplicaIsQuiescent(fixture->sources[player]));
+	assert_int_equal(
+	    GBAReplicaCapture(
+	        fixture->sources[player], player, 77,
+	        GBA_REPLICA_ENCODING_NONE,
+	        GBA_REPLICA_DEFAULT_CHUNK_SIZE,
+	        &fixture->bundles[player]),
+	    GBA_REPLICA_OK);
+	assert_int_equal(
+	    _assemble(
+	        &fixture->bundles[player],
+	        &fixture->payloads[player]),
+	    GBA_REPLICA_OK);
+	fixture->manifests[player] = fixture->bundles[player].manifest;
+}
+
 static void _install(
 	struct GBAReplicatedPair* pair, struct PairFixture* fixture) {
 	GBAReplicatedPairInit(pair);
@@ -262,12 +282,126 @@ M_TEST_DEFINE(frameInputsAdvanceExactlyOnceAndRejectConflicts) {
 	};
 	assert_int_equal(
 	    GBAReplicatedPairRunFrame(&pair), GBA_REPLICATED_PAIR_OK);
+	assert_int_equal(pair.lastRunResult, GBA_REPLICATED_PAIR_OK);
 	for (unsigned i = 0; i < 2; ++i) {
 		assert_int_equal(
 		    pair.players[i].core->frameCounter(pair.players[i].core),
 		    before[i] + 1);
 	}
 	assert_int_equal(pair.frameNumber, 1);
+	GBAReplicatedPairStop(&pair);
+	_deinitFixture(&fixture);
+}
+
+M_TEST_DEFINE(frameFailureRetainsSchedulerDiagnostics) {
+	struct PairFixture fixture;
+	_initFixture(&fixture);
+	struct GBAReplicatedPair pair;
+	_install(&pair, &fixture);
+	assert_int_equal(
+	    GBAReplicatedPairSetInputs(&pair, 0, 0, 0),
+	    GBA_REPLICATED_PAIR_OK);
+	pair.players[0].user.asleep = true;
+	pair.players[1].user.asleep = true;
+	assert_int_equal(
+	    GBAReplicatedPairRunFrame(&pair),
+	    GBA_REPLICATED_PAIR_DEADLOCK);
+	assert_int_equal(
+	    pair.lastRunResult, GBA_REPLICATED_PAIR_DEADLOCK);
+	assert_int_equal(pair.failureIteration, 0);
+	assert_int_equal(pair.startingFrames[0], pair.observedFrames[0]);
+	assert_int_equal(pair.startingFrames[1], pair.observedFrames[1]);
+	pair.players[0].user.asleep = false;
+	pair.players[1].user.asleep = false;
+	GBAReplicatedPairStop(&pair);
+	_deinitFixture(&fixture);
+}
+
+M_TEST_DEFINE(staggeredSnapshotFramesDoNotOvershootLogicalFrames) {
+	struct PairFixture fixture;
+	_initFixture(&fixture);
+	for (unsigned frame = 0; frame < 18; ++frame) {
+		fixture.sources[1]->runFrame(fixture.sources[1]);
+	}
+	_recapturePlayer(&fixture, 1);
+	struct GBAReplicatedPair pair;
+	_install(&pair, &fixture);
+	for (uint64_t frame = 0; frame < 600; ++frame) {
+		assert_int_equal(
+		    GBAReplicatedPairSetInputs(&pair, frame, 0, 0),
+		    GBA_REPLICATED_PAIR_OK);
+		assert_int_equal(
+		    GBAReplicatedPairRunFrame(&pair),
+		    GBA_REPLICATED_PAIR_OK);
+	}
+	GBAReplicatedPairStop(&pair);
+	_deinitFixture(&fixture);
+}
+
+M_TEST_DEFINE(singleFrameLeadIsConsumedWithoutSessionFailure) {
+	struct PairFixture fixture;
+	_initFixture(&fixture);
+	struct GBAReplicatedPair first;
+	struct GBAReplicatedPair second;
+	_install(&first, &fixture);
+	_install(&second, &fixture);
+	struct GBA* firstP0 = first.players[0].core->board;
+	struct GBA* firstP1 = first.players[1].core->board;
+	struct GBA* secondP0 = second.players[0].core->board;
+	struct GBA* secondP1 = second.players[1].core->board;
+	/* Model P0 one frame beyond its target after P1 reaches its target. */
+	firstP0->video.frameCounter += 2;
+	firstP1->video.frameCounter += 1;
+	secondP0->video.frameCounter += 2;
+	secondP1->video.frameCounter += 1;
+	for (uint64_t frame = 0; frame < 120; ++frame) {
+		assert_int_equal(
+		    GBAReplicatedPairSetInputs(&first, frame, 0, 0),
+		    GBA_REPLICATED_PAIR_OK);
+		assert_int_equal(
+		    GBAReplicatedPairSetInputs(&second, frame, 0, 0),
+		    GBA_REPLICATED_PAIR_OK);
+		assert_int_equal(
+		    GBAReplicatedPairRunFrame(&first),
+		    GBA_REPLICATED_PAIR_OK);
+		assert_int_equal(
+		    GBAReplicatedPairRunFrame(&second),
+		    GBA_REPLICATED_PAIR_OK);
+		assert_memory_equal(
+		    first.stateTrace, second.stateTrace,
+		    sizeof(first.stateTrace));
+	}
+	assert_int_equal(first.recoveredFrameLeads[0], 1);
+	assert_int_equal(first.recoveredFrameLeads[1], 0);
+	assert_memory_equal(
+	    first.recoveredFrameLeads, second.recoveredFrameLeads,
+	    sizeof(first.recoveredFrameLeads));
+	assert_int_equal(
+	    first.nextFrameCounters[0], firstP0->video.frameCounter + 1);
+	GBAReplicatedPairStop(&second);
+	GBAReplicatedPairStop(&first);
+	_deinitFixture(&fixture);
+}
+
+M_TEST_DEFINE(multipleFrameLeadStillFailsClosed) {
+	struct PairFixture fixture;
+	_initFixture(&fixture);
+	struct GBAReplicatedPair pair;
+	_install(&pair, &fixture);
+	struct GBA* p0 = pair.players[0].core->board;
+	struct GBA* p1 = pair.players[1].core->board;
+	p0->video.frameCounter += 3;
+	p1->video.frameCounter += 1;
+	assert_int_equal(
+	    GBAReplicatedPairSetInputs(&pair, 0, 0, 0),
+	    GBA_REPLICATED_PAIR_OK);
+	assert_int_equal(
+	    GBAReplicatedPairRunFrame(&pair),
+	    GBA_REPLICATED_PAIR_FRAME_OVERSHOOT);
+	assert_int_equal(
+	    pair.lastRunResult, GBA_REPLICATED_PAIR_FRAME_OVERSHOOT);
+	assert_int_equal(pair.failureIteration, 0);
+	assert_int_equal(pair.recoveredFrameLeads[0], 0);
 	GBAReplicatedPairStop(&pair);
 	_deinitFixture(&fixture);
 }
@@ -625,6 +759,10 @@ M_TEST_DEFINE(invalidBundleOrderFailsWithoutPartialLifetime) {
 M_TEST_SUITE_DEFINE_SETUP_TEARDOWN(GBAReplicatedPair,
 	cmocka_unit_test(installsCanonicalP0P1LocalLockstepPair),
 	cmocka_unit_test(frameInputsAdvanceExactlyOnceAndRejectConflicts),
+	cmocka_unit_test(frameFailureRetainsSchedulerDiagnostics),
+	cmocka_unit_test(staggeredSnapshotFramesDoNotOvershootLogicalFrames),
+	cmocka_unit_test(singleFrameLeadIsConsumedWithoutSessionFailure),
+	cmocka_unit_test(multipleFrameLeadStillFailsClosed),
 	cmocka_unit_test(continuousMultiTransfersPreserveHardwareSemantics),
 	cmocka_unit_test(perFrameStateTraceIsRepeatable),
 	cmocka_unit_test(canonicalDigestsCoverFutureStateOnly),

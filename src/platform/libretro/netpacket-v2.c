@@ -554,18 +554,45 @@ static void _logRuntimeSummary(
 	}
 	snprintf(message, sizeof(message),
 	    "%s P%u rv=%" PRIu64 "/%" PRIu64 "ms max=%" PRIu64
-	    " q=%zu in=%u/%u audio=%" PRIu64 "/%" PRIu64
+	    " q=%zu in=%u/%u lead=%" PRIu64 "/%" PRIu64
+	    " audio=%" PRIu64 "/%" PRIu64
 	    "/%" PRIu64 " wait=%" PRIu64 " run=%" PRIu64 "/%" PRIu64,
 	    event ? event : "runtime", adapter->session.localRole,
 	    adapter->metrics.rendezvousCount,
 	    adapter->metrics.rendezvousTotalMs,
 	    adapter->metrics.rendezvousMaxMs,
 	    adapter->metrics.queueHighWater, inputDepth[0], inputDepth[1],
+	    pair.recoveredFrameLeads[0], pair.recoveredFrameLeads[1],
 	    adapter->metrics.audioSamples,
 	    adapter->metrics.audioFrames,
 	    adapter->metrics.emptyAudioFrames,
 	    pair.waitEvents,
 	    pair.runLoops[0], pair.runLoops[1]);
+	_log(RETRO_LOG_INFO, message);
+	struct GBA* gbas[2] = {
+		adapter->pair.players[0].core
+		    ? adapter->pair.players[0].core->board : NULL,
+		adapter->pair.players[1].core
+		    ? adapter->pair.players[1].core->board : NULL,
+	};
+	snprintf(message, sizeof(message),
+	    "%s lines P%u mode=%d/%d cnt=%04x/%04x rcnt=%04x/%04x"
+	    " id=%d/%d attached=%d coord=%d active=%u waiting=%08x",
+	    event ? event : "runtime", adapter->session.localRole,
+	    gbas[0] ? (int) gbas[0]->sio.mode : -1,
+	    gbas[1] ? (int) gbas[1]->sio.mode : -1,
+	    gbas[0] ? gbas[0]->sio.siocnt : 0,
+	    gbas[1] ? gbas[1]->sio.siocnt : 0,
+	    gbas[0] ? gbas[0]->sio.rcnt : 0,
+	    gbas[1] ? gbas[1]->sio.rcnt : 0,
+	    adapter->pair.players[0].driver.d.deviceId(
+	        &adapter->pair.players[0].driver.d),
+	    adapter->pair.players[1].driver.d.deviceId(
+	        &adapter->pair.players[1].driver.d),
+	    adapter->pair.coordinator.nAttached,
+	    adapter->pair.coordinator.transferMode,
+	    adapter->pair.coordinator.transferActive,
+	    adapter->pair.coordinator.waiting);
 	_log(RETRO_LOG_INFO, message);
 	char traces[2][MGBA_SHA256_DIGEST_SIZE * 2 + 1];
 	_digestText(pair.stateTrace[0], traces[0]);
@@ -1270,12 +1297,54 @@ bool mLibretroNetpacketV2RunFrame(uint16_t keys) {
 	}
 	GBALinkV2SessionRuntimeDeadlineSatisfied(
 	    &_adapter.session, GBA_LINK_V2_DEADLINE_INPUT);
-	if (GBAReplicatedRuntimeRunFrame(&_adapter.runtime) !=
-	    GBA_REPLICATED_RUNTIME_OK) {
+	enum GBAReplicatedRuntimeResult runResult =
+	    GBAReplicatedRuntimeRunFrame(&_adapter.runtime);
+	if (runResult != GBA_REPLICATED_RUNTIME_OK) {
+		struct GBAReplicatedPair* pair = &_adapter.pair;
+		struct GBA* p0 = pair->players[0].core
+		    ? pair->players[0].core->board : NULL;
+		struct GBA* p1 = pair->players[1].core
+		    ? pair->players[1].core->board : NULL;
+		char detail[512];
+		snprintf(detail, sizeof(detail),
+		    "runtime=%s pair=%s frame=%" PRIu64
+		    " iteration=%" PRIu64 " counters=%" PRIu32
+		    "/%" PRIu32 "->%" PRIu32 "/%" PRIu32
+		    " targets=%" PRIu32 "/%" PRIu32
+		    " recovered=%" PRIu64 "/%" PRIu64
+		    " asleep=%u/%u sio_mode=%d/%d siocnt=%04x/%04x"
+		    " complete=%u/%u lockstep=%u/%u waiting=%08x"
+		    " active=%u transfer_mode=%d cable=%08x",
+		    GBAReplicatedRuntimeResultName(runResult),
+		    GBAReplicatedPairResultName(_adapter.runtime.lastPairResult),
+		    pair->frameNumber, pair->failureIteration,
+		    pair->startingFrames[0], pair->startingFrames[1],
+		    pair->observedFrames[0], pair->observedFrames[1],
+		    pair->nextFrameCounters[0], pair->nextFrameCounters[1],
+		    pair->recoveredFrameLeads[0],
+		    pair->recoveredFrameLeads[1],
+		    pair->players[0].user.asleep,
+		    pair->players[1].user.asleep,
+		    p0 ? (int) p0->sio.mode : -1,
+		    p1 ? (int) p1->sio.mode : -1,
+		    p0 ? p0->sio.siocnt : 0, p1 ? p1->sio.siocnt : 0,
+		    p0 && mTimingIsScheduled(
+		        &p0->timing, &p0->sio.completeEvent),
+		    p1 && mTimingIsScheduled(
+		        &p1->timing, &p1->sio.completeEvent),
+		    p0 && mTimingIsScheduled(
+		        &p0->timing, &pair->players[0].driver.event),
+		    p1 && mTimingIsScheduled(
+		        &p1->timing, &pair->players[1].driver.event),
+		    pair->coordinator.waiting,
+		    pair->coordinator.transferActive,
+		    pair->coordinator.transferMode,
+		    (uint32_t) pair->coordinator.cycle);
+		_log(RETRO_LOG_ERROR, detail);
 		GBALinkV2SessionFail(
 		    &_adapter.session,
 		    GBA_LINK_V2_REASON_INVALID_TRANSITION,
-		    "replicated pair frame failed");
+		    detail);
 		_finishFailed();
 		return false;
 	}

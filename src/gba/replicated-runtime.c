@@ -124,9 +124,12 @@ enum GBAReplicatedRuntimeResult GBAReplicatedRuntimeRunFrame(
 	}
 	if (GBAReplicatedPairSetInputs(
 	        runtime->pair, frame, keys[0], keys[1]) !=
-	        GBA_REPLICATED_PAIR_OK ||
-	    GBAReplicatedPairRunFrame(runtime->pair) !=
 	        GBA_REPLICATED_PAIR_OK) {
+		runtime->lastPairResult = GBA_REPLICATED_PAIR_INVALID_STATE;
+		return GBA_REPLICATED_RUNTIME_PAIR_FAILED;
+	}
+	runtime->lastPairResult = GBAReplicatedPairRunFrame(runtime->pair);
+	if (runtime->lastPairResult != GBA_REPLICATED_PAIR_OK) {
 		return GBA_REPLICATED_RUNTIME_PAIR_FAILED;
 	}
 	runtime->authoredCurrentFrame = false;

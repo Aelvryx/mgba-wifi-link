@@ -229,17 +229,17 @@ client_pid=$!
 wait "$host_pid"
 wait "$client_pid"
 
-cp tools/replicated-pair-diagnostic/core-options.cfg \
-  /tmp/mgba-replicated-pair-baseline-core-options.cfg
-"$retroarch" -v \
-  --config tools/replicated-pair-diagnostic/retroarch-desktop.cfg \
-  --max-frames=108000 -L "$core" "$rom" \
-  > /tmp/mgba-v2-baseline.log 2>&1
-
 python3 tools/analyze-replicated-netplay.py \
-  /tmp/mgba-v2-host.log /tmp/mgba-v2-client.log \
-  --baseline /tmp/mgba-v2-baseline.log
+  /tmp/mgba-v2-host.log /tmp/mgba-v2-client.log
 ```
+
+The release core no longer exposes the temporary local-pair diagnostic option.
+The transport-independent `test-gba-replicated-pair-spike` and
+`test-libretro-replicated-pair-spike` targets retain that scheduler and
+frontend-boundary coverage without adding a user-visible release switch. The
+analyzer's optional `--baseline` input remains available for comparing a run
+with a captured `replicated-pair diagnostic` summary such as the exact
+qualification evidence recorded below.
 
 The analyzer exits nonzero for fewer than 108,000 common frames, a missing or
 different sampled trace, mismatched serial counters, inadequate verification

@@ -12,8 +12,10 @@ The tested source snapshot was based on
 `380fe9a8b1c9807c1d72f1ddae5f21bf2fd8f875`, with Git tree object
 `63d5ac7a6955be1de8a8b2cafeae49c20ffee1ac` and staged binary-diff SHA-256
 `874f86cc2eb7f3849b3c785f1b5c11dc48d2b7f44e13f03d4c2fb8e521267971`.
-The diagnostic option is disabled by default and does not alter the protocol-v1
-runtime unless explicitly enabled before content load.
+The temporary diagnostic option was disabled by default and did not alter the
+protocol-v1 runtime unless explicitly enabled before content load. It was
+removed from the release core after this gate passed; equivalent local-pair
+coverage remains in the focused test targets.
 
 Two clean ARM64 Release build directories used Android NDK r27
 (`27.0.12077973`), Clang 18.0.1, API 21, and the same CMake inputs. Removing

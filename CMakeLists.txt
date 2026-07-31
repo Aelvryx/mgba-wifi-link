@@ -1021,6 +1021,9 @@ endif()
 
 if(BUILD_LIBRETRO)
 	file(GLOB RETRO_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/platform/libretro/*.c)
+	# The replicated-pair spike is a test harness, not part of the release core.
+	list(REMOVE_ITEM RETRO_SRC
+		${CMAKE_CURRENT_SOURCE_DIR}/src/platform/libretro/replicated-pair-spike.c)
 	add_library(${BINARY_NAME}_libretro SHARED
 		${CORE_SRC} ${RETRO_SRC} ${CORE_VFS_SRC} ${GBA_LOCKSTEP_SRC} ${GBA_NETPLAY_SRC})
 	add_dependencies(${BINARY_NAME}_libretro ${BINARY_NAME}-version-info)

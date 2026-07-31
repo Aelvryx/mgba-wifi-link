@@ -75,6 +75,17 @@ static void fail(uint32_t code) {
 	}
 }
 
+#ifdef GBA_LINK_CONTINUOUS
+#define FAIL_OR_RETRY(code) do { \
+	if (!result->observableAttachments) { \
+		goto retryAttachment; \
+	} \
+	fail(code); \
+} while (0)
+#else
+#define FAIL_OR_RETRY(code) fail(code)
+#endif
+
 static uint16_t outgoingWord(unsigned playerId, unsigned baud, unsigned transfer) {
 	return (uint16_t) (
 	    ((playerId + 1U) << 12) |
@@ -93,9 +104,17 @@ void main(void) {
 	result->version = RESULT_VERSION;
 	result->status = STATUS_BOOT;
 
+#ifdef GBA_LINK_CONTINUOUS
+retryAttachment:
+#endif
+	result->status = STATUS_WAITING;
+	result->effectiveParticipants = 0;
+	result->dataErrors = 0;
+	result->missedIrqs = 0;
+	result->duplicateIrqs = 0;
+	result->timeouts = 0;
 	REG_RCNT = 0;
 	REG_SIOCNT = SIOCNT_MULTI | SIOCNT_IRQ;
-	result->status = STATUS_WAITING;
 	while (!(REG_SIOCNT & SIOCNT_READY) ||
 	       ((REG_SIOCNT & SIOCNT_SLAVE) &&
 	        !(REG_SIOCNT & SIOCNT_ID_MASK))) {
@@ -110,10 +129,12 @@ void main(void) {
 	unsigned playerId =
 	    (REG_SIOCNT & SIOCNT_ID_MASK) >> 4;
 	if (playerId > 1) {
-		fail(2);
+		FAIL_OR_RETRY(2);
 	}
 	result->playerId = playerId;
-	result->observableAttachments = 1;
+	if (playerId == 1) {
+		result->observableAttachments = 1;
+	}
 	result->status = STATUS_RUNNING;
 
 	do {
@@ -151,7 +172,7 @@ void main(void) {
 			}
 			if (!spins) {
 				++result->timeouts;
-				fail(3);
+				FAIL_OR_RETRY(3);
 			}
 			++result->busyObservations;
 
@@ -162,7 +183,7 @@ void main(void) {
 			    SPIN_LIMIT - spins;
 			if (!spins) {
 				++result->timeouts;
-				fail(4);
+				FAIL_OR_RETRY(4);
 			}
 
 			result->lastSIOCNT = REG_SIOCNT;
@@ -177,6 +198,11 @@ void main(void) {
 			    outgoingWord(1, baud, transfer);
 			result->expected[2] = 0xFFFF;
 			result->expected[3] = 0xFFFF;
+			if (result->received[0] != 0xFFFF &&
+			    result->received[1] != 0xFFFF) {
+				result->observableAttachments = 1;
+				result->effectiveParticipants = 2;
+			}
 
 			for (unsigned i = 0; i < 4; ++i) {
 				if (result->received[i] !=
@@ -213,13 +239,13 @@ void main(void) {
 				++result->duplicateIrqs;
 				REG_IF = IRQ_SERIAL;
 			}
-				++result->transfers;
-				result->baudMask |= 1U << baud;
 				if (result->dataErrors ||
 				    result->missedIrqs ||
 				    result->duplicateIrqs) {
-					fail(5);
+					FAIL_OR_RETRY(5);
 				}
+				++result->transfers;
+				result->baudMask |= 1U << baud;
 			}
 		}
 #ifdef GBA_LINK_CONTINUOUS

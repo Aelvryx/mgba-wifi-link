@@ -13,6 +13,8 @@
 
 enum {
 	GBA_REPLICATED_PAIR_MAX_RUN_LOOPS = 4000000,
+	GBA_REPLICATED_PAIR_VIDEO_WIDTH = 256,
+	GBA_REPLICATED_PAIR_VIDEO_HEIGHT = 224,
 };
 
 static int _requestedId(struct mLockstepUser* user) {
@@ -58,7 +60,7 @@ void GBAReplicatedPairInit(struct GBAReplicatedPair* pair) {
 }
 
 static bool _copyTemplateAssets(
-	struct GBAReplicatedPair* pair, const struct mCore* templateCore) {
+	struct GBAReplicatedPair* pair, struct mCore* templateCore) {
 	if (!templateCore || !templateCore->platform ||
 	    templateCore->platform(templateCore) != mPLATFORM_GBA ||
 	    !templateCore->board || !templateCore->romSize) {
@@ -87,7 +89,7 @@ static bool _copyTemplateAssets(
 
 static enum GBAReplicatedPairResult _createPlayer(
 	struct GBAReplicatedPair* pair, unsigned playerId,
-	const struct mCore* templateCore,
+	struct mCore* templateCore,
 	const struct GBAReplicaManifest* manifest,
 	const struct GBAReplicaPayload* payload) {
 	struct GBAReplicatedPairPlayer* player = &pair->players[playerId];
@@ -120,12 +122,29 @@ static enum GBAReplicatedPairResult _createPlayer(
 	        player->core, player->temporarySave)) {
 		return GBA_REPLICATED_PAIR_CORE_FAILED;
 	}
+	player->videoBuffer = malloc(
+	    GBA_REPLICATED_PAIR_VIDEO_WIDTH *
+	    GBA_REPLICATED_PAIR_VIDEO_HEIGHT *
+	    sizeof(*player->videoBuffer));
+	if (!player->videoBuffer) {
+		return GBA_REPLICATED_PAIR_ALLOCATION_FAILED;
+	}
+	player->core->setVideoBuffer(
+	    player->core, player->videoBuffer,
+	    GBA_REPLICATED_PAIR_VIDEO_WIDTH);
+	player->core->setAudioBufferSize(
+	    player->core, templateCore->getAudioBufferSize(templateCore));
 	player->core->reset(player->core);
 	if (GBAReplicaRestore(
 	        player->core, manifest, payload, playerId,
 	        pair->snapshotGeneration) != GBA_REPLICA_OK) {
 		return GBA_REPLICATED_PAIR_RESTORE_FAILED;
 	}
+	struct GBA* gba = player->core->board;
+	player->observedSaveType = gba->memory.savedata.type;
+	player->observedSaveDirty = gba->memory.savedata.dirty;
+	player->observedSaveDirtAge = gba->memory.savedata.dirtAge;
+	player->saveGeneration = 1;
 	player->user.requestedId = playerId;
 	player->user.d.requestedId = _requestedId;
 	player->user.d.sleep = _sleep;
@@ -139,7 +158,7 @@ static enum GBAReplicatedPairResult _createPlayer(
 }
 
 enum GBAReplicatedPairResult GBAReplicatedPairInstall(
-	struct GBAReplicatedPair* pair, const struct mCore* templateCore,
+	struct GBAReplicatedPair* pair, struct mCore* templateCore,
 	const struct GBAReplicaManifest manifests[2],
 	const struct GBAReplicaPayload payloads[2], uint64_t generation) {
 	if (!pair || !templateCore || !manifests || !payloads || !generation) {
@@ -223,6 +242,20 @@ static void _recordTrace(
 	free(state);
 }
 
+static void _updateSaveGeneration(
+		struct GBAReplicatedPairPlayer* player) {
+	struct GBASavedata* savedata =
+	    &((struct GBA*) player->core->board)->memory.savedata;
+	if (savedata->type != player->observedSaveType ||
+	    savedata->dirty != player->observedSaveDirty ||
+	    savedata->dirtAge != player->observedSaveDirtAge) {
+		++player->saveGeneration;
+		player->observedSaveType = savedata->type;
+		player->observedSaveDirty = savedata->dirty;
+		player->observedSaveDirtAge = savedata->dirtAge;
+	}
+}
+
 enum GBAReplicatedPairResult GBAReplicatedPairRunFrame(
 	struct GBAReplicatedPair* pair) {
 	if (!pair || !pair->installed || pair->stopped || !pair->inputsReady ||
@@ -251,6 +284,8 @@ enum GBAReplicatedPairResult GBAReplicatedPairRunFrame(
 		if (complete[0] && complete[1]) {
 			++pair->frameNumber;
 			pair->inputsReady = false;
+			_updateSaveGeneration(&pair->players[0]);
+			_updateSaveGeneration(&pair->players[1]);
 			_recordTrace(pair, 0);
 			_recordTrace(pair, 1);
 			return GBA_REPLICATED_PAIR_OK;
@@ -290,6 +325,183 @@ const struct mCore* GBAReplicatedPairCoreConst(
 	    : NULL;
 }
 
+mColor* GBAReplicatedPairVideoBuffer(
+	struct GBAReplicatedPair* pair, uint8_t player) {
+	return pair && pair->installed && !pair->stopped && player < 2
+	    ? pair->players[player].videoBuffer
+	    : NULL;
+}
+
+bool GBAReplicatedPairAssignFrontend(
+	struct GBAReplicatedPair* pair, uint8_t player,
+	struct mCore* frontendCore) {
+	if (!pair || !pair->installed || pair->stopped || player > 1 ||
+	    !frontendCore || !frontendCore->getPeripheral) {
+		return false;
+	}
+	const int peripherals[] = {
+		mPERIPH_RUMBLE,
+		mPERIPH_ROTATION,
+		mPERIPH_GBA_LUMINANCE,
+	};
+	for (unsigned logical = 0; logical < 2; ++logical) {
+		for (unsigned i = 0;
+		     i < sizeof(peripherals) / sizeof(*peripherals); ++i) {
+			void* peripheral = logical == player
+			    ? frontendCore->getPeripheral(
+			          frontendCore, peripherals[i])
+			    : NULL;
+			pair->players[logical].core->setPeripheral(
+			    pair->players[logical].core,
+			    peripherals[i], peripheral);
+		}
+	}
+	return true;
+}
+
+bool GBAReplicatedPairAssignSaveBacking(
+	struct GBAReplicatedPair* pair, uint8_t player,
+	void* data, size_t capacity) {
+	if (!pair || !pair->installed || pair->stopped || player > 1 ||
+	    !data || capacity < GBA_SIZE_FLASH1M) {
+		return false;
+	}
+	struct VFile* backing = VFileFromMemory(data, capacity);
+	if (!backing ||
+	    !pair->players[player].core->loadTemporarySave(
+	        pair->players[player].core, backing)) {
+		if (backing) {
+			backing->close(backing);
+		}
+		return false;
+	}
+	/*
+	 * GBASavedataMask closed the previous temporary file. The pair owns
+	 * this replacement until core teardown.
+	 */
+	pair->players[player].temporarySave = backing;
+	struct GBASavedata* savedata =
+	    &((struct GBA*) pair->players[player].core->board)->memory.savedata;
+	pair->players[player].observedSaveType = savedata->type;
+	pair->players[player].observedSaveDirty = savedata->dirty;
+	pair->players[player].observedSaveDirtAge = savedata->dirtAge;
+	return true;
+}
+
+static void _digestU32(struct SHA256Context* context, uint32_t value) {
+	uint8_t encoded[4];
+	for (unsigned i = 0; i < sizeof(encoded); ++i) {
+		encoded[i] = value >> (i * 8);
+	}
+	sha256Update(context, encoded, sizeof(encoded));
+}
+
+static void _digestU64(struct SHA256Context* context, uint64_t value) {
+	uint8_t encoded[8];
+	for (unsigned i = 0; i < sizeof(encoded); ++i) {
+		encoded[i] = value >> (i * 8);
+	}
+	sha256Update(context, encoded, sizeof(encoded));
+}
+
+static bool _digestSave(
+		struct SHA256Context* context,
+		struct GBASavedata* savedata, size_t size) {
+	if (!size) {
+		return true;
+	}
+	if (savedata->data) {
+		sha256Update(context, savedata->data, size);
+		return true;
+	}
+	if (!savedata->vf) {
+		return false;
+	}
+	off_t position = savedata->vf->seek(
+	    savedata->vf, 0, SEEK_CUR);
+	if (position < 0 ||
+	    savedata->vf->seek(savedata->vf, 0, SEEK_SET) != 0) {
+		return false;
+	}
+	uint8_t buffer[2048];
+	size_t remaining = size;
+	bool valid = true;
+	while (remaining) {
+		size_t request = remaining < sizeof(buffer)
+		    ? remaining : sizeof(buffer);
+		ssize_t read = savedata->vf->read(
+		    savedata->vf, buffer, request);
+		if (read != (ssize_t) request) {
+			valid = false;
+			break;
+		}
+		sha256Update(context, buffer, request);
+		remaining -= request;
+	}
+	if (savedata->vf->seek(
+	        savedata->vf, position, SEEK_SET) != position) {
+		valid = false;
+	}
+	return valid;
+}
+
+bool GBAReplicatedPairStateDigest(
+		const struct GBAReplicatedPair* pair, uint8_t playerId,
+		uint8_t digest[MGBA_SHA256_DIGEST_SIZE]) {
+	if (!pair || !digest || !pair->installed || pair->stopped ||
+	    playerId > 1) {
+		return false;
+	}
+	const struct GBAReplicatedPairPlayer* player =
+	    &pair->players[playerId];
+	struct GBA* gba = player->core->board;
+	struct GBASerializedState* state = calloc(1, sizeof(*state));
+	void* driverState = NULL;
+	size_t driverSize = 0;
+	if (!state || !gba || !gba->sio.driver ||
+	    !gba->sio.driver->driverId || !gba->sio.driver->saveState) {
+		free(state);
+		return false;
+	}
+	GBASerialize(gba, state);
+	gba->sio.driver->saveState(
+	    gba->sio.driver, &driverState, &driverSize);
+	if (!driverState || !driverSize) {
+		free(driverState);
+		free(state);
+		return false;
+	}
+
+	struct GBASavedata* savedata = &gba->memory.savedata;
+	size_t saveSize = GBASavedataSize(savedata);
+
+	static const char domain[] = "mGBA replicated-pair state digest";
+	struct SHA256Context context;
+	sha256Init(&context);
+	sha256Update(&context, domain, sizeof(domain));
+	_digestU32(&context, GBA_REPLICATED_PAIR_DIGEST_VERSION);
+	_digestU32(&context, GBASavestateMagic + GBASavestateVersion);
+	_digestU64(&context, sizeof(*state));
+	sha256Update(&context, state, sizeof(*state));
+	_digestU32(&context, player->core->rtc.override);
+	_digestU64(&context, player->core->rtc.value);
+	_digestU32(&context, savedata->type);
+	_digestU64(&context, saveSize);
+	if (!_digestSave(&context, savedata, saveSize)) {
+		free(driverState);
+		free(state);
+		return false;
+	}
+	_digestU32(&context, gba->sio.driver->driverId(gba->sio.driver));
+	_digestU64(&context, driverSize);
+	sha256Update(&context, driverState, driverSize);
+	sha256Finalize(digest, &context);
+
+	free(driverState);
+	free(state);
+	return true;
+}
+
 bool GBAReplicatedPairGetMetrics(
 	const struct GBAReplicatedPair* pair,
 	struct GBAReplicatedPairMetrics* metrics) {
@@ -304,6 +516,8 @@ bool GBAReplicatedPairGetMetrics(
 		metrics->runLoops[i] = pair->players[i].runLoops;
 		metrics->sleeps[i] = pair->players[i].user.sleeps;
 		metrics->wakes[i] = pair->players[i].user.wakes;
+		metrics->saveGenerations[i] =
+		    pair->players[i].saveGeneration;
 	}
 	metrics->transferStarts = pair->coordinator.transferStarts;
 	metrics->transferCompletions = pair->coordinator.transferCompletions;
@@ -340,6 +554,8 @@ void GBAReplicatedPairStop(struct GBAReplicatedPair* pair) {
 			player->temporarySave->close(player->temporarySave);
 			player->temporarySave = NULL;
 		}
+		free(player->videoBuffer);
+		player->videoBuffer = NULL;
 	}
 	GBASIOLockstepCoordinatorDeinit(&pair->coordinator);
 	free(pair->bios);

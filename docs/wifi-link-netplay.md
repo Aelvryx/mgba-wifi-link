@@ -1,29 +1,52 @@
 # Wi-Fi GBA Link Netplay
 
 This fork adds two-device GBA Multi-Pak cable emulation to the mGBA libretro
-core using RetroArch's Netpacket interface. RetroArch owns the LAN connection
-and menus; the core owns GBA SIO timing, synchronization, transferred words,
-and failure behavior. No RetroArch fork or direct socket configuration is
-required.
+core through RetroArch's Netpacket interface. RetroArch owns LAN discovery,
+connection management, and the host/join menus. The core owns the replicated
+GBA machines, inputs, local link cable, verification, and failure behavior. It
+does not require a RetroArch fork or direct socket configuration.
 
-## Supported MVP
+## Supported alpha scope
 
 - Two players on the same LAN.
-- GBA MULTI mode and Multi-Pak only.
-- Stock RetroArch with Netpacket command 78 and its current callback contract.
-- Reliable, ordered, flushed core packets.
+- GBA MULTI mode and Multi-Pak cartridges.
+- Stock RetroArch with the Netpacket command-78 callback contract.
 - Identical effective ROM bytes on both peers.
-- Independent save memory and inputs.
+- Independent player inputs and save data.
 - Android and desktop libretro deployments.
 
-The MVP does not support three or four players, Single-Pak multiboot,
+The alpha does not support three or four players, Single-Pak multiboot,
 NORMAL8/NORMAL32 networking, RFU/Wireless Adapter, internet relay/NAT
-traversal, reconnection, host migration, rollback, or savestates during any
-live network session.
+traversal, reconnection, host migration, rollback, or savestates during a live
+session.
+
+## Why protocol v2 is real-time
+
+Protocol v1 synchronized individual cable events across Wi-Fi. It was useful
+as a correctness oracle, but a real game could perform enough serial
+transactions to make both devices wait for many network round trips per frame.
+That produced the severe slowdown and broken audio seen in early tests.
+
+The release protocol is `mgba-gba-link-replicated-v2`. At attachment:
+
+1. The host contributes the authoritative player-zero machine state.
+2. The client contributes the authoritative player-one machine state.
+3. Both endpoints validate and install the same P0/P1 pair.
+4. Each endpoint connects its two logical GBAs to an ordinary in-process mGBA
+   lockstep coordinator.
+5. Only one small, reliable input packet per player per emulated frame crosses
+   Wi-Fi; every cable word stays local.
+
+The host presents P0 and the client presents P1. Each endpoint still runs both
+logical machines, so serial traffic no longer changes network packet volume.
+The local-role machine alone receives that device's controller, rumble,
+rotation, solar sensor, video, audio, and persistent save backing. Shadow
+outputs are drained without frontend callbacks and shadow saves remain in
+memory.
 
 ## Build
 
-Desktop builds use the ordinary mGBA libretro target:
+Desktop builds use the ordinary libretro target:
 
 ```sh
 cmake -S . -B build-netplay \
@@ -31,10 +54,10 @@ cmake -S . -B build-netplay \
 cmake --build build-netplay --target mgba_libretro --parallel
 ```
 
-An Android ABI can be selected with the NDK toolchain:
+For Android arm64:
 
 ```sh
-MGBA_ANDROID_NDK=/path/to/android-ndk-r27
+MGBA_ANDROID_NDK=/path/to/android-ndk
 cmake -S . -B build-android-arm64 \
   -DCMAKE_TOOLCHAIN_FILE="$MGBA_ANDROID_NDK/build/cmake/android.toolchain.cmake" \
   -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-21 \
@@ -42,161 +65,111 @@ cmake -S . -B build-android-arm64 \
 cmake --build build-android-arm64 --target mgba_libretro --parallel
 ```
 
-Production qualification builds passed for `arm64-v8a`, `armeabi-v7a`, `x86`,
-and `x86_64`. The physical qualification devices use `arm64-v8a`.
-
-## Install on Android
-
-Name the built library `mgba_libretro_android.so`. Install it through
-RetroArch's **Load Core → Install or Restore a Core** flow, or use the stock
-Android sideload activity:
-
-```sh
-adb push mgba_libretro_android.so /sdcard/Download/
-adb shell am start \
-  -n com.retroarch.aarch64/com.retroarch.browser.debug.CoreSideloadActivity \
-  --es LIBRETRO /sdcard/Download/mgba_libretro_android.so \
-  --es ROM /sdcard/Download/game.gba
-```
-
-The tested AArch64 package installs the core at:
-
-```text
-/data/user/0/com.retroarch.aarch64/cores/mgba_libretro_android.so
-```
-
-Each device needs its own legal copy of the content and may keep independent
-save data. The loaded bytes, not filenames, are compared.
+Name the resulting Android library `mgba_libretro_android.so`. In RetroArch,
+use **Load Core → Install or Restore a Core**, select the file, and then load
+content with that installed core.
 
 ## Host and join
 
 1. Put both devices on the same LAN and load the same ROM with this core.
-2. On player one, open RetroArch's Main Menu, choose **Netplay**, then
-   **Host**.
-3. On player two, set the host address/port if LAN discovery is not used.
-4. On player two, choose **Netplay → Connect to Netplay Host**.
-5. Wait for `GBA link ready: player 1 (host)` and
-   `GBA link ready: player 2 (client)`.
+2. On player one, open **Netplay** and choose **Host**.
+3. On player two, use LAN discovery or enter the host address, then choose
+   **Connect to Netplay Host**.
+4. Wait for `GBA replicated link ready: player 1` on the host and
+   `GBA replicated link ready: player 2` on the client.
+5. Enter the game's ordinary Multi-Pak multiplayer flow.
 
-RetroArch assigns frontend client ID zero to the host and ID one to the client.
-The core exposes GBA device ID zero/primary on the host and ID one/secondary on
-the client only after the acknowledged attachment and initial mode generation
-commit.
+RetroArch assigns Netpacket client ID zero to the host and one to the client.
+The core maps those roles to GBA P0/primary and P1/secondary respectively.
+Only one frontend controller is sampled on each physical device; RetroArch's
+normal controller remapping remains authoritative.
 
-## Compatibility and frozen state
+## Compatibility and session policy
 
-The protocol name is `mgba-gba-link-netplay-v1`. Its own handshake—not
-RetroArch's informational core-version comparison—is authoritative.
+The handshake compares SHA-1 and byte length over the effective ROM, not its
+filename. Save contents are deliberately independent. It also validates the
+versioned replica/runtime format and rejects enabled cheats or incompatible
+timing policy.
 
-The MVP accepts only `EXACT_ROM`: SHA-1 and byte length of the effective loaded
-ROM must match. The protocol reserves a compatibility-group policy for future
-cross-title or cross-revision combinations, but version one never accepts it.
+The input delay is selected once from a supported two-to-eight-frame range
+using the measured handshake RTT and a conservative jitter budget. It remains
+fixed for the session. Each input packet carries a four-frame redundancy
+window, and the core waits inside the current `retro_run()` only when the
+authoritative input for that exact frame has not arrived. A successful call
+therefore returns one newly rendered local-role frame and its newly generated
+audio instead of repeating a stale frame.
 
-The handshake also compares stable per-category determinism digests for:
+From transport start until teardown, the core rejects savestate creation and
+loading, cheat changes, and timing-sensitive variable changes. Reset tears
+down the session first. Unsupported GBA serial modes continue through the
+ordinary no-network behavior.
 
-- BIOS/HLE selection and BIOS identity;
-- CPU timing, idle optimization, overclock, and speed-hack behavior;
-- RTC override mode;
-- disabled cheat state;
-- the emulation compatibility version.
+## State verification and saves
 
-Compiler, Android ABI, harmless build metadata, save contents, inputs, visual
-options, audio filters, and the runtime RTC value are excluded.
+Every 60 replicated frames, both endpoints exchange canonical SHA-256 digests
+for P0 and P1. The versioned digest covers CPU, memory, hardware timing, RTC
+policy, save bytes, and the local lockstep-driver state. It excludes video and
+audio presentation buffers, frontend pointers, file paths, logs, transport
+queues, and wall-clock bookkeeping.
 
-From transport start until complete teardown, timing-sensitive core-variable
-changes and cheat API requests are rejected. Both `retro_serialize` and
-`retro_unserialize` fail in every non-disconnected session state. Reset first
-tears down the link; serialization while disconnected is unchanged.
+A mismatch fails before another input frame is authored. The log identifies
+the frame, first mismatching logical player, both digests, recent input window,
+protocol/runtime policy, and session ID without printing save data or private
+paths.
 
-## Timing and completion behavior
-
-Player zero leads execution. It runs to a candidate cable horizon before
-granting player one permission to catch up, with at most one outstanding
-grant. The defaults are:
-
-| Policy | Default |
-| --- | ---: |
-| Local scheduler quantum | 4,096 GBA cycles |
-| Candidate horizon | 280,896 cycles, one GBA frame |
-| Periodic health barrier | Disabled |
-
-A transfer uses `START → READY → COMMIT`, followed by the host-led
-`COMPLETION_CATCHUP → COMPLETION_READY → COMPLETION_DECISION →
-COMPLETION_DECISION_ACK` release. `TRANSFER_COMMIT` contains candidate words
-but is not a grant and is not the outcome commit point. Common mGBA completion
-still installs receive registers, clears busy, and raises each enabled local
-SIO IRQ.
-
-A network pause raised inside an mGBA timing callback interrupts that timing
-pass immediately. This prevents a queued completion event from running before
-the corresponding network catch-up authorization.
-
-The ready bit is high both for a jointly ready cable and for disconnected
-pulled-up lines. Role lines distinguish them:
-
-| State | Ready | Slave | ID |
-| --- | ---: | ---: | ---: |
-| Jointly ready primary | 1 | 0 | 0 |
-| Jointly ready secondary | 1 | 1 | 1 |
-| Attached, mode not jointly committed | 0 | 1 | 0 |
-| Detached/pulled up | 1 | 1 | 0 |
-
-Topology and transfer participation remain separate. An acknowledged session
-has one topological peer, while the effective transfer peer count is zero
-until both peers have committed MULTI readiness and one for every emitted
-START.
+The assigned local machine uses the endpoint's normal RetroArch save buffer.
+The shadow never receives that path. Save dirty generations are tracked for
+both logical machines. On teardown, the local save remains live and the
+retained single core is restored to the latest quiescent state whose pair
+digest both peers acknowledged. If no periodic check completed yet, the
+original attachment snapshot is preserved rather than installing uncertain
+state.
 
 ## Failure behavior
 
-Failure before `TRANSFER_START` emission follows mGBA's ordinary zero-peer
-path. Once START is emitted, its announced completion cycle is immutable.
-Recoverable failure completes there with:
+Packets are copied into bounded, transport-generation-scoped queues. Queue
+exhaustion, oversized packets, malformed fields, sequence gaps, conflicting
+input duplicates, input timeout, verification timeout, synchronous frontend
+stop, and digest divergence all fail closed. Stored frontend callbacks are
+never used after their generation is invalidated.
 
-- all four receive words set to `0xFFFF`;
-- busy clear and communication error set;
-- ready one, slave one, and ID zero;
-- RCNT SC high;
-- exactly one local SIO IRQ when enabled;
-- detached topology for subsequent writes.
+An abrupt peer exit may show a short error notification on the remaining
+device. It does not leave a network cable driver or shadow core attached. The
+single-player core resumes from the latest safe state described above.
 
-Reset and unload cancel immediately without fabricating a completion IRQ.
+## Diagnostics
 
-`COMPLETION_DECISION` is the outcome commit point. If the transport dies after
-the host commits it but before the client receives it, a successful host and
-erroneous client are an explicitly permitted terminal observation. If the
-client received the decision but only its final acknowledgement is lost, both
-retain that same outcome and the host closes the session so another transfer
-cannot begin.
+Normal logs emit short attach, ten-second periodic, and teardown records. The
+fields include:
 
-## Deadlines and diagnostics
+- replicated frames;
+- sent/received packets and bytes;
+- successful state checks;
+- local SIO transfers and words;
+- rendezvous count, total, and maximum wall time;
+- future input depth and copied-queue high-water mark;
+- produced audio samples, audio frames, and empty-audio frames;
+- local lockstep waits and per-core scheduler work;
+- handshake RTT, jitter budget, selected delay, and attachment duration.
 
-| Operation | Default |
-| --- | ---: |
-| Handshake | 1,500 ms |
-| Attachment | 3,000 ms |
-| Grant | 1,500 ms |
-| Mode barrier | 1,500 ms |
-| Transfer readiness | 3,000 ms |
-| Transfer commit | 3,000 ms |
-| Completion catch-up/readiness/decision | 3,000 ms each |
-| Graceful detach | 1,000 ms |
+The continuous CC0 fixture under `tools/gba-link-test-rom` tolerates the
+expected pre-attachment no-peer state, then runs all four MULTI baud selectors
+indefinitely and fails closed after a real peer has been observed. This makes
+late host/join runs useful for serial-throughput and audio qualification.
 
-Frontend messages stay short; verbose mGBA logs identify the failed operation,
-role, session/transfer state, sequences, cycles, and transport generation.
-Queue exhaustion, oversized packets, send failure, invalid ordering, stale
-generation, and malformed protocol input all fail closed rather than becoming
-silent packet loss.
+The legacy protocol-v1 implementation and traces remain only as a diagnostic
+SIO oracle. The normal libretro registration selects protocol v2.
 
-## Qualification
+## Current validation
 
-The CC0 fixture in `tools/gba-link-test-rom` completes 16 transactions on each
-peer across every MULTI baud selector and checks words, busy/error/ready/slave
-state, IDs, and missed/duplicate IRQs.
+The Linux suite passes 37/37 tests. Focused input, codec, session, replica,
+pair, save-routing, and libretro-adapter tests also pass under ASan/UBSan with
+leak detection. A stock-RetroArch localhost run from the current implementation
+passed more than 2,100 replicated frames with matching checks every 60 frames.
+Using the late-attach continuous fixture, 1,200 frames completed roughly 1,100
+generic MULTI transfers while packets remained frame-scaled and every
+presented frame produced audio.
 
-The final stock-RetroArch Wi-Fi run used an AYN Thor and AYN Odin2 Portal and
-also ran afska's independently authored MIT-licensed LinkCable `basic` example
-from release `v8.0.3`. Both devices reported `Players: 2`; a captured
-continuous run completed more than 150 rapid back-to-back transfers. Full
-evidence and commands are in `docs/netplay-validation-matrix.md`,
-`docs/netpacket-feasibility-spike.md`, and
-`docs/gba-sio-characterization.md`.
+Exact-head two-device Android and commercial-game qualification is recorded
+separately in `docs/netplay-validation-matrix.md`; older entries in that file
+are explicitly protocol-v1 historical evidence.

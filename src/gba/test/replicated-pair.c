@@ -13,6 +13,7 @@
 #include <mgba/internal/gba/gba.h>
 #include <mgba/internal/gba/replicated-pair.h>
 #include <mgba/internal/gba/replicated-runtime.h>
+#include <mgba-util/audio-buffer.h>
 #include <mgba-util/vfs.h>
 
 #ifndef GBA_LINK_CONTINUOUS_ROM_PATH
@@ -211,6 +212,28 @@ M_TEST_DEFINE(installsCanonicalP0P1LocalLockstepPair) {
 	assert_ptr_equal(
 	    ((struct GBA*) pair.players[1].core->board)->sio.driver,
 	    &pair.players[1].driver.d);
+	int rumble;
+	int rotation;
+	int luminance;
+	fixture.sources[0]->setPeripheral(
+	    fixture.sources[0], mPERIPH_RUMBLE, &rumble);
+	fixture.sources[0]->setPeripheral(
+	    fixture.sources[0], mPERIPH_ROTATION, &rotation);
+	fixture.sources[0]->setPeripheral(
+	    fixture.sources[0], mPERIPH_GBA_LUMINANCE, &luminance);
+	assert_true(GBAReplicatedPairAssignFrontend(
+	    &pair, 1, fixture.sources[0]));
+	assert_null(pair.players[0].core->getPeripheral(
+	    pair.players[0].core, mPERIPH_RUMBLE));
+	assert_ptr_equal(pair.players[1].core->getPeripheral(
+	    pair.players[1].core, mPERIPH_RUMBLE), &rumble);
+	assert_ptr_equal(pair.players[1].core->getPeripheral(
+	    pair.players[1].core, mPERIPH_ROTATION), &rotation);
+	assert_ptr_equal(pair.players[1].core->getPeripheral(
+	    pair.players[1].core, mPERIPH_GBA_LUMINANCE), &luminance);
+	assert_ptr_not_equal(
+	    GBAReplicatedPairVideoBuffer(&pair, 0),
+	    GBAReplicatedPairVideoBuffer(&pair, 1));
 	GBAReplicatedPairStop(&pair);
 	GBAReplicatedPairStop(&pair);
 	_deinitFixture(&fixture);
@@ -325,6 +348,107 @@ M_TEST_DEFINE(perFrameStateTraceIsRepeatable) {
 	_deinitFixture(&fixture);
 }
 
+static void _assertPairDigestsEqual(
+		const struct GBAReplicatedPair* first,
+		const struct GBAReplicatedPair* second) {
+	for (unsigned player = 0; player < 2; ++player) {
+		uint8_t firstDigest[MGBA_SHA256_DIGEST_SIZE];
+		uint8_t secondDigest[MGBA_SHA256_DIGEST_SIZE];
+		assert_true(GBAReplicatedPairStateDigest(
+		    first, player, firstDigest));
+		assert_true(GBAReplicatedPairStateDigest(
+		    second, player, secondDigest));
+		assert_memory_equal(
+		    firstDigest, secondDigest, sizeof(firstDigest));
+	}
+}
+
+static void _assertPlayerDigestDiffers(
+		const struct GBAReplicatedPair* first,
+		const struct GBAReplicatedPair* second, uint8_t player) {
+	uint8_t firstDigest[MGBA_SHA256_DIGEST_SIZE];
+	uint8_t secondDigest[MGBA_SHA256_DIGEST_SIZE];
+	assert_true(GBAReplicatedPairStateDigest(
+	    first, player, firstDigest));
+	assert_true(GBAReplicatedPairStateDigest(
+	    second, player, secondDigest));
+	assert_memory_not_equal(
+	    firstDigest, secondDigest, sizeof(firstDigest));
+}
+
+M_TEST_DEFINE(canonicalDigestsCoverFutureStateOnly) {
+	struct PairFixture fixture;
+	_initFixture(&fixture);
+	struct GBAReplicatedPair first;
+	struct GBAReplicatedPair second;
+	_install(&first, &fixture);
+	_install(&second, &fixture);
+	_assertPairDigestsEqual(&first, &second);
+
+	first.players[0].videoBuffer[0] ^= 0xFFFFFF;
+	first.players[1].videoBuffer[1] ^= 0xFFFFFF;
+	_assertPairDigestsEqual(&first, &second);
+
+	struct GBA* firstP0 = first.players[0].core->board;
+	struct GBA* secondP0 = second.players[0].core->board;
+	struct GBA* secondP1 = second.players[1].core->board;
+	secondP0->memory.wram[0] ^= 1;
+	_assertPlayerDigestDiffers(&first, &second, 0);
+	secondP0->memory.wram[0] ^= 1;
+	secondP1->memory.iwram[0] ^= 1;
+	_assertPlayerDigestDiffers(&first, &second, 1);
+	secondP1->memory.iwram[0] ^= 1;
+	secondP0->timing.globalCycles++;
+	_assertPlayerDigestDiffers(&first, &second, 0);
+	secondP0->timing.globalCycles--;
+
+	GBASavedataForceType(
+	    &firstP0->memory.savedata, GBA_SAVEDATA_SRAM);
+	GBASavedataForceType(
+	    &secondP0->memory.savedata, GBA_SAVEDATA_SRAM);
+	assert_non_null(firstP0->memory.savedata.data);
+	assert_non_null(secondP0->memory.savedata.data);
+	memset(firstP0->memory.savedata.data, 0, GBA_SIZE_SRAM);
+	memset(secondP0->memory.savedata.data, 0, GBA_SIZE_SRAM);
+	_assertPairDigestsEqual(&first, &second);
+	secondP0->memory.savedata.data[17] ^= 1;
+	_assertPlayerDigestDiffers(&first, &second, 0);
+
+	GBAReplicatedPairStop(&second);
+	GBAReplicatedPairStop(&first);
+	_deinitFixture(&fixture);
+}
+
+M_TEST_DEFINE(saveBackingBelongsOnlyToAssignedPlayer) {
+	struct PairFixture fixture;
+	_initFixture(&fixture);
+	for (uint8_t localPlayer = 0; localPlayer < 2; ++localPlayer) {
+		struct GBAReplicatedPair pair;
+		_install(&pair, &fixture);
+		uint8_t* backing = malloc(GBA_SIZE_FLASH1M);
+		assert_non_null(backing);
+		memset(backing, 0xFF, GBA_SIZE_FLASH1M);
+		assert_true(GBAReplicatedPairAssignSaveBacking(
+		    &pair, localPlayer, backing, GBA_SIZE_FLASH1M));
+		uint8_t shadowPlayer = localPlayer ^ 1;
+		struct GBA* local = pair.players[localPlayer].core->board;
+		struct GBA* shadow = pair.players[shadowPlayer].core->board;
+		GBASavedataForceType(
+		    &local->memory.savedata, GBA_SAVEDATA_SRAM);
+		GBASavedataForceType(
+		    &shadow->memory.savedata, GBA_SAVEDATA_SRAM);
+		assert_ptr_equal(local->memory.savedata.data, backing);
+		assert_ptr_not_equal(shadow->memory.savedata.data, backing);
+		local->memory.savedata.data[7] = 0x52;
+		shadow->memory.savedata.data[7] = 0x19;
+		assert_int_equal(backing[7], 0x52);
+		GBAReplicatedPairStop(&pair);
+		assert_int_equal(backing[7], 0x52);
+		free(backing);
+	}
+	_deinitFixture(&fixture);
+}
+
 static void _exchangeAuthored(
 	struct GBAReplicatedRuntime* sender,
 	struct GBAReplicatedRuntime* receiver, uint16_t keys,
@@ -387,6 +511,20 @@ M_TEST_DEFINE(frameRuntimeReleasesOnceAndPacketsScaleOnlyWithFrames) {
 		assert_int_equal(
 		    GBAReplicatedRuntimeRunFrame(&client),
 		    GBA_REPLICATED_RUNTIME_OK);
+		for (unsigned player = 0; player < 2; ++player) {
+			assert_true(mAudioBufferAvailable(
+			    hostPair.players[player].core->getAudioBuffer(
+			        hostPair.players[player].core)) > 0);
+			assert_true(mAudioBufferAvailable(
+			    clientPair.players[player].core->getAudioBuffer(
+			        clientPair.players[player].core)) > 0);
+			mAudioBufferClear(
+			    hostPair.players[player].core->getAudioBuffer(
+			        hostPair.players[player].core));
+			mAudioBufferClear(
+			    clientPair.players[player].core->getAudioBuffer(
+			        clientPair.players[player].core));
+		}
 		assert_int_equal(
 		    GBAReplicatedRuntimeRunFrame(&host),
 		    GBA_REPLICATED_RUNTIME_INVALID_STATE);
@@ -452,5 +590,7 @@ M_TEST_SUITE_DEFINE_SETUP_TEARDOWN(GBAReplicatedPair,
 	cmocka_unit_test(frameInputsAdvanceExactlyOnceAndRejectConflicts),
 	cmocka_unit_test(continuousMultiTransfersPreserveHardwareSemantics),
 	cmocka_unit_test(perFrameStateTraceIsRepeatable),
+	cmocka_unit_test(canonicalDigestsCoverFutureStateOnly),
+	cmocka_unit_test(saveBackingBelongsOnlyToAssignedPlayer),
 	cmocka_unit_test(frameRuntimeReleasesOnceAndPacketsScaleOnlyWithFrames),
 	cmocka_unit_test(invalidBundleOrderFailsWithoutPartialLifetime))

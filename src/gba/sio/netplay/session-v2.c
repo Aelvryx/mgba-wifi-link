@@ -773,7 +773,13 @@ static bool _handleReadyAck(
 	if (!_send(session, &release, true)) {
 		return false;
 	}
-	session->config.callbacks->commitPair(session->config.callbackContext);
+	if (!session->config.callbacks->commitPair(
+	        session->config.callbackContext)) {
+		GBALinkV2SessionFail(
+		    session, GBA_LINK_V2_REASON_INSTALL_FAILED,
+		    "replicated runtime initialization failed");
+		return false;
+	}
 	session->pairCommitted = true;
 	session->config.callbacks->setPaused(
 	    session->config.callbackContext, false);
@@ -794,7 +800,13 @@ static bool _handleInputWindow(
 	    window->frameCount != session->inputDelay + 1) {
 		return false;
 	}
-	session->config.callbacks->commitPair(session->config.callbackContext);
+	if (!session->config.callbacks->commitPair(
+	        session->config.callbackContext)) {
+		GBALinkV2SessionFail(
+		    session, GBA_LINK_V2_REASON_INSTALL_FAILED,
+		    "replicated runtime initialization failed");
+		return false;
+	}
 	session->pairCommitted = true;
 	session->config.callbacks->setPaused(
 	    session->config.callbackContext, false);
@@ -940,6 +952,10 @@ static enum GBALinkV2Reason _deadlineReason(
 		return GBA_LINK_V2_REASON_INSTALL_FAILED;
 	case GBA_LINK_V2_DEADLINE_READY:
 		return GBA_LINK_V2_REASON_READY_TIMEOUT;
+	case GBA_LINK_V2_DEADLINE_INPUT:
+		return GBA_LINK_V2_REASON_INPUT_TIMEOUT;
+	case GBA_LINK_V2_DEADLINE_VERIFY:
+		return GBA_LINK_V2_REASON_VERIFICATION_TIMEOUT;
 	default:
 		return GBA_LINK_V2_REASON_TRANSPORT_STOP;
 	}
@@ -1018,4 +1034,14 @@ bool GBALinkV2SessionSendRuntime(
 	}
 	_setDeadline(session, deadline);
 	return true;
+}
+
+void GBALinkV2SessionRuntimeDeadlineSatisfied(
+	struct GBALinkV2Session* session,
+	enum GBALinkV2DeadlineOperation operation) {
+	if (!session || session->state != GBA_LINK_V2_SESSION_READY ||
+	    session->deadlineOperation != operation) {
+		return;
+	}
+	_setDeadline(session, GBA_LINK_V2_DEADLINE_NONE);
 }

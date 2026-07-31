@@ -68,37 +68,37 @@
 
 - [x] 8.1 Negotiate a fixed whole-frame input delay from a versioned supported range and recorded handshake RTT/jitter, and freeze it for the session.
 - [x] 8.2 Add bounded per-player input rings keyed by 64-bit replicated frame number with ownership checks and exact/conflicting duplicate handling.
-- [ ] 8.3 Sample only the assigned physical controller and author it for frame `F + D` with a short redundancy window in one reliable flushed `INPUT_BATCH`.
+- [x] 8.3 Sample only the assigned physical controller and author it for frame `F + D` with a short redundancy window in one reliable flushed `INPUT_BATCH`.
 - [x] 8.4 Release frame `F` only after both authoritative inputs exist, set both cores once, and advance the pair exactly once.
-- [ ] 8.5 Integrate bounded in-call receive rendezvous so a healthy `retro_run()` returns one newly advanced local-role frame with normal audio/video.
-- [ ] 8.6 Add deterministic jitter, reordering-within-ordered-delivery, duplicate, conflicting duplicate, missed-input, timeout, and stop-during-wait tests.
+- [x] 8.5 Integrate bounded in-call receive rendezvous so a healthy `retro_run()` returns one newly advanced local-role frame with normal audio/video.
+- [x] 8.6 Add deterministic jitter, reordering-within-ordered-delivery, duplicate, conflicting duplicate, missed-input, timeout, and stop-during-wait tests.
 - [x] 8.7 Assert ordinary v2 packet counts scale with frames and remain unchanged when fixture serial-word volume increases.
 
 ## 9. Route frontend behavior by logical role
 
-- [ ] 9.1 Route host video/audio to P0 and client video/audio to P1 while draining shadow output without frontend callbacks.
-- [ ] 9.2 Route controller, rumble, sensors, camera, solar, and other frontend-facing peripheral behavior only through the assigned logical core.
-- [ ] 9.3 Prevent the shadow core from reading frontend input or invoking duplicate environment callbacks.
+- [x] 9.1 Route host video/audio to P0 and client video/audio to P1 while draining shadow output without frontend callbacks.
+- [x] 9.2 Route controller, rumble, sensors, camera, solar, and other frontend-facing peripheral behavior only through the assigned logical core.
+- [x] 9.3 Prevent the shadow core from reading frontend input or invoking duplicate environment callbacks.
 - [ ] 9.4 Add host/client presentation tests with visibly and audibly distinct logical-player fixtures.
-- [ ] 9.5 Confirm a runnable protocol-v2 call generates a normal local-role audio buffer and add a regression for Android-style empty-buffer stop storms.
+- [x] 9.5 Confirm a runnable protocol-v2 call generates a normal local-role audio buffer and add a regression for Android-style empty-buffer stop storms.
 
 ## 10. Enforce save ownership and safe restoration
 
-- [ ] 10.1 Give the local-role core the endpoint's normal save backing and give the shadow core memory-only save backing with no frontend path.
-- [ ] 10.2 Track per-logical-player save dirty generations and last verified pair frame.
-- [ ] 10.3 On clean teardown, copy only the newest verified local-role save/state back to the retained or restored single core.
-- [ ] 10.4 On divergence or uncertain teardown, preserve the last valid local-owned generation and emit a diagnostic instead of writing uncertain data.
+- [x] 10.1 Give the local-role core the endpoint's normal save backing and give the shadow core memory-only save backing with no frontend path.
+- [x] 10.2 Track per-logical-player save dirty generations and last verified pair frame.
+- [x] 10.3 On clean teardown, copy only the newest verified local-role save/state back to the retained or restored single core.
+- [x] 10.4 On divergence or uncertain teardown, preserve the last valid local-owned generation and emit a diagnostic instead of writing uncertain data.
 - [ ] 10.5 Add host/client tests proving P0 persists only on host, P1 only on client, and no shadow save reaches disk for clean, timeout, stop, reset, and unload paths.
-- [ ] 10.6 Continue rejecting serialize/unserialize in every non-disconnected v2 state and teardown before reset.
+- [x] 10.6 Continue rejecting serialize/unserialize in every non-disconnected v2 state and teardown before reset.
 
 ## 11. Add replica verification and diagnostics
 
-- [ ] 11.1 Define a versioned canonical digest input for future-affecting GBA state that excludes host-specific and presentation-only fields.
-- [ ] 11.2 Compute P0/P1 digests at the negotiated interval and exchange one `STATE_CHECK` for the exact replicated frame.
-- [ ] 11.3 Fail closed before releasing later input when a digest differs and log frame, logical player, digests, recent inputs, runtime policy, and session ID without private paths or save bytes.
-- [ ] 11.4 Add structured counters for real pair frames, rendezvous duration, input depth, packets/bytes, RTT/jitter, queue high-water marks, local SIO words/waits, audio production, and per-core runtime.
-- [ ] 11.5 Emit concise attach, periodic, and teardown summaries while keeping verbose packet traces opt-in and sampled.
-- [ ] 11.6 Add injected single-bit divergence tests for P0, P1, save memory, timing state, and excluded presentation state.
+- [x] 11.1 Define a versioned canonical digest input for future-affecting GBA state that excludes host-specific and presentation-only fields.
+- [x] 11.2 Compute P0/P1 digests at the negotiated interval and exchange one `STATE_CHECK` for the exact replicated frame.
+- [x] 11.3 Fail closed before releasing later input when a digest differs and log frame, logical player, digests, recent inputs, runtime policy, and session ID without private paths or save bytes.
+- [x] 11.4 Add structured counters for real pair frames, rendezvous duration, input depth, packets/bytes, RTT/jitter, queue high-water marks, local SIO words/waits, audio production, and per-core runtime.
+- [x] 11.5 Emit concise attach, periodic, and teardown summaries while keeping verbose packet traces opt-in and sampled.
+- [x] 11.6 Add injected single-bit divergence tests for P0, P1, save memory, timing state, and excluded presentation state.
 
 ## 12. Complete automated validation
 

@@ -27,6 +27,7 @@
 #include <mgba-util/vfs.h>
 
 #include "libretro_core_options.h"
+#include "replicated-pair-spike.h"
 #ifdef MGBA_NETPACKET_SPIKE
 #include "netpacket-spike.h"
 #else
@@ -103,6 +104,7 @@ static bool deferredSetup = false;
 static bool gameLoaded;
 static bool useBitmasks = true;
 static bool envVarsUpdated;
+static bool replicatedPairDiagnostic;
 static int32_t tiltX = 0;
 static int32_t tiltY = 0;
 static int32_t gyroZ = 0;
@@ -315,6 +317,14 @@ static void _reloadSettings(void) {
 		opts.skipBios = strcmp(var.value, "ON") == 0;
 	}
 
+	replicatedPairDiagnostic = false;
+	var.key = "mgba_replicated_pair_diagnostic";
+	var.value = 0;
+	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
+		replicatedPairDiagnostic =
+		    strcmp(var.value, "enabled") == 0;
+	}
+
 	var.key = "mgba_frameskip";
 	var.value = 0;
 	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
@@ -519,6 +529,7 @@ void retro_init(void) {
 }
 
 void retro_deinit(void) {
+	mLibretroReplicatedPairSpikeStop();
 	free(outputBuffer);
 
 	if (audioSampleBuffer) {
@@ -552,10 +563,17 @@ void retro_run(void) {
 	if (deferredSetup) {
 		_doDeferredSetup();
 	}
+	if (replicatedPairDiagnostic &&
+	    !mLibretroReplicatedPairSpikeIsActive() &&
+	    !mLibretroReplicatedPairSpikeStart(core)) {
+		replicatedPairDiagnostic = false;
+	}
 #ifdef MGBA_NETPACKET_SPIKE
 	mNetpacketSpikeTimingBoundary();
 #else
-	mLibretroNetpacketRunBegin();
+	if (!replicatedPairDiagnostic) {
+		mLibretroNetpacketRunBegin();
+	}
 #endif
 	uint16_t keys;
 
@@ -629,15 +647,25 @@ void retro_run(void) {
 		}
 	}
 
+	if (replicatedPairDiagnostic) {
+		if (!mLibretroReplicatedPairSpikeRunFrame(keys)) {
+			mLibretroReplicatedPairSpikeStop();
+			replicatedPairDiagnostic = false;
+			core->runFrame(core);
+		}
+	} else {
 #ifndef MGBA_NETPACKET_SPIKE
-	if (!mLibretroNetpacketExecutionBlocked()) {
-		core->runFrame(core);
-	}
+		if (!mLibretroNetpacketExecutionBlocked()) {
+			core->runFrame(core);
+		}
 #else
-	core->runFrame(core);
+		core->runFrame(core);
 #endif
+	}
 #ifndef MGBA_NETPACKET_SPIKE
-	mLibretroNetpacketRunEnd();
+	if (!replicatedPairDiagnostic) {
+		mLibretroNetpacketRunEnd();
+	}
 #endif
 	unsigned width, height;
 	core->currentVideoSize(core, &width, &height);
@@ -866,6 +894,7 @@ void retro_reset(void) {
 #ifndef MGBA_NETPACKET_SPIKE
 	mLibretroNetpacketReset();
 #endif
+	mLibretroReplicatedPairSpikeStop();
 	core->reset(core);
 	mRumbleIntegratorReset(&rumble);
 	_setupMaps(core);
@@ -1024,7 +1053,9 @@ bool retro_load_game(const struct retro_game_info* game) {
 #ifdef MGBA_NETPACKET_SPIKE
 	mNetpacketSpikeRegister(environCallback);
 #else
-	mLibretroNetpacketRegister(environCallback, core);
+	if (!replicatedPairDiagnostic) {
+		mLibretroNetpacketRegister(environCallback, core);
+	}
 #endif
 	gameLoaded = true;
 	return true;
@@ -1032,6 +1063,7 @@ bool retro_load_game(const struct retro_game_info* game) {
 
 void retro_unload_game(void) {
 	gameLoaded = false;
+	mLibretroReplicatedPairSpikeStop();
 #ifdef MGBA_NETPACKET_SPIKE
 	mNetpacketSpikeUnload();
 #else
@@ -1049,6 +1081,9 @@ void retro_unload_game(void) {
 }
 
 size_t retro_serialize_size(void) {
+	if (replicatedPairDiagnostic) {
+		return 0;
+	}
 	if (deferredSetup) {
 		_doDeferredSetup();
 	}
@@ -1060,6 +1095,9 @@ size_t retro_serialize_size(void) {
 }
 
 bool retro_serialize(void* data, size_t size) {
+	if (replicatedPairDiagnostic) {
+		return false;
+	}
 #ifndef MGBA_NETPACKET_SPIKE
 	if (mLibretroNetpacketRejectStateOperation("Saving state")) {
 		return false;
@@ -1083,6 +1121,9 @@ bool retro_serialize(void* data, size_t size) {
 }
 
 bool retro_unserialize(const void* data, size_t size) {
+	if (replicatedPairDiagnostic) {
+		return false;
+	}
 #ifndef MGBA_NETPACKET_SPIKE
 	if (mLibretroNetpacketRejectStateOperation("Loading state")) {
 		return false;

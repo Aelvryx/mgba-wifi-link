@@ -126,6 +126,20 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       "OFF"
    },
    {
+      "mgba_replicated_pair_diagnostic",
+      "Replicated Pair Diagnostic (Restart)",
+      NULL,
+      "Runs two local GBA instances through mGBA's cable coordinator to measure replicated-pair performance. Diagnostic only: disables network play and uses the loaded content for both logical players.",
+      NULL,
+      "system",
+      {
+         { "disabled", NULL },
+         { "enabled",  NULL },
+         { NULL, NULL },
+      },
+      "disabled"
+   },
+   {
       "mgba_gb_colors",
       "Default Game Boy Palette",
       NULL,

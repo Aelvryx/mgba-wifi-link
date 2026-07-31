@@ -99,8 +99,8 @@ jobs:
       - name: Install OpenSpec CLI
         run: npm install --global @fission-ai/openspec@1.6.0
 
-      - name: Validate OpenSpec change
-        run: openspec validate add-wifi-link-cable-netplay --strict
+      - name: Validate OpenSpec specs
+        run: openspec validate --all --strict --no-interactive
 
       - name: Download pinned GNU Arm toolchain
         run: |

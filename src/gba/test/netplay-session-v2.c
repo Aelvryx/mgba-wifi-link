@@ -25,6 +25,7 @@ struct V2Endpoint {
 	enum GBALinkV2MessageType exhaustType;
 	bool corruptChunk;
 	bool stopDuringPoll;
+	uint32_t acceptAckDelayMs;
 	unsigned captureCalls;
 	unsigned installCalls;
 	unsigned commitCalls;
@@ -57,6 +58,9 @@ static bool _sendReliable(
 	}
 	if (packet.header.type == endpoint->dropType) {
 		return true;
+	}
+	if (packet.header.type == GBA_LINK_V2_MESSAGE_ACCEPT_ACK) {
+		endpoint->peer->now += endpoint->acceptAckDelayMs;
 	}
 	if (packet.header.type == endpoint->exhaustType) {
 		const uint8_t filler = 0xFF;
@@ -249,6 +253,7 @@ static struct GBALinkV2SessionConfig _config(
 	config.maxChunkSize = GBA_REPLICA_DEFAULT_CHUNK_SIZE;
 	config.minimumInputDelay = 2;
 	config.maximumInputDelay = 8;
+	config.estimatedJitterMs = 5;
 	config.experimentalRuntime = true;
 	GBALinkV2DeadlinePolicyInit(&config.deadlines);
 	config.callbacks = &_callbacks;
@@ -330,6 +335,22 @@ M_TEST_DEFINE(bilateralBundlesInstallInCanonicalOrderAndReleaseAtomically) {
 	    pair.client.installedDigests, sizeof(pair.host.installedDigests));
 	assert_int_equal(pair.host.session.inputDelay, 2);
 	assert_int_equal(pair.client.session.inputDelay, 2);
+	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(handshakeRttAndJitterFreezeOneSharedInputDelay) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.client.acceptAckDelayMs = 40;
+	_startPair(&pair);
+	_pump(&pair, 8);
+	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_READY);
+	assert_int_equal(pair.client.session.state, GBA_LINK_V2_SESSION_READY);
+	assert_int_equal(pair.host.session.handshakeRoundTripMs, 40);
+	assert_int_equal(pair.host.session.inputDelay, 3);
+	assert_int_equal(pair.client.session.inputDelay, 3);
+	assert_int_equal(pair.host.session.overlappingMinimumInputDelay, 2);
+	assert_int_equal(pair.host.session.overlappingMaximumInputDelay, 8);
 	_deinitPair(&pair);
 }
 
@@ -466,6 +487,7 @@ M_TEST_DEFINE(synchronousStopDuringReceivePollInvalidatesGeneration) {
 
 M_TEST_SUITE_DEFINE(GBALinkSessionV2,
 	cmocka_unit_test(bilateralBundlesInstallInCanonicalOrderAndReleaseAtomically),
+	cmocka_unit_test(handshakeRttAndJitterFreezeOneSharedInputDelay),
 	cmocka_unit_test(attachmentDeadlineBeginsBeforeQuiescentCapture),
 	cmocka_unit_test(identityMismatchPreservesBothOriginalCores),
 	cmocka_unit_test(corruptReplicaFailsBeforeProvisionalInstallation),

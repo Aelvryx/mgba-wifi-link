@@ -11,6 +11,10 @@
 #include <mgba-util/common.h>
 #include <mgba-util/image.h>
 
+#ifdef M_LIBRETRO_NETPACKET_V2_TEST
+#include <mgba/internal/gba/sio/netplay/protocol-v2.h>
+#endif
+
 struct mCore;
 
 bool mLibretroNetpacketV2Register(
@@ -33,6 +37,13 @@ bool mLibretroNetpacketV2TestPollReceive(void);
 void mLibretroNetpacketV2TestSetTimeMs(uint64_t nowMs);
 uint64_t mLibretroNetpacketV2TestCallbackGeneration(void);
 size_t mLibretroNetpacketV2TestPendingPacketCount(void);
+uint8_t mLibretroNetpacketV2TestPlayerForRole(enum GBALinkRole role);
+bool mLibretroNetpacketV2TestInstallPair(
+	const struct GBAReplicaManifest manifests[2],
+	const struct GBAReplicaPayload payloads[2],
+	enum GBALinkRole role, uint64_t generation);
+struct mCore* mLibretroNetpacketV2TestPairCore(uint8_t player);
+void mLibretroNetpacketV2TestFail(enum GBALinkV2Reason reason);
 #endif
 
 #endif

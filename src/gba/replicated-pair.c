@@ -9,6 +9,7 @@
 #include <mgba/gba/core.h>
 #include <mgba/internal/gba/gba.h>
 #include <mgba/internal/gba/serialize.h>
+#include <mgba-util/audio-buffer.h>
 #include <mgba-util/vfs.h>
 
 enum {
@@ -356,6 +357,18 @@ bool GBAReplicatedPairAssignFrontend(
 			    peripherals[i], peripheral);
 		}
 	}
+	return true;
+}
+
+bool GBAReplicatedPairDrainShadowAudio(
+		struct GBAReplicatedPair* pair, uint8_t presentedPlayer) {
+	if (!pair || !pair->installed || pair->stopped ||
+	    presentedPlayer > 1) {
+		return false;
+	}
+	struct mCore* shadow =
+	    pair->players[presentedPlayer ^ 1].core;
+	mAudioBufferClear(shadow->getAudioBuffer(shadow));
 	return true;
 }
 

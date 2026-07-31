@@ -158,7 +158,10 @@ indefinitely and fails closed after a real peer has been observed. This makes
 late host/join runs useful for serial-throughput and audio qualification.
 
 The legacy protocol-v1 implementation and traces remain only as a diagnostic
-SIO oracle. The normal libretro registration selects protocol v2.
+SIO oracle. The normal libretro registration selects protocol v2. Developers
+can select **GBA Link Netplay Runtime → Cable Sync v1 (Diagnostic)** and
+restart content to reproduce a v1 trace; that mode is intentionally labelled
+unsuitable for gameplay.
 
 ## Current validation
 

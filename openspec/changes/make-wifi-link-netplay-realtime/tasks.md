@@ -105,7 +105,7 @@
 - [x] 12.1 Add unit suites for replica bundle, replicated pair, v2 codec, v2 session, input rings, save ownership, verification, and libretro role routing.
 - [x] 12.2 Add end-to-end paired-adapter replay with latency/jitter/fault injection at every attachment, input, state-check, detach, reset, and unload boundary.
 - [x] 12.3 Run the continuous-transfer ROM for at least 30 emulated minutes and assert identical per-frame traces, no deadlock, and local-baseline serial throughput.
-- [ ] 12.4 Run focused normal, ASan/UBSan, leak, and supported thread-sanitizer suites in CI with pinned toolchains and fail-fast settings.
+- [x] 12.4 Run focused normal, ASan/UBSan, leak, and supported thread-sanitizer suites in CI with pinned toolchains and fail-fast settings.
 - [x] 12.5 Add fixture reproducibility and protocol-v2 packet-count checks to CI.
 - [x] 12.6 Retain protocol-v1 trace tests as a short SIO correctness oracle and mark its runtime selection diagnostic-only.
 

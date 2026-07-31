@@ -66,13 +66,13 @@
 
 ## 8. Implement frame-input synchronization
 
-- [ ] 8.1 Negotiate a fixed whole-frame input delay from a versioned supported range and recorded handshake RTT/jitter, and freeze it for the session.
-- [ ] 8.2 Add bounded per-player input rings keyed by 64-bit replicated frame number with ownership checks and exact/conflicting duplicate handling.
+- [x] 8.1 Negotiate a fixed whole-frame input delay from a versioned supported range and recorded handshake RTT/jitter, and freeze it for the session.
+- [x] 8.2 Add bounded per-player input rings keyed by 64-bit replicated frame number with ownership checks and exact/conflicting duplicate handling.
 - [ ] 8.3 Sample only the assigned physical controller and author it for frame `F + D` with a short redundancy window in one reliable flushed `INPUT_BATCH`.
-- [ ] 8.4 Release frame `F` only after both authoritative inputs exist, set both cores once, and advance the pair exactly once.
+- [x] 8.4 Release frame `F` only after both authoritative inputs exist, set both cores once, and advance the pair exactly once.
 - [ ] 8.5 Integrate bounded in-call receive rendezvous so a healthy `retro_run()` returns one newly advanced local-role frame with normal audio/video.
 - [ ] 8.6 Add deterministic jitter, reordering-within-ordered-delivery, duplicate, conflicting duplicate, missed-input, timeout, and stop-during-wait tests.
-- [ ] 8.7 Assert ordinary v2 packet counts scale with frames and remain unchanged when fixture serial-word volume increases.
+- [x] 8.7 Assert ordinary v2 packet counts scale with frames and remain unchanged when fixture serial-word volume increases.
 
 ## 9. Route frontend behavior by logical role
 

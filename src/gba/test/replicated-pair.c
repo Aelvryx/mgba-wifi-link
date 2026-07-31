@@ -12,6 +12,7 @@
 #include <mgba/gba/core.h>
 #include <mgba/internal/gba/gba.h>
 #include <mgba/internal/gba/replicated-pair.h>
+#include <mgba/internal/gba/replicated-runtime.h>
 #include <mgba-util/vfs.h>
 
 #ifndef GBA_LINK_CONTINUOUS_ROM_PATH
@@ -324,6 +325,108 @@ M_TEST_DEFINE(perFrameStateTraceIsRepeatable) {
 	_deinitFixture(&fixture);
 }
 
+static void _exchangeAuthored(
+	struct GBAReplicatedRuntime* sender,
+	struct GBAReplicatedRuntime* receiver, uint16_t keys,
+	bool reverse, bool duplicate) {
+	struct GBALinkV2Packet packets[
+	    GBA_REPLICATED_RUNTIME_MAX_AUTHOR_PACKETS];
+	uint8_t count = 0;
+	assert_int_equal(
+	    GBAReplicatedRuntimeAuthorInput(
+	        sender, keys, packets, &count),
+	    GBA_REPLICATED_RUNTIME_OK);
+	assert_true(count >= 1);
+	assert_true(count <= GBA_REPLICATED_RUNTIME_MAX_AUTHOR_PACKETS);
+	enum GBALinkRole senderRole = sender->localRole;
+	for (unsigned i = 0; i < count; ++i) {
+		unsigned index = reverse ? count - i - 1 : i;
+		assert_int_equal(
+		    GBAReplicatedRuntimeHandleInput(
+		        receiver, senderRole,
+		        &packets[index].payload.inputBatch),
+		    GBA_REPLICATED_RUNTIME_OK);
+	}
+	if (duplicate) {
+		assert_int_equal(
+		    GBAReplicatedRuntimeHandleInput(
+		        receiver, senderRole,
+		        &packets[count - 1].payload.inputBatch),
+		    GBA_REPLICATED_RUNTIME_OK);
+	}
+}
+
+M_TEST_DEFINE(frameRuntimeReleasesOnceAndPacketsScaleOnlyWithFrames) {
+	struct PairFixture fixture;
+	_initFixture(&fixture);
+	struct GBAReplicatedPair hostPair;
+	struct GBAReplicatedPair clientPair;
+	_install(&hostPair, &fixture);
+	_install(&clientPair, &fixture);
+	struct GBAReplicatedRuntime host;
+	struct GBAReplicatedRuntime client;
+	assert_true(GBAReplicatedRuntimeInit(
+	    &host, &hostPair, 77, GBA_LINK_ROLE_HOST, 3, 0));
+	assert_true(GBAReplicatedRuntimeInit(
+	    &client, &clientPair, 77, GBA_LINK_ROLE_CLIENT, 3, 0));
+
+	uint64_t packetsAt60 = 0;
+	uint64_t wordsAt60 = 0;
+	for (uint64_t frame = 0; frame < 120; ++frame) {
+		assert_false(GBAReplicatedRuntimeFrameReady(&host));
+		assert_false(GBAReplicatedRuntimeFrameReady(&client));
+		_exchangeAuthored(
+		    &host, &client, frame & 1, frame == 0, frame == 7);
+		_exchangeAuthored(
+		    &client, &host, frame & 2, false, frame == 7);
+		assert_true(GBAReplicatedRuntimeFrameReady(&host));
+		assert_true(GBAReplicatedRuntimeFrameReady(&client));
+		assert_int_equal(
+		    GBAReplicatedRuntimeRunFrame(&host),
+		    GBA_REPLICATED_RUNTIME_OK);
+		assert_int_equal(
+		    GBAReplicatedRuntimeRunFrame(&client),
+		    GBA_REPLICATED_RUNTIME_OK);
+		assert_int_equal(
+		    GBAReplicatedRuntimeRunFrame(&host),
+		    GBA_REPLICATED_RUNTIME_INVALID_STATE);
+		assert_memory_equal(hostPair.stateTrace, clientPair.stateTrace,
+		    sizeof(hostPair.stateTrace));
+		if (frame == 59) {
+			struct GBAReplicatedRuntimeMetrics runtimeMetrics;
+			struct GBAReplicatedPairMetrics pairMetrics;
+			assert_true(GBAReplicatedRuntimeGetMetrics(
+			    &host, &runtimeMetrics));
+			assert_true(GBAReplicatedPairGetMetrics(
+			    &hostPair, &pairMetrics));
+			packetsAt60 = runtimeMetrics.authoredPackets;
+			wordsAt60 = pairMetrics.transferredWords;
+		}
+	}
+	struct GBAReplicatedRuntimeMetrics hostMetrics;
+	struct GBAReplicatedRuntimeMetrics clientMetrics;
+	struct GBAReplicatedPairMetrics pairMetrics;
+	assert_true(GBAReplicatedRuntimeGetMetrics(&host, &hostMetrics));
+	assert_true(GBAReplicatedRuntimeGetMetrics(&client, &clientMetrics));
+	assert_true(GBAReplicatedPairGetMetrics(&hostPair, &pairMetrics));
+	assert_int_equal(hostMetrics.framesReleased, 120);
+	assert_int_equal(clientMetrics.framesReleased, 120);
+	assert_int_equal(hostMetrics.authoredPackets, 121);
+	assert_int_equal(clientMetrics.authoredPackets, 121);
+	assert_int_equal(hostMetrics.authoredPackets - packetsAt60, 60);
+	assert_true(pairMetrics.transferredWords > wordsAt60);
+	assert_true(wordsAt60);
+	assert_int_equal(hostMetrics.exactDuplicates, 1);
+	/* Reordered initial seed plus the injected runtime duplicate. */
+	assert_int_equal(clientMetrics.exactDuplicates, 2);
+
+	GBAReplicatedRuntimeDeinit(&client);
+	GBAReplicatedRuntimeDeinit(&host);
+	GBAReplicatedPairStop(&clientPair);
+	GBAReplicatedPairStop(&hostPair);
+	_deinitFixture(&fixture);
+}
+
 M_TEST_DEFINE(invalidBundleOrderFailsWithoutPartialLifetime) {
 	struct PairFixture fixture;
 	_initFixture(&fixture);
@@ -349,4 +452,5 @@ M_TEST_SUITE_DEFINE_SETUP_TEARDOWN(GBAReplicatedPair,
 	cmocka_unit_test(frameInputsAdvanceExactlyOnceAndRejectConflicts),
 	cmocka_unit_test(continuousMultiTransfersPreserveHardwareSemantics),
 	cmocka_unit_test(perFrameStateTraceIsRepeatable),
+	cmocka_unit_test(frameRuntimeReleasesOnceAndPacketsScaleOnlyWithFrames),
 	cmocka_unit_test(invalidBundleOrderFailsWithoutPartialLifetime))

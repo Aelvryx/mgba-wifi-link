@@ -69,6 +69,7 @@ struct GBALinkV2SessionConfig {
 	uint32_t maxChunkSize;
 	uint16_t minimumInputDelay;
 	uint16_t maximumInputDelay;
+	uint32_t estimatedJitterMs;
 	bool experimentalRuntime;
 	struct GBALinkV2DeadlinePolicy deadlines;
 	const struct GBALinkV2SessionCallbacks* callbacks;
@@ -96,7 +97,11 @@ struct GBALinkV2Session {
 	uint8_t playerDigests[2][MGBA_SHA256_DIGEST_SIZE];
 	uint32_t selectedChunkSize;
 	enum GBAReplicaEncoding selectedEncoding;
+	uint16_t overlappingMinimumInputDelay;
+	uint16_t overlappingMaximumInputDelay;
 	uint16_t inputDelay;
+	uint32_t handshakeRoundTripMs;
+	uint64_t acceptSentAtMs;
 	uint64_t firstFrame;
 	bool configured;
 	bool paused;

@@ -5,6 +5,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include <mgba/internal/gba/sio/netplay/session-v2.h>
 
+#include <mgba/internal/gba/sio/netplay/input-sync.h>
+
 static enum GBALinkReason _transportReason(enum GBALinkV2Reason reason) {
 	switch (reason) {
 	case GBA_LINK_V2_REASON_QUEUE_EXHAUSTED:
@@ -162,6 +164,7 @@ bool GBALinkV2SessionConfigure(
 	    config->maxChunkSize > GBA_REPLICA_MAX_CHUNK_SIZE ||
 	    config->minimumInputDelay > config->maximumInputDelay ||
 	    config->maximumInputDelay > GBA_LINK_V2_MAX_INPUT_DELAY ||
+	    config->estimatedJitterMs > 30000 ||
 	    !GBALinkV2DeadlinePolicyValidate(&config->deadlines) ||
 	    !config->callbacks || !config->callbacks->quiescentBoundary ||
 	    !config->callbacks->setPaused ||
@@ -353,6 +356,9 @@ static bool _helloCompatible(
 		    "protocol-v2 runtime ranges do not overlap");
 		return false;
 	}
+	session->overlappingMinimumInputDelay = minimum;
+	session->overlappingMaximumInputDelay = maximum;
+	/* ACCEPT carries a valid provisional value; SESSION_READY freezes D. */
 	session->inputDelay = minimum;
 	session->selectedChunkSize = session->config.maxChunkSize;
 	if (hello->maxChunkSize < session->selectedChunkSize) {
@@ -519,6 +525,19 @@ static bool _readyEqual(
 	return !memcmp(&expected, ready, sizeof(expected));
 }
 
+static bool _readyCompatibleClient(
+	struct GBALinkV2Session* session,
+	const struct GBALinkV2SessionReady* ready) {
+	if (ready->inputDelay < session->overlappingMinimumInputDelay ||
+	    ready->inputDelay > session->overlappingMaximumInputDelay) {
+		return false;
+	}
+	struct GBALinkV2SessionReady expected;
+	_fillReady(session, &expected);
+	expected.inputDelay = ready->inputDelay;
+	return !memcmp(&expected, ready, sizeof(expected));
+}
+
 static bool _trySendReady(struct GBALinkV2Session* session) {
 	if (session->localRole != GBA_LINK_ROLE_HOST || session->readySent ||
 	    !session->pairInstalled || !session->remoteInstalled) {
@@ -554,7 +573,7 @@ static bool _handleHello(
 		session->sessionId = 1;
 	}
 	session->snapshotGeneration = session->sessionId;
-	session->firstFrame = 1;
+	session->firstFrame = 0;
 	struct GBALinkV2Packet accept;
 	memset(&accept, 0, sizeof(accept));
 	accept.header.type = GBA_LINK_V2_MESSAGE_ACCEPT;
@@ -567,6 +586,8 @@ static bool _handleHello(
 	accept.payload.accept.selectedChunkSize = session->selectedChunkSize;
 	accept.payload.accept.selectedEncoding = session->selectedEncoding;
 	accept.payload.accept.inputDelay = session->inputDelay;
+	session->acceptSentAtMs =
+	    GBALinkTransportMonotonicTimeMs(session->transport);
 	if (!_send(session, &accept, true)) {
 		return false;
 	}
@@ -582,12 +603,14 @@ static bool _handleAccept(
 	    !session->remoteHello.capabilities ||
 	    accept->selectedChunkSize != session->selectedChunkSize ||
 	    accept->selectedEncoding != session->selectedEncoding ||
-	    accept->inputDelay != session->inputDelay) {
+	    accept->inputDelay < session->overlappingMinimumInputDelay ||
+	    accept->inputDelay > session->overlappingMaximumInputDelay) {
 		return false;
 	}
+	session->inputDelay = accept->inputDelay;
 	session->sessionId = accept->proposedSessionId;
 	session->snapshotGeneration = accept->snapshotGeneration;
-	session->firstFrame = 1;
+	session->firstFrame = 0;
 	if (!_captureLocal(session)) {
 		return false;
 	}
@@ -612,6 +635,19 @@ static bool _handleAcceptAck(
 	    packet->payload.acceptAck.acceptedSessionId != session->sessionId ||
 	    packet->payload.acceptAck.snapshotGeneration !=
 	        session->snapshotGeneration || !_captureLocal(session)) {
+		return false;
+	}
+	uint64_t now = GBALinkTransportMonotonicTimeMs(session->transport);
+	uint64_t elapsed = now >= session->acceptSentAtMs
+	    ? now - session->acceptSentAtMs
+	    : 0;
+	session->handshakeRoundTripMs =
+	    elapsed > UINT32_MAX ? UINT32_MAX : elapsed;
+	session->inputDelay = GBALinkInputSelectDelay(
+	    session->overlappingMinimumInputDelay,
+	    session->overlappingMaximumInputDelay,
+	    session->handshakeRoundTripMs, session->config.estimatedJitterMs);
+	if (session->inputDelay == UINT16_MAX) {
 		return false;
 	}
 	session->state = GBA_LINK_V2_SESSION_REPLICA_EXCHANGE;
@@ -707,9 +743,10 @@ static bool _handleReady(
 	if (session->localRole != GBA_LINK_ROLE_CLIENT ||
 	    session->state != GBA_LINK_V2_SESSION_READY_BARRIER ||
 	    !session->pairInstalled || !session->remoteInstalled ||
-	    !_readyEqual(session, &packet->payload.sessionReady)) {
+	    !_readyCompatibleClient(session, &packet->payload.sessionReady)) {
 		return false;
 	}
+	session->inputDelay = packet->payload.sessionReady.inputDelay;
 	struct GBALinkV2Packet ack;
 	memset(&ack, 0, sizeof(ack));
 	ack.header.type = GBA_LINK_V2_MESSAGE_SESSION_READY_ACK;

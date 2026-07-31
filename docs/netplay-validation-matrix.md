@@ -9,8 +9,7 @@ classes. Test names below are cmocka case names inside the named source file.
 
 Protocol v2 replaces per-cable-event network barriers with one replicated
 P0/P1 pair on each endpoint and frame-authoritative input packets. The current
-integration branch has the following Linux evidence before exact-head Android
-qualification:
+integration branch has the following automated and rendered-device evidence:
 
 - All 16 focused SIO, input-ring, v2 codec/session, replica, pair,
   save-routing, and libretro-adapter test executables pass normally, under
@@ -59,8 +58,80 @@ and five-percent throughput limit. The soak used core SHA-256
 `62edfb5504f66e3ece28f18ed6418d4ae401ef24841abdacc61496d622d4be5d`
 and cartridge-sized continuous fixture SHA-256
 `c302487462e6f1241e038fab8b135a43909cfce9f07cfe7498a2b1fc7b4c8330`.
-Exact arm64 artifact hashes and physical-device results remain pending until
-section 13 of `make-wifi-link-netplay-realtime` is executed.
+The exact ARM64 physical-device qualification is recorded below.
+
+### Exact-build Android continuous-link qualification
+
+The ARM64 candidate built from source head
+`217c231f2b1152b9e7b8484b0245f2210ae709d0` (tree
+`a1cca0be9434d3beeac79788fbfa745845381d76`) with Android NDK r27 was installed
+through stock RetroArch 1.22.2 on the AYN Thor host and AYN Odin2 Portal
+client. The installed 8,063,296-byte core had SHA-256
+`e045d614e5b2def408ee636c7cbffe46e94105edcb8abda65c8142879cca2989`.
+The isolated, black-screen qualification ROM had SHA-256
+`09580c39920cafa6f597f20a9019098260442242fbdbd7402e15d1217484abe3`.
+
+The continuous rendered run exceeded 33 minutes and completed 120,600 common
+replicated frames. The strict analyzer result was:
+
+```text
+frames=120600 checks=2010/2009 packets=122650/122649
+serial=60297/120594 audio_empty=0/0 fps=60.219/60.220
+rv_p50=21/21ms rv_p95=53/46ms rv_max=251/223ms
+packet_rate=61.243/61.244pps byte_rate=7130.2/7130.3Bps
+trace_samples=201 baseline_delta=0.008%
+```
+
+All 201 sampled P0/P1 trace pairs matched. The fixture reported RUNNING on
+both logical players, 60,295 matching measured transfers per endpoint, and
+zero fixture errors or timeouts. The two extra local SIO transfers are fixture
+synchronization transactions. Every completed frame supplied ordinary
+local-role audio and neither endpoint returned an empty audio frame. The
+negotiated input delay was four frames. Ordinary traffic remained about one
+packet per endpoint per frame rather than scaling with the much larger serial
+word count.
+
+The direct frame-paced pair baseline produced 59.719 serial words per emulated
+second. The rendered Android run differed by only 0.008%, well inside the
+five-percent gate. ADB sampling caused isolated rendezvous maxima of 251 ms on
+Thor and 223 ms on Odin without causing a timeout, divergence, or sustained
+frame-rate reduction.
+
+| Metric | AYN Thor | AYN Odin2 Portal |
+| --- | ---: | ---: |
+| ADB samples / observed collector window | 61 / 1,971 s | 61 / 1,992 s |
+| Process CPU mean / p95 / max | 33.31% / 38.40% / 50.00% | 48.72% / 57.60% / 61.50% |
+| Peak resident memory | 153,232 KiB | 155,828 KiB |
+| Hottest CPU/GPU sensor p50 / p95 / max | 50.3 / 57.4 / 59.4 C | 40.0 / 43.2 / 50.7 C |
+| Maximum battery temperature | 28.0 C | 27.0 C |
+| Android thermal status | 0 in all samples | 0 in all samples |
+
+The run used isolated configs, options, logs, saves, and states. The normal
+RetroArch configs, normal mGBA options, and canonical user-save manifests were
+hashed before and after qualification and were byte-identical:
+
+| Preserved data | Before and after SHA-256 |
+| --- | --- |
+| Thor RetroArch config | `eb3a81dd57e247715c71e76ade295080c1a45a9e7830d311568b3ac1d1365c24` |
+| Odin RetroArch config | `f7b9545632423876000627d3181db095700de2d1ed941ce11ca5fdbe6b36d7f1` |
+| Thor/Odin normal mGBA options | `65fd9076a4f1cd6f4aa09ad3965bab83c00ea4b7a90c0626674737d7f1f6a468` |
+| Thor user-save manifest | `a7017a805b801f60f7bafcf97ea7e0ce52bd0a1afa6b72c4909d7d4344dadcc6` |
+| Odin user-save manifest | `65d2e3196cd7f4c36454855b8ee01805aa9643fddeabcc2c7f8db5678a6f86fb` |
+
+Raw logs remain outside the repository and contain no committed ROM or save
+data. Their verification hashes are:
+
+| Evidence | SHA-256 |
+| --- | --- |
+| Thor core log | `46ddfe4bbe4ebbabdbb0252e6264e1b5d8711f98afb9a2757edb3ba4782d9bf2` |
+| Odin core log | `94d975ad9baa6a3e4d9aab501ac589f7d21311db3dc3de599265c3ec149072c8` |
+| Thor ADB samples | `f52f082685e55b27faf632ac65b2c548fba1c963176808cfb80d2eff0e4b161c` |
+| Odin ADB samples | `f2bc69474cb498ee672c6344c803aab483ace79357fc4ff85a12633015488e61` |
+
+The qualification fixture renders black while waiting and running, and dim
+red only on failure, avoiding a static bright OLED workload during long soaks.
+Both RetroArch processes were stopped after evidence capture and Android
+reported every built-in display panel `OFF`.
 
 The desktop soak is reproducible with a stock RetroArch executable, the built
 libretro core, and the continuous CC0 fixture. Copy the core-option templates

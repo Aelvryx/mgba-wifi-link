@@ -182,5 +182,9 @@ RetroArch soak are recorded in the validation matrix. Arm GNU Toolchain
 15.2.Rel1 reproduces the committed 32 KiB test ROM byte-for-byte.
 
 Android NDK r27 builds passed for `arm64-v8a`, `armeabi-v7a`, `x86`, and
-`x86_64`; the ARM64 production core was validated on the two physical Android
-devices described in the validation matrix.
+`x86_64`. The exact ARM64 protocol-v2 candidate from
+`217c231f2b1152b9e7b8484b0245f2210ae709d0`, SHA-256
+`e045d614e5b2def408ee636c7cbffe46e94105edcb8abda65c8142879cca2989`,
+completed a 120,600-frame continuous-link run on the two physical Android
+devices described in the validation matrix. Both endpoints sustained 60.22
+FPS with matching traces, no empty audio frames, and no link error or timeout.

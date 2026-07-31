@@ -22,8 +22,10 @@ Status
 - Sixty-frame canonical state verification and bounded failure handling.
 - Linux libretro and Android `arm64-v8a`, `armeabi-v7a`, `x86`, and `x86_64`
   builds.
-- Protocol-v1 was validated on two physical Android handhelds; exact-head
-  protocol-v2 device qualification is in progress.
+- Protocol-v2 passed an exact-build, 120,600-frame continuous-link run on two
+  physical Android handhelds at 60.22 FPS with matching state traces, normal
+  audio delivery, and no link errors or timeouts. Commercial-game
+  qualification remains in progress.
 
 The first release intentionally excludes Single-Pak multiboot, the GBA
 Wireless Adapter/RFU, NORMAL8/NORMAL32 networking, three- or four-player

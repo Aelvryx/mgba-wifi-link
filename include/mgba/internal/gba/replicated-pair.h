@@ -25,6 +25,10 @@ enum GBAReplicatedPairResult {
 	GBA_REPLICATED_PAIR_FRAME_OVERSHOOT,
 };
 
+enum {
+	GBA_REPLICATED_PAIR_DIGEST_VERSION = 1,
+};
+
 struct GBAReplicatedPairUser {
 	struct mLockstepUser d;
 	int requestedId;
@@ -36,10 +40,15 @@ struct GBAReplicatedPairUser {
 struct GBAReplicatedPairPlayer {
 	struct mCore* core;
 	struct VFile* temporarySave;
+	mColor* videoBuffer;
 	struct GBASIOLockstepDriver driver;
 	struct GBAReplicatedPairUser user;
 	bool attached;
 	uint64_t runLoops;
+	uint64_t saveGeneration;
+	enum GBASavedataType observedSaveType;
+	int observedSaveDirty;
+	uint32_t observedSaveDirtAge;
 	bool configInitialized;
 };
 
@@ -49,6 +58,7 @@ struct GBAReplicatedPairMetrics {
 	uint64_t runLoops[2];
 	uint64_t sleeps[2];
 	uint64_t wakes[2];
+	uint64_t saveGenerations[2];
 	uint64_t transferStarts;
 	uint64_t transferCompletions;
 	uint64_t transferredWords;
@@ -76,7 +86,7 @@ struct GBAReplicatedPair {
 const char* GBAReplicatedPairResultName(enum GBAReplicatedPairResult result);
 void GBAReplicatedPairInit(struct GBAReplicatedPair* pair);
 enum GBAReplicatedPairResult GBAReplicatedPairInstall(
-	struct GBAReplicatedPair* pair, const struct mCore* templateCore,
+	struct GBAReplicatedPair* pair, struct mCore* templateCore,
 	const struct GBAReplicaManifest manifests[2],
 	const struct GBAReplicaPayload payloads[2], uint64_t generation);
 enum GBAReplicatedPairResult GBAReplicatedPairSetInputs(
@@ -88,6 +98,17 @@ struct mCore* GBAReplicatedPairCore(
 	struct GBAReplicatedPair* pair, uint8_t player);
 const struct mCore* GBAReplicatedPairCoreConst(
 	const struct GBAReplicatedPair* pair, uint8_t player);
+mColor* GBAReplicatedPairVideoBuffer(
+	struct GBAReplicatedPair* pair, uint8_t player);
+bool GBAReplicatedPairAssignFrontend(
+	struct GBAReplicatedPair* pair, uint8_t player,
+	struct mCore* frontendCore);
+bool GBAReplicatedPairAssignSaveBacking(
+	struct GBAReplicatedPair* pair, uint8_t player,
+	void* data, size_t capacity);
+bool GBAReplicatedPairStateDigest(
+	const struct GBAReplicatedPair* pair, uint8_t player,
+	uint8_t digest[MGBA_SHA256_DIGEST_SIZE]);
 bool GBAReplicatedPairGetMetrics(
 	const struct GBAReplicatedPair* pair,
 	struct GBAReplicatedPairMetrics* metrics);

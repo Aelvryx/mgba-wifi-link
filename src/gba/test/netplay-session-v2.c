@@ -199,11 +199,12 @@ static bool _installPair(
 	return endpoint->installResult;
 }
 
-static void _commitPair(void* context) {
+static bool _commitPair(void* context) {
 	struct V2Endpoint* endpoint = context;
 	assert_true(endpoint->pairInstalled);
 	++endpoint->commitCalls;
 	endpoint->pairCommitted = true;
+	return true;
 }
 
 static void _discardPair(void* context, bool committed) {
@@ -485,6 +486,36 @@ M_TEST_DEFINE(synchronousStopDuringReceivePollInvalidatesGeneration) {
 	_deinitPair(&pair);
 }
 
+M_TEST_DEFINE(runtimeInputDeadlineFailsWithSpecificReason) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	_startPair(&pair);
+	_pump(&pair, 8);
+	assert_int_equal(
+	    pair.host.session.state, GBA_LINK_V2_SESSION_READY);
+
+	struct GBALinkV2Packet packet;
+	memset(&packet, 0, sizeof(packet));
+	packet.header.type = GBA_LINK_V2_MESSAGE_INPUT_BATCH;
+	packet.payload.inputBatch.snapshotGeneration =
+	    pair.host.session.snapshotGeneration;
+	packet.payload.inputBatch.player = 0;
+	packet.payload.inputBatch.count = 1;
+	packet.payload.inputBatch.records[0].frame =
+	    pair.host.session.firstFrame;
+	assert_true(GBALinkV2SessionSendRuntime(
+	    &pair.host.session, &packet,
+	    GBA_LINK_V2_DEADLINE_INPUT));
+	pair.host.now += 3001;
+	assert_false(GBALinkV2SessionUpdate(
+	    &pair.host.session, false));
+	assert_int_equal(
+	    pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
+	assert_int_equal(
+	    pair.host.failureReason, GBA_LINK_V2_REASON_INPUT_TIMEOUT);
+	_deinitPair(&pair);
+}
+
 M_TEST_SUITE_DEFINE(GBALinkSessionV2,
 	cmocka_unit_test(bilateralBundlesInstallInCanonicalOrderAndReleaseAtomically),
 	cmocka_unit_test(handshakeRttAndJitterFreezeOneSharedInputDelay),
@@ -495,4 +526,5 @@ M_TEST_SUITE_DEFINE(GBALinkSessionV2,
 	cmocka_unit_test(synchronousStopAtEveryReplicaBoundaryFailsClosed),
 	cmocka_unit_test(queueExhaustionDuringManifestSendFailsClosed),
 	cmocka_unit_test(pairInstallationFailureRetainsOriginalAndStopsSession),
-	cmocka_unit_test(synchronousStopDuringReceivePollInvalidatesGeneration))
+	cmocka_unit_test(synchronousStopDuringReceivePollInvalidatesGeneration),
+	cmocka_unit_test(runtimeInputDeadlineFailsWithSpecificReason))

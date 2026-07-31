@@ -5,6 +5,44 @@ Date: 2026-07-31
 This document maps the MVP's automated evidence to protocol phases and failure
 classes. Test names below are cmocka case names inside the named source file.
 
+## Protocol-v2 real-time evidence
+
+Protocol v2 replaces per-cable-event network barriers with one replicated
+P0/P1 pair on each endpoint and frame-authoritative input packets. The current
+integration branch has the following local evidence before exact-head Android
+qualification:
+
+- The complete normal suite passes 37/37 tests.
+- Focused input-ring, v2 codec/session, replica, pair, save-routing, and
+  libretro-adapter suites pass under ASan/UBSan with leak detection.
+- `canonicalDigestsCoverFutureStateOnly` detects injected one-bit P0 memory,
+  P1 memory, timing, and save changes while ignoring presentation-buffer
+  changes.
+- `saveBackingBelongsOnlyToAssignedPlayer` proves host/P0 and client/P1 save
+  ownership without exposing the shadow save to the frontend buffer.
+- `runtimeInputDeadlineFailsWithSpecificReason` and
+  `missingPollingAndSynchronousStopFailClosed` cover bounded input wait and
+  generation invalidation during a receive callback.
+- A stock-RetroArch localhost run exceeded 2,100 replicated frames with
+  matching P0/P1 state checks every 60 frames.
+- A second late-attach run completed 1,200 frames and approximately 1,100
+  generic MULTI transfers. Packet counts remained frame-scaled, both logical
+  cores produced audio for every presented frame, and no empty-audio callback
+  was recorded.
+- Peer timeout restored the retained single core to frame 1,200, the latest
+  jointly verified quiescent local-role state, while preserving its live local
+  save generation.
+
+The short structured summaries include cumulative packets/bytes, verification
+count, local SIO transfers/words/waits, input rendezvous timing, future input
+depth, queue high-water, audio samples/frames/empties, and per-core scheduler
+work. Exact arm64 artifact hashes and physical-device results remain pending
+until section 13 of `make-wifi-link-netplay-realtime` is executed.
+
+The remaining sections document protocol-v1 correctness and its earlier
+physical qualification. That code remains a diagnostic SIO oracle; it is not
+the normal release runtime.
+
 ## Deterministic two-core evidence
 
 `src/gba/test/netplay-integration.c` boots the redistributable link-test ROM in

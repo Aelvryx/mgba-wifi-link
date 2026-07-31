@@ -18,11 +18,12 @@ Status
 - Stock RetroArch 1.22.2 or another frontend implementing the current
   Netpacket command-78 callback contract.
 - Exact effective-ROM matching, with independent saves and inputs.
-- Host-led conservative synchronization with bounded failure handling.
+- Replicated P0/P1 execution with one input packet per player per frame.
+- Sixty-frame canonical state verification and bounded failure handling.
 - Linux libretro and Android `arm64-v8a`, `armeabi-v7a`, `x86`, and `x86_64`
   builds.
-- Validated on two physical Android handhelds at every MULTI baud rate and
-  against an independently authored LinkCable workload.
+- Protocol-v1 was validated on two physical Android handhelds; exact-head
+  protocol-v2 device qualification is in progress.
 
 The first release intentionally excludes Single-Pak multiboot, the GBA
 Wireless Adapter/RFU, NORMAL8/NORMAL32 networking, three- or four-player
@@ -56,7 +57,7 @@ Project documentation
 
 The principal implementation lives in `src/gba/sio/netplay`, with the
 transport-neutral interfaces in `include/mgba/internal/gba/sio/netplay` and
-the libretro adapter in `src/platform/libretro/netpacket.c`. Tests are under
+the release libretro adapter in `src/platform/libretro/netpacket-v2.c`. Tests are under
 `src/gba/test` and `src/platform/test`.
 
 Upstream mGBA

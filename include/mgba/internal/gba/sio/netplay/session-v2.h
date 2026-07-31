@@ -54,7 +54,7 @@ struct GBALinkV2SessionCallbacks {
 	bool (*installPair)(
 		void* context, const struct GBAReplicaManifest manifests[2],
 		const struct GBAReplicaPayload payloads[2]);
-	void (*commitPair)(void* context);
+	bool (*commitPair)(void* context);
 	void (*discardPair)(void* context, bool committed);
 	bool (*runtimePacket)(
 		void* context, const struct GBALinkV2Packet* packet);
@@ -134,6 +134,9 @@ bool GBALinkV2SessionUpdate(
 bool GBALinkV2SessionSendRuntime(
 	struct GBALinkV2Session* session, struct GBALinkV2Packet* packet,
 	enum GBALinkV2DeadlineOperation deadline);
+void GBALinkV2SessionRuntimeDeadlineSatisfied(
+	struct GBALinkV2Session* session,
+	enum GBALinkV2DeadlineOperation operation);
 void GBALinkV2SessionFail(
 	struct GBALinkV2Session* session, enum GBALinkV2Reason reason,
 	const char* diagnostic);

@@ -18,19 +18,22 @@ make CROSS=arm-none-eabi-
 The normal generated output is `build/gba-link-test.gba`. Defining
 `GBA_LINK_CONTINUOUS` produces `build/gba-link-continuous.gba`, which repeats
 the checked transfer matrix indefinitely for scheduler and performance tests.
+The continuous variant tolerates the ordinary no-peer state before frontend
+attachment, then fails closed after it has observed a real peer. This permits
+late host/join qualification without hiding failures in an established link.
 Reviewed fixtures are committed separately under `fixtures/` so a clean
 checkout can run the two-core tests without making an Arm toolchain a normal
 mGBA test dependency. The generated `build/` directory remains ignored.
 Rebuilding the normal fixture should produce the same SHA-256:
 
 ```text
-24b7ef2bee7ff95ebe00d487f06ff82ea10eaefa63f04760bdb71bf9c64ffbe8
+2f662e4bcf2ac81c438ae5eacc786b2d2984c00807d3656b4990da66a99edc13
 ```
 
 The continuous fixture should produce:
 
 ```text
-5d82dc1f4c62c99cf024c6978671fce4dbb23671658f4bfc8e8e52a124802e9d
+21a674dba3e62cec23da3dcdf3030629b76d8f6d58033ccbb62ff5acce0f2aa6
 ```
 
 CI rebuilds the ROM with the GNU Arm Embedded toolchain and compares every

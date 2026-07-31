@@ -114,7 +114,7 @@ static bool _validType(enum GBALinkV2MessageType type) {
 
 static bool _validReason(enum GBALinkV2Reason reason) {
 	return reason >= GBA_LINK_V2_REASON_PROTOCOL_MISMATCH &&
-	       reason <= GBA_LINK_V2_REASON_INVALID_TRANSITION;
+	       reason <= GBA_LINK_V2_REASON_DIVERGENCE;
 }
 
 static bool _preSessionType(enum GBALinkV2MessageType type) {

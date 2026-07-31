@@ -33,6 +33,7 @@
 #else
 #include "netpacket.h"
 #endif
+#include "netpacket-v2.h"
 
 #define GB_SAMPLES 512
 /* An alpha factor of 1/180 is *somewhat* equivalent
@@ -572,7 +573,7 @@ void retro_run(void) {
 	mNetpacketSpikeTimingBoundary();
 #else
 	if (!replicatedPairDiagnostic) {
-		mLibretroNetpacketRunBegin();
+		mLibretroNetpacketV2RunBegin();
 	}
 #endif
 	uint16_t keys;
@@ -589,6 +590,8 @@ void retro_run(void) {
 		};
 		if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value &&
 #ifndef MGBA_NETPACKET_SPIKE
+		    !mLibretroNetpacketV2RejectOperation(
+		        "Changing input-direction settings") &&
 		    !mLibretroNetpacketRejectTimingChange("input-direction")
 #else
 		    true
@@ -623,7 +626,9 @@ void retro_run(void) {
 			keys |= (!!inputCallback(0, RETRO_DEVICE_JOYPAD, 0, keymap[i])) << i;
 		}
 	}
-	core->setKeys(core, keys);
+	if (!mLibretroNetpacketV2OwnsExecution()) {
+		core->setKeys(core, keys);
+	}
 
 	if (!luxSensorUsed) {
 		static bool wasAdjustingLux = false;
@@ -655,25 +660,36 @@ void retro_run(void) {
 		}
 	} else {
 #ifndef MGBA_NETPACKET_SPIKE
-		if (!mLibretroNetpacketExecutionBlocked()) {
+		if (mLibretroNetpacketV2OwnsExecution()) {
+			mLibretroNetpacketV2RunFrame(keys);
+		} else if (!mLibretroNetpacketV2ExecutionBlocked()) {
 			core->runFrame(core);
 		}
 #else
 		core->runFrame(core);
 #endif
 	}
-#ifndef MGBA_NETPACKET_SPIKE
-	if (!replicatedPairDiagnostic) {
-		mLibretroNetpacketRunEnd();
+	struct mCore* presentedCore =
+	    mLibretroNetpacketV2PresentedCore();
+	bool replicatedPresentation = presentedCore != NULL;
+	mColor* presentedVideo =
+	    mLibretroNetpacketV2PresentedVideo();
+	if (!presentedCore) {
+		presentedCore = core;
+		presentedVideo = outputBuffer;
 	}
-#endif
 	unsigned width, height;
-	core->currentVideoSize(core, &width, &height);
-	videoCallback(outputBuffer, width, height, BYTES_PER_PIXEL * 256);
+	presentedCore->currentVideoSize(
+	    presentedCore, &width, &height);
+	videoCallback(
+	    presentedVideo, width, height,
+	    BYTES_PER_PIXEL * 256);
 
 #ifdef M_CORE_GBA
-	if (core->platform(core) == mPLATFORM_GBA) {
-		struct mAudioBuffer *buffer = core->getAudioBuffer(core);
+	size_t replicatedAudioSamples = 0;
+	if (presentedCore->platform(presentedCore) == mPLATFORM_GBA) {
+		struct mAudioBuffer *buffer =
+		    presentedCore->getAudioBuffer(presentedCore);
 		int samplesAvail            = mAudioBufferAvailable(buffer);
 		if (samplesAvail > 0) {
 			/* Update 'running average' of number of
@@ -693,12 +709,17 @@ void retro_run(void) {
 			}
 			int produced = mAudioBufferRead(buffer, audioSampleBuffer, samplesToRead);
 			if (produced > 0) {
+				replicatedAudioSamples = produced;
 				if (audioLowPassEnabled) {
 					_audioLowPassFilter(audioSampleBuffer, produced);
 				}
 				audioCallback(audioSampleBuffer, (size_t)produced);
 			}
 		}
+	}
+	if (replicatedPresentation) {
+		mLibretroNetpacketV2ReportAudio(
+		    replicatedAudioSamples);
 	}
 #endif
 }
@@ -892,7 +913,7 @@ static void _setupMaps(struct mCore* core) {
 
 void retro_reset(void) {
 #ifndef MGBA_NETPACKET_SPIKE
-	mLibretroNetpacketReset();
+	mLibretroNetpacketV2Reset();
 #endif
 	mLibretroReplicatedPairSpikeStop();
 	core->reset(core);
@@ -1054,7 +1075,9 @@ bool retro_load_game(const struct retro_game_info* game) {
 	mNetpacketSpikeRegister(environCallback);
 #else
 	if (!replicatedPairDiagnostic) {
-		mLibretroNetpacketRegister(environCallback, core);
+		mLibretroNetpacketV2Register(
+		    environCallback, core, savedata,
+		    GBA_SIZE_FLASH1M);
 	}
 #endif
 	gameLoaded = true;
@@ -1067,7 +1090,7 @@ void retro_unload_game(void) {
 #ifdef MGBA_NETPACKET_SPIKE
 	mNetpacketSpikeUnload();
 #else
-	mLibretroNetpacketUnload();
+	mLibretroNetpacketV2Unload();
 #endif
 	if (!core) {
 		return;
@@ -1081,7 +1104,8 @@ void retro_unload_game(void) {
 }
 
 size_t retro_serialize_size(void) {
-	if (replicatedPairDiagnostic) {
+	if (replicatedPairDiagnostic ||
+	    mLibretroNetpacketV2SessionActive()) {
 		return 0;
 	}
 	if (deferredSetup) {
@@ -1099,7 +1123,8 @@ bool retro_serialize(void* data, size_t size) {
 		return false;
 	}
 #ifndef MGBA_NETPACKET_SPIKE
-	if (mLibretroNetpacketRejectStateOperation("Saving state")) {
+	if (mLibretroNetpacketV2RejectOperation("Saving state") ||
+	    mLibretroNetpacketRejectStateOperation("Saving state")) {
 		return false;
 	}
 #endif
@@ -1125,7 +1150,8 @@ bool retro_unserialize(const void* data, size_t size) {
 		return false;
 	}
 #ifndef MGBA_NETPACKET_SPIKE
-	if (mLibretroNetpacketRejectStateOperation("Loading state")) {
+	if (mLibretroNetpacketV2RejectOperation("Loading state") ||
+	    mLibretroNetpacketRejectStateOperation("Loading state")) {
 		return false;
 	}
 #endif
@@ -1140,7 +1166,8 @@ bool retro_unserialize(const void* data, size_t size) {
 
 void retro_cheat_reset(void) {
 #ifndef MGBA_NETPACKET_SPIKE
-	if (mLibretroNetpacketRejectCheatChange()) {
+	if (mLibretroNetpacketV2RejectOperation("Changing cheats") ||
+	    mLibretroNetpacketRejectCheatChange()) {
 		return;
 	}
 #endif
@@ -1149,7 +1176,8 @@ void retro_cheat_reset(void) {
 
 void retro_cheat_set(unsigned index, bool enabled, const char* code) {
 #ifndef MGBA_NETPACKET_SPIKE
-	if (mLibretroNetpacketRejectCheatChange()) {
+	if (mLibretroNetpacketV2RejectOperation("Changing cheats") ||
+	    mLibretroNetpacketRejectCheatChange()) {
 		return;
 	}
 #endif

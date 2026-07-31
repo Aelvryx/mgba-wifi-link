@@ -961,6 +961,92 @@ M_TEST_DEFINE(clientIndependentStartWaitsForPrimary) {
 	assert_int_equal(
 	    client.driver.transfer.state,
 	    GBA_SIO_NETPLAY_TRANSFER_IDLE);
+	assert_true(client.driver.secondaryStartPending);
+	_deinitFixture(&client);
+	_deinitFixture(&host);
+}
+
+M_TEST_DEFINE(clientIndependentStartThenDisconnectRestoresIdleLines) {
+	struct DriverFixture host;
+	struct DriverFixture client;
+	_initAttachedPair(&host, &client);
+	const uint16_t words[] = {
+		0x1357, 0x2468, 0x9ABC, 0xDEF0,
+	};
+	memcpy(
+	    &client.gba->memory.io[GBA_REG(SIOMULTI0)],
+	    words, sizeof(words));
+	client.gba->memory.io[GBA_REG(IF)] = 0;
+	client.gba->sio.siocnt =
+	    GBASIOMultiplayerFillError(
+	        client.gba->sio.siocnt);
+
+	GBASIOWriteSIOCNT(
+	    &client.gba->sio, 0x6080);
+	assert_true(client.driver.secondaryStartPending);
+	assert_true(GBASIOMultiplayerIsBusy(
+	    client.gba->sio.siocnt));
+	assert_false(mTimingIsScheduled(
+	    &client.gba->timing,
+	    &client.gba->sio.completeEvent));
+
+	GBALinkSessionFail(
+	    &client.session, GBA_LINK_REASON_PEER_DETACH,
+	    "injected disconnect during secondary wait");
+
+	assert_null(client.gba->sio.driver);
+	assert_false(client.driver.secondaryStartPending);
+	assert_false(GBASIOMultiplayerIsBusy(
+	    client.gba->sio.siocnt));
+	assert_false(mTimingIsScheduled(
+	    &client.gba->timing,
+	    &client.gba->sio.completeEvent));
+	assert_false(
+	    client.gba->memory.io[GBA_REG(IF)] &
+	    (1 << GBA_IRQ_SIO));
+	assert_memory_equal(
+	    &client.gba->memory.io[GBA_REG(SIOMULTI0)],
+	    words, sizeof(words));
+	assert_true(GBASIOMultiplayerIsError(
+	    client.gba->sio.siocnt));
+	assert_true(GBASIOMultiplayerIsReady(
+	    client.gba->sio.siocnt));
+	assert_true(GBASIOMultiplayerIsSlave(
+	    client.gba->sio.siocnt));
+	assert_int_equal(
+	    GBASIOMultiplayerGetId(
+	        client.gba->sio.siocnt), 0);
+	assert_true(GBASIORegisterRCNTIsSc(
+	    client.gba->sio.rcnt));
+	_deinitFixture(&client);
+	_deinitFixture(&host);
+}
+
+M_TEST_DEFINE(remoteStartConsumesClientIndependentStart) {
+	struct DriverFixture host;
+	struct DriverFixture client;
+	_initAttachedPair(&host, &client);
+	_configureTransfer(&host, &client, true);
+
+	GBASIOWriteSIOCNT(
+	    &client.gba->sio, 0x6080);
+	assert_true(client.driver.secondaryStartPending);
+	_startHostTransfer(&host, true);
+
+	assert_false(client.driver.secondaryStartPending);
+	assert_true(client.driver.transfer.startAccepted);
+	assert_true(mTimingIsScheduled(
+	    &client.gba->timing,
+	    &client.gba->sio.completeEvent));
+	_completeHostTransfer(&host);
+	assert_false(GBASIOMultiplayerIsBusy(
+	    client.gba->sio.siocnt));
+	assert_int_equal(
+	    client.gba->memory.io[GBA_REG(SIOMULTI0)],
+	    0x1234);
+	assert_int_equal(
+	    client.gba->memory.io[GBA_REG(SIOMULTI1)],
+	    0x5678);
 	_deinitFixture(&client);
 	_deinitFixture(&host);
 }
@@ -1700,6 +1786,10 @@ M_TEST_SUITE_DEFINE(GBASIONetplayDriver,
 	    notReadyHostStartUsesOrdinaryNoPeerPath),
 	cmocka_unit_test(
 	    clientIndependentStartWaitsForPrimary),
+	cmocka_unit_test(
+	    clientIndependentStartThenDisconnectRestoresIdleLines),
+	cmocka_unit_test(
+	    remoteStartConsumesClientIndependentStart),
 	cmocka_unit_test(
 	    stopAfterCommitErrorCompletesAtAnnouncedCycle),
 	cmocka_unit_test(

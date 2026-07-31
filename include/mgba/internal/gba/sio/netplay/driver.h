@@ -92,6 +92,7 @@ struct GBASIONetplayDriver {
 	bool unloading;
 	bool processingEvent;
 	bool queuedLocalModeIntent;
+	bool secondaryStartPending;
 };
 
 void GBASIONetplayDriverCreate(

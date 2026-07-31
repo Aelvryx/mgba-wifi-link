@@ -537,6 +537,7 @@ static void _driverDeinit(struct GBASIODriver* base) {
 	driver->executionLimitEnabled = false;
 	driver->paused = false;
 	driver->boundary = GBA_SIO_NETPLAY_BOUNDARY_NONE;
+	driver->secondaryStartPending = false;
 }
 
 static void _driverReset(struct GBASIODriver* base) {
@@ -737,6 +738,16 @@ static uint16_t _driverWriteSIOCNT(
 	    (struct GBASIONetplayDriver*) base;
 	int connected = _driverConnectedDevices(base);
 	int id = _driverDeviceId(base);
+	bool secondaryStart =
+	    driver->session->localRole == GBA_LINK_ROLE_CLIENT &&
+	    id == 1 &&
+	    GBASIOMultiplayerIsBusy(value) &&
+	    !GBASIOMultiplayerIsBusy(driver->sio->siocnt) &&
+	    !_transferInProgress(driver) &&
+	    (!driver->sio->p ||
+	     !mTimingIsScheduled(
+	         &driver->sio->p->timing,
+	         &driver->sio->completeEvent));
 	value = connected
 	            ? GBASIOMultiplayerFillReady(value)
 	            : driver->attached && driver->observable
@@ -745,6 +756,9 @@ static uint16_t _driverWriteSIOCNT(
 	value = GBASIOMultiplayerSetSlave(
 	    value, id || !connected);
 	value = GBASIOMultiplayerSetId(value, id);
+	if (secondaryStart) {
+		driver->secondaryStartPending = true;
+	}
 	return value;
 }
 
@@ -1190,6 +1204,7 @@ static bool _handleTransferStart(
 	        (uint32_t) duration) {
 		return false;
 	}
+	driver->secondaryStartPending = false;
 	memset(
 	    &driver->transfer, 0,
 	    sizeof(driver->transfer));
@@ -1733,6 +1748,7 @@ void GBASIONetplayDriverCancel(
 	driver->paused = false;
 	driver->executionLimitEnabled = false;
 	driver->boundary = GBA_SIO_NETPLAY_BOUNDARY_NONE;
+	driver->secondaryStartPending = false;
 	if (GBALinkSessionIsLive(driver->session)) {
 		GBALinkSessionFail(
 		    driver->session, reason,
@@ -1749,6 +1765,21 @@ void GBASIONetplayDriverDetach(
 	if (!driver || !driver->sio) {
 		return;
 	}
+	bool orphanedSecondaryWait =
+	    driver->secondaryStartPending &&
+	    driver->sio->mode == GBA_SIO_MULTI &&
+	    GBASIOMultiplayerIsBusy(driver->sio->siocnt) &&
+	    !_transferInProgress(driver) &&
+	    (!driver->sio->p ||
+	     !mTimingIsScheduled(
+	         &driver->sio->p->timing,
+	         &driver->sio->completeEvent));
+	if (orphanedSecondaryWait) {
+		driver->sio->siocnt =
+		    GBASIOMultiplayerClearBusy(
+		        driver->sio->siocnt);
+	}
+	driver->secondaryStartPending = false;
 	if (driver->sio->mode == GBA_SIO_MULTI &&
 	    !GBASIOMultiplayerIsBusy(driver->sio->siocnt)) {
 		driver->sio->siocnt =

@@ -266,6 +266,49 @@ M_TEST_DEFINE(invalidEnumsIdsAndRolesFail) {
 	    GBA_LINK_DECODE_ROLE);
 }
 
+M_TEST_DEFINE(noncanonicalBooleanBytesFailWithoutMutation) {
+	const struct {
+		enum GBALinkMessageType type;
+		size_t payloadOffset;
+	} cases[] = {
+		{
+			GBA_LINK_MESSAGE_MODE_INTENT,
+			17,
+		},
+		{
+			GBA_LINK_MESSAGE_MODE_COMMIT,
+			18,
+		},
+		{
+			GBA_LINK_MESSAGE_COMPLETION_READY,
+			26,
+		},
+	};
+	struct GBALinkPacket sentinel;
+	memset(&sentinel, 0xA5, sizeof(sentinel));
+	for (size_t i = 0;
+	     i < sizeof(cases) / sizeof(cases[0]); ++i) {
+		struct GBALinkPacket packet =
+		    _packet(cases[i].type);
+		uint8_t buffer[GBA_LINK_MAX_PACKET_SIZE];
+		size_t encodedSize = 0;
+		assert_true(GBALinkPacketEncode(
+		    &packet, buffer, sizeof(buffer),
+		    &encodedSize));
+		buffer[GBA_LINK_HEADER_SIZE +
+		       cases[i].payloadOffset] = 2;
+		struct GBALinkPacket output = sentinel;
+		assert_int_equal(
+		    GBALinkPacketDecode(
+		        buffer, encodedSize,
+		        _senderRole(cases[i].type),
+		        &output),
+		    GBA_LINK_DECODE_FIELD);
+		assert_memory_equal(
+		    &output, &sentinel, sizeof(output));
+	}
+}
+
 M_TEST_DEFINE(counterBoundaryIsRepresentableWithoutWrap) {
 	struct GBALinkPacket packet = _packet(GBA_LINK_MESSAGE_EXECUTION_GRANT);
 	packet.header.packetSequence = UINT64_MAX;
@@ -360,6 +403,8 @@ M_TEST_SUITE_DEFINE(GBALinkProtocol,
 	cmocka_unit_test(truncationAndTrailingDataFailWithoutMutation),
 	cmocka_unit_test(oversizedAndReservedDataFail),
 	cmocka_unit_test(invalidEnumsIdsAndRolesFail),
+	cmocka_unit_test(
+	    noncanonicalBooleanBytesFailWithoutMutation),
 	cmocka_unit_test(counterBoundaryIsRepresentableWithoutWrap),
 	cmocka_unit_test(conflictingDuplicateHasDistinctCanonicalBytes),
 	cmocka_unit_test(randomInputNeverPartiallyMutatesOutput),

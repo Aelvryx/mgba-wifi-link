@@ -96,6 +96,16 @@ static bool _readZeroes(struct GBALinkReader* reader, size_t size) {
 	return zero;
 }
 
+static bool _readBoolean(
+    struct GBALinkReader* reader, bool* value) {
+	uint8_t encoded = _read8(reader);
+	if (encoded > 1) {
+		return false;
+	}
+	*value = encoded != 0;
+	return true;
+}
+
 static bool _validMode(enum GBALinkWireMode mode) {
 	switch (mode) {
 	case GBA_LINK_MODE_NORMAL_8:
@@ -510,6 +520,7 @@ bool GBALinkPacketEncode(const struct GBALinkPacket* packet, void* data, size_t 
 static enum GBALinkDecodeStatus _decodePayload(
     struct GBALinkReader* reader, struct GBALinkPacket* packet) {
 	bool reserved = true;
+	bool canonical = true;
 	switch (packet->header.type) {
 	case GBA_LINK_MESSAGE_HELLO: {
 		struct GBALinkHello* hello = &packet->payload.hello;
@@ -569,7 +580,8 @@ static enum GBALinkDecodeStatus _decodePayload(
 		packet->payload.modeIntent.modeGeneration = _read64(reader);
 		packet->payload.modeIntent.localCycle = _read64(reader);
 		packet->payload.modeIntent.localMode = _read8(reader);
-		packet->payload.modeIntent.deferred = _read8(reader);
+		canonical &= _readBoolean(
+		    reader, &packet->payload.modeIntent.deferred);
 		reserved &= _readZeroes(reader, 6);
 		break;
 	case GBA_LINK_MESSAGE_MODE_COMMIT:
@@ -577,7 +589,8 @@ static enum GBALinkDecodeStatus _decodePayload(
 		packet->payload.modeCommit.commitCycle = _read64(reader);
 		packet->payload.modeCommit.hostMode = _read8(reader);
 		packet->payload.modeCommit.clientMode = _read8(reader);
-		packet->payload.modeCommit.jointlyReady = _read8(reader);
+		canonical &= _readBoolean(
+		    reader, &packet->payload.modeCommit.jointlyReady);
 		reserved &= _readZeroes(reader, 5);
 		break;
 	case GBA_LINK_MESSAGE_MODE_ACK:
@@ -618,7 +631,9 @@ static enum GBALinkDecodeStatus _decodePayload(
 		packet->payload.completionReady.completionSequence = _read64(reader);
 		packet->payload.completionReady.completionCycle = _read64(reader);
 		packet->payload.completionReady.abortReason = _read16(reader);
-		packet->payload.completionReady.hasDeferredMode = _read8(reader);
+		canonical &= _readBoolean(
+		    reader,
+		    &packet->payload.completionReady.hasDeferredMode);
 		reserved &= _readZeroes(reader, 5);
 		break;
 	case GBA_LINK_MESSAGE_COMPLETION_DECISION:
@@ -642,6 +657,9 @@ static enum GBALinkDecodeStatus _decodePayload(
 	}
 	if (!reader->valid) {
 		return GBA_LINK_DECODE_TRUNCATED;
+	}
+	if (!canonical) {
+		return GBA_LINK_DECODE_FIELD;
 	}
 	if (!reserved) {
 		return GBA_LINK_DECODE_RESERVED;

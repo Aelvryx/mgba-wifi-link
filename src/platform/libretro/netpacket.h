@@ -30,6 +30,9 @@ bool mLibretroNetpacketTestPollReceive(void);
 int mLibretroNetpacketTestSessionState(void);
 void mLibretroNetpacketTestSetSessionState(
     int state);
+void mLibretroNetpacketTestSetTimeMs(uint64_t nowMs);
+uint64_t mLibretroNetpacketTestCallbackGeneration(void);
+size_t mLibretroNetpacketTestPendingPacketCount(void);
 #endif
 
 #endif

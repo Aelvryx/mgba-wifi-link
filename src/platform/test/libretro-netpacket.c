@@ -9,6 +9,8 @@
 
 #include <mgba/core/core.h>
 #include <mgba/gba/core.h>
+#include <mgba/internal/gba/gba.h>
+#include <mgba/internal/gba/sio.h>
 #include <mgba/internal/gba/sio/netplay/protocol.h>
 #include <mgba/internal/gba/sio/netplay/session.h>
 #include <mgba-util/vfs.h>
@@ -30,6 +32,7 @@ struct FakeFrontend {
 	uint16_t lastTarget;
 	uint8_t lastPacket[GBA_LINK_MAX_PACKET_SIZE];
 	size_t lastPacketSize;
+	char lastMessage[384];
 };
 
 struct AdapterFixture {
@@ -58,10 +61,24 @@ static bool RETRO_CALLCONV _environment(
 			    0, _send, _pollReceive);
 		}
 		return _frontend->supportsNetpacket;
-	case RETRO_ENVIRONMENT_SET_MESSAGE:
-	case RETRO_ENVIRONMENT_SET_MESSAGE_EXT:
+	case RETRO_ENVIRONMENT_SET_MESSAGE: {
 		++_frontend->messages;
+		const struct retro_message* message = data;
+		snprintf(
+		    _frontend->lastMessage,
+		    sizeof(_frontend->lastMessage), "%s",
+		    message && message->msg ? message->msg : "");
 		return true;
+	}
+	case RETRO_ENVIRONMENT_SET_MESSAGE_EXT: {
+		++_frontend->messages;
+		const struct retro_message_ext* message = data;
+		snprintf(
+		    _frontend->lastMessage,
+		    sizeof(_frontend->lastMessage), "%s",
+		    message && message->msg ? message->msg : "");
+		return true;
+	}
 	default:
 		return false;
 	}
@@ -225,6 +242,103 @@ M_TEST_DEFINE(clientStartsHandshakeTowardHost) {
 	    hello.header.type,
 	    GBA_LINK_MESSAGE_HELLO);
 	assert_int_equal(hello.header.sessionId, 0);
+}
+
+M_TEST_DEFINE(scheduledCompletionReachesQuiescenceBeforeDeadline) {
+	struct AdapterFixture* fixture = *state;
+	struct GBA* gba = fixture->core->board;
+	assert_true(mLibretroNetpacketRegister(
+	    _environment, fixture->core));
+	mLibretroNetpacketTestSetTimeMs(100);
+	GBASIOWriteRCNT(&gba->sio, 0);
+	GBASIOWriteSIOCNT(&gba->sio, 0x2000);
+	GBASIOWriteSIOCNT(&gba->sio, 0x2080);
+	assert_true(mTimingIsScheduled(
+	    &gba->timing, &gba->sio.completeEvent));
+
+	fixture->frontend.callbacks.start(
+	    1, _send, _pollReceive);
+	assert_int_equal(
+	    mLibretroNetpacketTestSessionState(),
+	    GBA_LINK_SESSION_TRANSPORT_STARTED);
+	assert_int_equal(fixture->frontend.sends, 0);
+	assert_false(mLibretroNetpacketExecutionBlocked());
+
+	int32_t duration = mTimingUntil(
+	    &gba->timing, &gba->sio.completeEvent);
+	assert_true(duration >= 0);
+	gba->timing.masterCycles += (uint32_t) duration;
+	mTimingDeschedule(
+	    &gba->timing, &gba->sio.completeEvent);
+	gba->sio.completeEvent.callback(
+	    &gba->timing,
+	    gba->sio.completeEvent.context, 0);
+	mLibretroNetpacketRunBegin();
+
+	assert_int_equal(fixture->frontend.sends, 1);
+	assert_true(mLibretroNetpacketExecutionBlocked());
+	struct GBALinkPacket hello;
+	assert_int_equal(
+	    GBALinkPacketDecode(
+	        fixture->frontend.lastPacket,
+	        fixture->frontend.lastPacketSize,
+	        GBA_LINK_ROLE_CLIENT, &hello),
+	    GBA_LINK_DECODE_OK);
+	assert_int_equal(
+	    hello.header.type, GBA_LINK_MESSAGE_HELLO);
+}
+
+M_TEST_DEFINE(permanentlyBusySioTimesOutFromPeerAdmission) {
+	struct AdapterFixture* fixture = *state;
+	struct GBA* gba = fixture->core->board;
+	assert_true(mLibretroNetpacketRegister(
+	    _environment, fixture->core));
+	mLibretroNetpacketTestSetTimeMs(100);
+	fixture->frontend.callbacks.start(
+	    0, _send, _pollReceive);
+	GBASIOWriteRCNT(&gba->sio, 0);
+	GBASIOWriteSIOCNT(&gba->sio, 0x2000);
+	gba->sio.siocnt =
+	    GBASIOMultiplayerFillBusy(gba->sio.siocnt);
+
+	uint8_t provisional = 0xA5;
+	fixture->frontend.callbacks.receive(
+	    &provisional, sizeof(provisional), 1);
+	assert_int_equal(
+	    mLibretroNetpacketTestPendingPacketCount(), 1);
+	assert_true(
+	    fixture->frontend.callbacks.connected(1));
+	assert_int_equal(
+	    mLibretroNetpacketTestSessionState(),
+	    GBA_LINK_SESSION_TRANSPORT_STARTED);
+	assert_int_equal(fixture->frontend.sends, 0);
+	assert_false(mLibretroNetpacketExecutionBlocked());
+	assert_int_equal(
+	    mLibretroNetpacketTestPendingPacketCount(), 1);
+	uint64_t generation =
+	    mLibretroNetpacketTestCallbackGeneration();
+
+	mLibretroNetpacketTestSetTimeMs(3100);
+	mLibretroNetpacketRunBegin();
+	assert_false(mLibretroNetpacketSessionActive());
+	assert_false(mLibretroNetpacketExecutionBlocked());
+	assert_int_equal(fixture->frontend.sends, 0);
+	assert_int_equal(
+	    mLibretroNetpacketTestPendingPacketCount(), 0);
+	assert_true(
+	    mLibretroNetpacketTestCallbackGeneration() !=
+	    generation);
+	assert_true(fixture->frontend.messages > 0);
+	assert_non_null(strstr(
+	    fixture->frontend.lastMessage,
+	    "attachment timed out"));
+	assert_non_null(strstr(
+	    fixture->frontend.lastMessage,
+	    "quiescent SIO rendezvous"));
+
+	fixture->frontend.callbacks.poll();
+	mLibretroNetpacketRunEnd();
+	assert_int_equal(fixture->frontend.sends, 0);
 }
 
 M_TEST_DEFINE(missingReceivePollingFailsBeforeAttachment) {
@@ -524,6 +638,12 @@ M_TEST_SUITE_DEFINE(
         _setup, _teardown),
     cmocka_unit_test_setup_teardown(
         clientStartsHandshakeTowardHost,
+        _setup, _teardown),
+    cmocka_unit_test_setup_teardown(
+        scheduledCompletionReachesQuiescenceBeforeDeadline,
+        _setup, _teardown),
+    cmocka_unit_test_setup_teardown(
+        permanentlyBusySioTimesOutFromPeerAdmission,
         _setup, _teardown),
     cmocka_unit_test_setup_teardown(
         missingReceivePollingFailsBeforeAttachment,

@@ -46,8 +46,11 @@ struct mLibretroNetpacketAdapter {
 	bool sessionPrepared;
 	bool inFrontendCallback;
 	bool reportedReady;
-	bool rendezvousPaused;
 	bool protocolPending;
+#ifdef M_LIBRETRO_NETPACKET_TEST
+	bool testClockEnabled;
+	uint64_t testNowMs;
+#endif
 };
 
 static struct mLibretroNetpacketAdapter _adapter = {
@@ -242,6 +245,11 @@ static void _tracePacket(
 
 static uint64_t _monotonicTimeMs(void* context) {
 	UNUSED(context);
+#ifdef M_LIBRETRO_NETPACKET_TEST
+	if (_adapter.testClockEnabled) {
+		return _adapter.testNowMs;
+	}
+#endif
 #ifdef _WIN32
 	return GetTickCount64();
 #else
@@ -383,7 +391,6 @@ static void _invalidateFrontendFunctions(
 	adapter->localId = NETPACKET_NO_CLIENT;
 	adapter->remoteId = NETPACKET_NO_CLIENT;
 	_clearPreAdmission(adapter);
-	adapter->rendezvousPaused = false;
 	adapter->protocolPending = false;
 	++adapter->callbackGeneration;
 	if (!adapter->callbackGeneration) {
@@ -575,21 +582,9 @@ static bool _beginProtocol(
 	return true;
 }
 
-static bool _sioQuiescent(
-    const struct mLibretroNetpacketAdapter* adapter) {
-	return adapter && adapter->gba &&
-	       !mTimingIsScheduled(
-	           &adapter->gba->timing,
-	           &adapter->gba->sio.completeEvent) &&
-	       !(adapter->gba->sio.mode == GBA_SIO_MULTI &&
-	         GBASIOMultiplayerIsBusy(
-	             adapter->gba->sio.siocnt));
-}
-
 static bool _beginPendingProtocol(
     struct mLibretroNetpacketAdapter* adapter) {
 	if (!adapter || !adapter->protocolPending ||
-	    !adapter->rendezvousPaused ||
 	    adapter->sessionPrepared) {
 		return adapter && adapter->sessionPrepared;
 	}
@@ -625,12 +620,6 @@ static bool _enterRendezvous(
 	    adapter->remoteId == NETPACKET_NO_CLIENT &&
 	    !adapter->protocolPending) {
 		return true;
-	}
-	if (!adapter->rendezvousPaused) {
-		if (!_sioQuiescent(adapter)) {
-			return false;
-		}
-		adapter->rendezvousPaused = true;
 	}
 	if (adapter->protocolPending &&
 	    !adapter->sessionPrepared) {
@@ -829,8 +818,7 @@ static bool RETRO_CALLCONV _connected(uint16_t clientId) {
 	}
 	_adapter.remoteId = clientId;
 	_adapter.protocolPending = true;
-	if (!_enterRendezvous(&_adapter) &&
-	    _adapter.rendezvousPaused) {
+	if (!_enterRendezvous(&_adapter)) {
 		_adapter.remoteId = NETPACKET_NO_CLIENT;
 		_adapter.protocolPending = false;
 		return false;
@@ -973,12 +961,8 @@ void mLibretroNetpacketRunEnd(void) {
 
 bool mLibretroNetpacketExecutionBlocked(void) {
 	if (!_adapter.frontendStarted ||
-	    !_adapter.rendezvousPaused) {
+	    !_adapter.sessionPrepared) {
 		return false;
-	}
-	if (!_adapter.sessionPrepared ||
-	    !_adapter.driver.attached) {
-		return true;
 	}
 	return GBASIONetplayDriverIsPaused(
 	    &_adapter.driver);
@@ -1103,5 +1087,23 @@ void mLibretroNetpacketTestSetSessionState(
 		_adapter.session.state =
 		    (enum GBALinkSessionState) state;
 	}
+}
+
+void mLibretroNetpacketTestSetTimeMs(uint64_t nowMs) {
+	_adapter.testClockEnabled = true;
+	_adapter.testNowMs = nowMs;
+}
+
+uint64_t mLibretroNetpacketTestCallbackGeneration(void) {
+	return _adapter.callbackGeneration;
+}
+
+size_t mLibretroNetpacketTestPendingPacketCount(void) {
+	size_t count = _adapter.preAdmission.size;
+	if (_adapter.sessionPrepared) {
+		count += _adapter.transport.inbound.size;
+		count += _adapter.transport.outbound.size;
+	}
+	return count;
 }
 #endif

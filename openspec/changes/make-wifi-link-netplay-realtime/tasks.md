@@ -79,7 +79,7 @@
 - [x] 9.1 Route host video/audio to P0 and client video/audio to P1 while draining shadow output without frontend callbacks.
 - [x] 9.2 Route controller, rumble, sensors, camera, solar, and other frontend-facing peripheral behavior only through the assigned logical core.
 - [x] 9.3 Prevent the shadow core from reading frontend input or invoking duplicate environment callbacks.
-- [ ] 9.4 Add host/client presentation tests with visibly and audibly distinct logical-player fixtures.
+- [x] 9.4 Add host/client presentation tests with visibly and audibly distinct logical-player fixtures.
 - [x] 9.5 Confirm a runnable protocol-v2 call generates a normal local-role audio buffer and add a regression for Android-style empty-buffer stop storms.
 
 ## 10. Enforce save ownership and safe restoration
@@ -88,7 +88,7 @@
 - [x] 10.2 Track per-logical-player save dirty generations and last verified pair frame.
 - [x] 10.3 On clean teardown, copy only the newest verified local-role save/state back to the retained or restored single core.
 - [x] 10.4 On divergence or uncertain teardown, preserve the last valid local-owned generation and emit a diagnostic instead of writing uncertain data.
-- [ ] 10.5 Add host/client tests proving P0 persists only on host, P1 only on client, and no shadow save reaches disk for clean, timeout, stop, reset, and unload paths.
+- [x] 10.5 Add host/client tests proving P0 persists only on host, P1 only on client, and no shadow save reaches disk for clean, timeout, stop, reset, and unload paths.
 - [x] 10.6 Continue rejecting serialize/unserialize in every non-disconnected v2 state and teardown before reset.
 
 ## 11. Add replica verification and diagnostics
@@ -102,12 +102,12 @@
 
 ## 12. Complete automated validation
 
-- [ ] 12.1 Add unit suites for replica bundle, replicated pair, v2 codec, v2 session, input rings, save ownership, verification, and libretro role routing.
+- [x] 12.1 Add unit suites for replica bundle, replicated pair, v2 codec, v2 session, input rings, save ownership, verification, and libretro role routing.
 - [ ] 12.2 Add end-to-end paired-adapter replay with latency/jitter/fault injection at every attachment, input, state-check, detach, reset, and unload boundary.
 - [ ] 12.3 Run the continuous-transfer ROM for at least 30 emulated minutes and assert identical per-frame traces, no deadlock, and local-baseline serial throughput.
 - [ ] 12.4 Run focused normal, ASan/UBSan, leak, and supported thread-sanitizer suites in CI with pinned toolchains and fail-fast settings.
-- [ ] 12.5 Add fixture reproducibility and protocol-v2 packet-count checks to CI.
-- [ ] 12.6 Retain protocol-v1 trace tests as a short SIO correctness oracle and mark its runtime selection diagnostic-only.
+- [x] 12.5 Add fixture reproducibility and protocol-v2 packet-count checks to CI.
+- [x] 12.6 Retain protocol-v1 trace tests as a short SIO correctness oracle and mark its runtime selection diagnostic-only.
 
 ## 13. Qualify the exact Android release candidate
 

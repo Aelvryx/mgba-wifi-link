@@ -103,6 +103,8 @@ mColor* GBAReplicatedPairVideoBuffer(
 bool GBAReplicatedPairAssignFrontend(
 	struct GBAReplicatedPair* pair, uint8_t player,
 	struct mCore* frontendCore);
+bool GBAReplicatedPairDrainShadowAudio(
+	struct GBAReplicatedPair* pair, uint8_t presentedPlayer);
 bool GBAReplicatedPairAssignSaveBacking(
 	struct GBAReplicatedPair* pair, uint8_t player,
 	void* data, size_t capacity);

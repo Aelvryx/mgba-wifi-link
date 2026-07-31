@@ -106,6 +106,7 @@ static bool gameLoaded;
 static bool useBitmasks = true;
 static bool envVarsUpdated;
 static bool replicatedPairDiagnostic;
+static bool netplayV1Diagnostic;
 static int32_t tiltX = 0;
 static int32_t tiltY = 0;
 static int32_t gyroZ = 0;
@@ -324,6 +325,14 @@ static void _reloadSettings(void) {
 	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
 		replicatedPairDiagnostic =
 		    strcmp(var.value, "enabled") == 0;
+	}
+
+	netplayV1Diagnostic = false;
+	var.key = "mgba_gba_link_netplay_runtime";
+	var.value = 0;
+	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
+		netplayV1Diagnostic =
+		    strcmp(var.value, "cable-v1") == 0;
 	}
 
 	var.key = "mgba_frameskip";
@@ -573,7 +582,11 @@ void retro_run(void) {
 	mNetpacketSpikeTimingBoundary();
 #else
 	if (!replicatedPairDiagnostic) {
-		mLibretroNetpacketV2RunBegin();
+		if (netplayV1Diagnostic) {
+			mLibretroNetpacketRunBegin();
+		} else {
+			mLibretroNetpacketV2RunBegin();
+		}
 	}
 #endif
 	uint16_t keys;
@@ -626,7 +639,8 @@ void retro_run(void) {
 			keys |= (!!inputCallback(0, RETRO_DEVICE_JOYPAD, 0, keymap[i])) << i;
 		}
 	}
-	if (!mLibretroNetpacketV2OwnsExecution()) {
+	if (netplayV1Diagnostic ||
+	    !mLibretroNetpacketV2OwnsExecution()) {
 		core->setKeys(core, keys);
 	}
 
@@ -660,7 +674,12 @@ void retro_run(void) {
 		}
 	} else {
 #ifndef MGBA_NETPACKET_SPIKE
-		if (mLibretroNetpacketV2OwnsExecution()) {
+		if (netplayV1Diagnostic) {
+			if (!mLibretroNetpacketExecutionBlocked()) {
+				core->runFrame(core);
+			}
+			mLibretroNetpacketRunEnd();
+		} else if (mLibretroNetpacketV2OwnsExecution()) {
 			mLibretroNetpacketV2RunFrame(keys);
 		} else if (!mLibretroNetpacketV2ExecutionBlocked()) {
 			core->runFrame(core);
@@ -913,7 +932,11 @@ static void _setupMaps(struct mCore* core) {
 
 void retro_reset(void) {
 #ifndef MGBA_NETPACKET_SPIKE
-	mLibretroNetpacketV2Reset();
+	if (netplayV1Diagnostic) {
+		mLibretroNetpacketReset();
+	} else {
+		mLibretroNetpacketV2Reset();
+	}
 #endif
 	mLibretroReplicatedPairSpikeStop();
 	core->reset(core);
@@ -1075,9 +1098,13 @@ bool retro_load_game(const struct retro_game_info* game) {
 	mNetpacketSpikeRegister(environCallback);
 #else
 	if (!replicatedPairDiagnostic) {
-		mLibretroNetpacketV2Register(
-		    environCallback, core, savedata,
-		    GBA_SIZE_FLASH1M);
+		if (netplayV1Diagnostic) {
+			mLibretroNetpacketRegister(environCallback, core);
+		} else {
+			mLibretroNetpacketV2Register(
+			    environCallback, core, savedata,
+			    GBA_SIZE_FLASH1M);
+		}
 	}
 #endif
 	gameLoaded = true;
@@ -1090,7 +1117,11 @@ void retro_unload_game(void) {
 #ifdef MGBA_NETPACKET_SPIKE
 	mNetpacketSpikeUnload();
 #else
-	mLibretroNetpacketV2Unload();
+	if (netplayV1Diagnostic) {
+		mLibretroNetpacketUnload();
+	} else {
+		mLibretroNetpacketV2Unload();
+	}
 #endif
 	if (!core) {
 		return;
@@ -1104,10 +1135,15 @@ void retro_unload_game(void) {
 }
 
 size_t retro_serialize_size(void) {
-	if (replicatedPairDiagnostic ||
-	    mLibretroNetpacketV2SessionActive()) {
+	if (replicatedPairDiagnostic) {
 		return 0;
 	}
+#ifndef MGBA_NETPACKET_SPIKE
+	if (mLibretroNetpacketV2SessionActive() ||
+	    mLibretroNetpacketSessionActive()) {
+		return 0;
+	}
+#endif
 	if (deferredSetup) {
 		_doDeferredSetup();
 	}

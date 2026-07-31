@@ -437,7 +437,11 @@ M_TEST_DEFINE(cooperativePairTeardownAtCriticalBoundaries) {
 	_deinitPair(&pair, false);
 
 	_initPair(&pair, false);
+	assert_int_equal((uintptr_t) pair.players[0].gba %
+	    _Alignof(struct GBA), 0);
 	GBASIOWriteRCNT(&pair.players[0].gba->sio, 0);
+	assert_int_equal((uintptr_t) pair.players[0].gba %
+	    _Alignof(struct GBA), 0);
 	GBASIOWriteSIOCNT(&pair.players[0].gba->sio, 0x6000);
 	assert_true(pair.coordinator.waiting != 0);
 	_deinitPair(&pair, false);

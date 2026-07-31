@@ -23,10 +23,13 @@ jobs:
         include:
           - name: normal
             build_dir: build-ci
-            sanitizers: false
+            sanitizers: none
           - name: ASan + UBSan
             build_dir: build-ci-sanitize
-            sanitizers: true
+            sanitizers: address,undefined
+          - name: TSan
+            build_dir: build-ci-tsan
+            sanitizers: thread
 
     steps:
       - name: Check out source
@@ -41,12 +44,12 @@ jobs:
         shell: bash
         run: |
           sanitizer_flags=()
-          if [[ "${{ matrix.sanitizers }}" == "true" ]]; then
+          if [[ "${{ matrix.sanitizers }}" != "none" ]]; then
             sanitizer_flags+=(
-              -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
-              -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
-              -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
-              -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined"
+              -DCMAKE_C_FLAGS="-fsanitize=${{ matrix.sanitizers }} -fno-omit-frame-pointer"
+              -DCMAKE_CXX_FLAGS="-fsanitize=${{ matrix.sanitizers }} -fno-omit-frame-pointer"
+              -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=${{ matrix.sanitizers }}"
+              -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=${{ matrix.sanitizers }}"
             )
           fi
 
@@ -68,21 +71,30 @@ jobs:
           cmake --build "${{ matrix.build_dir }}" --parallel 2 --target \
             test-gba-netplay-driver \
             test-gba-netplay-identity \
+            test-gba-netplay-input-sync \
             test-gba-netplay-integration \
             test-gba-netplay-protocol \
+            test-gba-netplay-protocol-v2 \
             test-gba-netplay-session \
+            test-gba-netplay-session-v2 \
             test-gba-netplay-transport \
+            test-gba-replica \
+            test-gba-replicated-pair \
+            test-gba-replicated-pair-spike \
             test-gba-sio \
-            test-libretro-netpacket
+            test-libretro-netpacket \
+            test-libretro-netpacket-v2
 
       - name: Run focused suite
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          LSAN_OPTIONS: exitcode=23
+          TSAN_OPTIONS: halt_on_error=1:history_size=7
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: |
           ctest --test-dir "${{ matrix.build_dir }}" \
             --output-on-failure \
-            --tests-regex 'gba-netplay|gba-sio|libretro-netpacket' \
+            --tests-regex 'gba-netplay|gba-replica|gba-sio|libretro-netpacket' \
             --parallel 2
 
   fixture-and-spec:

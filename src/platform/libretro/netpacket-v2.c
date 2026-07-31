@@ -104,6 +104,10 @@ static struct mLibretroNetpacketV2Adapter _adapter = {
 
 static uint64_t _monotonicTimeMs(void* context);
 
+static uint8_t _playerForRole(enum GBALinkRole role) {
+	return role == GBA_LINK_ROLE_HOST ? 0 : 1;
+}
+
 static void _log(enum retro_log_level level, const char* message) {
 	enum mLogLevel mapped = mLOG_INFO;
 	if (level == RETRO_LOG_ERROR) {
@@ -325,8 +329,8 @@ static bool _installPair(
 	        &adapter->pair, adapter->core, manifests, payloads,
 	        adapter->session.snapshotGeneration) ==
 	    GBA_REPLICATED_PAIR_OK) {
-		uint8_t localPlayer =
-		    adapter->session.localRole == GBA_LINK_ROLE_HOST ? 0 : 1;
+		uint8_t localPlayer = _playerForRole(
+		    adapter->session.localRole);
 		if (GBAReplicatedPairAssignFrontend(
 		        &adapter->pair, localPlayer, adapter->core) &&
 		    GBAReplicatedPairAssignSaveBacking(
@@ -543,8 +547,8 @@ static bool _completeVerification(
 			return false;
 		}
 	}
-	uint8_t localPlayer =
-	    adapter->session.localRole == GBA_LINK_ROLE_HOST ? 0 : 1;
+	uint8_t localPlayer = _playerForRole(
+	    adapter->session.localRole);
 	struct GBA* localGBA = GBAReplicatedPairCore(
 	    &adapter->pair, localPlayer)->board;
 	if (!GBASIOMultiplayerIsBusy(localGBA->sio.siocnt) &&
@@ -670,8 +674,8 @@ static bool _beginVerification(
 	packet.payload.stateCheck.snapshotGeneration =
 	    adapter->session.snapshotGeneration;
 	packet.payload.stateCheck.frame = frame;
-	packet.payload.stateCheck.player =
-	    adapter->session.localRole == GBA_LINK_ROLE_HOST ? 0 : 1;
+	packet.payload.stateCheck.player = _playerForRole(
+	    adapter->session.localRole);
 	memcpy(packet.payload.stateCheck.playerDigests,
 	    adapter->verificationDigests,
 	    sizeof(packet.payload.stateCheck.playerDigests));
@@ -1142,13 +1146,9 @@ bool mLibretroNetpacketV2RunFrame(uint16_t keys) {
 		_finishFailed();
 		return false;
 	}
-	uint8_t shadow =
-	    _adapter.session.localRole == GBA_LINK_ROLE_HOST ? 1 : 0;
-	struct mCore* shadowCore =
-	    GBAReplicatedPairCore(&_adapter.pair, shadow);
-	if (shadowCore) {
-		mAudioBufferClear(shadowCore->getAudioBuffer(shadowCore));
-	}
+	GBAReplicatedPairDrainShadowAudio(
+	    &_adapter.pair,
+	    _playerForRole(_adapter.session.localRole));
 	uint64_t frame = _adapter.runtime.metrics.framesReleased;
 	if (frame % NETPACKET_V2_VERIFICATION_INTERVAL == 0 &&
 	    !_beginVerification(&_adapter, frame)) {
@@ -1173,8 +1173,8 @@ struct mCore* mLibretroNetpacketV2PresentedCore(void) {
 	if (!mLibretroNetpacketV2OwnsExecution()) {
 		return NULL;
 	}
-	uint8_t player =
-	    _adapter.session.localRole == GBA_LINK_ROLE_HOST ? 0 : 1;
+	uint8_t player = _playerForRole(
+	    _adapter.session.localRole);
 	return GBAReplicatedPairCore(&_adapter.pair, player);
 }
 
@@ -1182,8 +1182,8 @@ mColor* mLibretroNetpacketV2PresentedVideo(void) {
 	if (!mLibretroNetpacketV2OwnsExecution()) {
 		return NULL;
 	}
-	uint8_t player =
-	    _adapter.session.localRole == GBA_LINK_ROLE_HOST ? 0 : 1;
+	uint8_t player = _playerForRole(
+	    _adapter.session.localRole);
 	return GBAReplicatedPairVideoBuffer(&_adapter.pair, player);
 }
 
@@ -1265,5 +1265,58 @@ size_t mLibretroNetpacketV2TestPendingPacketCount(void) {
 		count += _adapter.transport.outbound.size;
 	}
 	return count;
+}
+
+uint8_t mLibretroNetpacketV2TestPlayerForRole(enum GBALinkRole role) {
+	return _playerForRole(role);
+}
+
+bool mLibretroNetpacketV2TestInstallPair(
+		const struct GBAReplicaManifest manifests[2],
+		const struct GBAReplicaPayload payloads[2],
+		enum GBALinkRole role, uint64_t generation) {
+	if (!_adapter.registered || !manifests || !payloads || !generation ||
+	    (role != GBA_LINK_ROLE_HOST && role != GBA_LINK_ROLE_CLIENT) ||
+	    _adapter.sessionPrepared || _adapter.pairInitialized) {
+		return false;
+	}
+	GBALinkTransportInit(
+	    &_adapter.transport, &_transportVTable, &_adapter);
+	GBALinkV2SessionInit(&_adapter.session, &_adapter.transport);
+	_adapter.sessionPrepared = true;
+	_adapter.session.state = GBA_LINK_V2_SESSION_READY;
+	_adapter.session.localRole = role;
+	_adapter.session.snapshotGeneration = generation;
+	_adapter.session.inputDelay = 2;
+	_adapter.session.firstFrame = 0;
+	_adapter.session.config.callbacks = &_sessionCallbacks;
+	_adapter.session.config.callbackContext = &_adapter;
+	if (!_installPair(&_adapter, manifests, payloads)) {
+		_deinitSession(&_adapter);
+		return false;
+	}
+	_adapter.session.pairInstalled = true;
+	if (!_commitPair(&_adapter)) {
+		_discardPair(&_adapter, false);
+		_adapter.session.pairInstalled = false;
+		_deinitSession(&_adapter);
+		return false;
+	}
+	_adapter.session.pairCommitted = true;
+	return true;
+}
+
+struct mCore* mLibretroNetpacketV2TestPairCore(uint8_t player) {
+	return _adapter.pairInitialized
+	    ? GBAReplicatedPairCore(&_adapter.pair, player) : NULL;
+}
+
+void mLibretroNetpacketV2TestFail(enum GBALinkV2Reason reason) {
+	if (_adapter.sessionPrepared &&
+	    GBALinkV2SessionIsLive(&_adapter.session)) {
+		GBALinkV2SessionFail(
+		    &_adapter.session, reason, "injected test teardown");
+		_finishFailed();
+	}
 }
 #endif

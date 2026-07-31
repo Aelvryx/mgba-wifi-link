@@ -8,7 +8,9 @@
 #include "../libretro/netpacket-v2.h"
 
 #include <mgba/core/core.h>
+#include <mgba/core/log.h>
 #include <mgba/gba/core.h>
+#include <mgba/internal/gba/gba.h>
 #include <mgba/internal/gba/memory.h>
 #include <mgba/internal/gba/savedata.h>
 #include <mgba/internal/gba/sio/netplay/protocol-v2.h>
@@ -35,7 +37,37 @@ struct V2AdapterFixture {
 	uint8_t save[GBA_SIZE_FLASH1M];
 };
 
+enum V2TeardownAction {
+	V2_TEARDOWN_CLEAN,
+	V2_TEARDOWN_TIMEOUT,
+	V2_TEARDOWN_STOP,
+	V2_TEARDOWN_RESET,
+	V2_TEARDOWN_UNLOAD,
+};
+
 static struct V2Frontend* _frontend;
+static struct mLogger _silentLogger;
+
+static void _discardLog(
+		struct mLogger* logger, int category,
+		enum mLogLevel level, const char* format, va_list args) {
+	UNUSED(logger);
+	UNUSED(category);
+	UNUSED(level);
+	UNUSED(format);
+	UNUSED(args);
+}
+
+M_TEST_SUITE_SETUP(LibretroNetpacketV2) {
+	_silentLogger.log = _discardLog;
+	mLogSetDefaultLogger(&_silentLogger);
+	return 0;
+}
+
+M_TEST_SUITE_TEARDOWN(LibretroNetpacketV2) {
+	mLogSetDefaultLogger(NULL);
+	return 0;
+}
 
 static void RETRO_CALLCONV _send(
 	int flags, const void* data, size_t size, uint16_t clientId) {
@@ -127,6 +159,10 @@ M_TEST_DEFINE(registersExactReplicatedProtocol) {
 	    GBA_LINK_V2_PROTOCOL_NAME);
 	assert_false(mLibretroNetpacketV2OwnsExecution());
 	assert_null(mLibretroNetpacketV2PresentedCore());
+	assert_int_equal(mLibretroNetpacketV2TestPlayerForRole(
+	    GBA_LINK_ROLE_HOST), 0);
+	assert_int_equal(mLibretroNetpacketV2TestPlayerForRole(
+	    GBA_LINK_ROLE_CLIENT), 1);
 }
 
 M_TEST_DEFINE(clientStartsWithReliableFlushedV2Hello) {
@@ -199,7 +235,104 @@ M_TEST_DEFINE(missingPollingAndSynchronousStopFailClosed) {
 	assert_false(mLibretroNetpacketV2SessionActive());
 }
 
-M_TEST_SUITE_DEFINE(LibretroNetpacketV2,
+static struct mCore* _secondCore(
+		struct V2AdapterFixture* fixture) {
+	struct mCore* core = GBACoreCreate();
+	assert_non_null(core);
+	assert_true(core->init(core));
+	mCoreInitConfig(core, NULL);
+	assert_true(core->loadROM(core, VFileFromConstMemory(
+	    fixture->rom, sizeof(fixture->rom))));
+	core->reset(core);
+	return core;
+}
+
+static void _teardownPairAction(
+		struct V2AdapterFixture* fixture, enum GBALinkRole role,
+		enum V2TeardownAction action) {
+	memset(fixture->save, 0xFF, sizeof(fixture->save));
+	assert_true(mLibretroNetpacketV2Register(
+	    _environment, fixture->core, fixture->save,
+	    sizeof(fixture->save)));
+	struct mCore* second = _secondCore(fixture);
+	struct mCore* sources[2] = { fixture->core, second };
+	struct GBAReplicaBundle bundles[2];
+	struct GBAReplicaManifest manifests[2];
+	struct GBAReplicaPayload payloads[2];
+	memset(bundles, 0, sizeof(bundles));
+	memset(payloads, 0, sizeof(payloads));
+	for (unsigned player = 0; player < 2; ++player) {
+		assert_int_equal(GBAReplicaCapture(
+		    sources[player], player, 77,
+		    GBA_REPLICA_ENCODING_NONE,
+		    GBA_REPLICA_DEFAULT_CHUNK_SIZE,
+		    &bundles[player]), GBA_REPLICA_OK);
+		manifests[player] = bundles[player].manifest;
+		payloads[player].data = bundles[player].encodedData;
+		payloads[player].size = bundles[player].encodedSize;
+	}
+	assert_true(mLibretroNetpacketV2TestInstallPair(
+	    manifests, payloads, role, 77));
+	uint8_t localPlayer = role == GBA_LINK_ROLE_HOST ? 0 : 1;
+	uint8_t shadowPlayer = localPlayer ^ 1;
+	struct GBA* local = mLibretroNetpacketV2TestPairCore(
+	    localPlayer)->board;
+	struct GBA* shadow = mLibretroNetpacketV2TestPairCore(
+	    shadowPlayer)->board;
+	GBASavedataForceType(
+	    &local->memory.savedata, GBA_SAVEDATA_SRAM);
+	GBASavedataForceType(
+	    &shadow->memory.savedata, GBA_SAVEDATA_SRAM);
+	local->memory.savedata.data[23] =
+	    role == GBA_LINK_ROLE_HOST ? 0xA0 : 0xB1;
+	shadow->memory.savedata.data[23] = 0x5C;
+	assert_int_equal(fixture->save[23],
+	    role == GBA_LINK_ROLE_HOST ? 0xA0 : 0xB1);
+
+	switch (action) {
+	case V2_TEARDOWN_CLEAN:
+		mLibretroNetpacketV2TestFail(
+		    GBA_LINK_V2_REASON_USER_DISCONNECT);
+		break;
+	case V2_TEARDOWN_TIMEOUT:
+		mLibretroNetpacketV2TestFail(
+		    GBA_LINK_V2_REASON_INPUT_TIMEOUT);
+		break;
+	case V2_TEARDOWN_STOP:
+		fixture->frontend.callbacks.stop();
+		break;
+	case V2_TEARDOWN_RESET:
+		mLibretroNetpacketV2Reset();
+		break;
+	case V2_TEARDOWN_UNLOAD:
+		mLibretroNetpacketV2Unload();
+		break;
+	}
+	assert_int_equal(fixture->save[23],
+	    role == GBA_LINK_ROLE_HOST ? 0xA0 : 0xB1);
+	assert_null(mLibretroNetpacketV2TestPairCore(0));
+	assert_null(mLibretroNetpacketV2TestPairCore(1));
+
+	for (unsigned player = 0; player < 2; ++player) {
+		GBAReplicaBundleDeinit(&bundles[player]);
+	}
+	mCoreConfigDeinit(&second->config);
+	second->deinit(second);
+}
+
+M_TEST_DEFINE(localRoleSaveSurvivesEveryTeardownWithoutShadowWriteback) {
+	struct V2AdapterFixture* fixture = *state;
+	for (enum GBALinkRole role = GBA_LINK_ROLE_HOST;
+	     role <= GBA_LINK_ROLE_CLIENT; ++role) {
+		for (enum V2TeardownAction action = V2_TEARDOWN_CLEAN;
+		     action <= V2_TEARDOWN_UNLOAD; ++action) {
+			_teardownPairAction(fixture, role, action);
+			mLibretroNetpacketV2Unload();
+		}
+	}
+}
+
+M_TEST_SUITE_DEFINE_SETUP_TEARDOWN(LibretroNetpacketV2,
 	cmocka_unit_test_setup_teardown(
 	    registersExactReplicatedProtocol, _setup, _teardown),
 	cmocka_unit_test_setup_teardown(
@@ -207,4 +340,7 @@ M_TEST_SUITE_DEFINE(LibretroNetpacketV2,
 	cmocka_unit_test_setup_teardown(
 	    hostAdmissionBoundsProvisionalTraffic, _setup, _teardown),
 	cmocka_unit_test_setup_teardown(
-	    missingPollingAndSynchronousStopFailClosed, _setup, _teardown))
+	    missingPollingAndSynchronousStopFailClosed, _setup, _teardown),
+	cmocka_unit_test_setup_teardown(
+	    localRoleSaveSurvivesEveryTeardownWithoutShadowWriteback,
+	    _setup, _teardown))

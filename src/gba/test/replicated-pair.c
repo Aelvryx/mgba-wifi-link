@@ -449,6 +449,43 @@ M_TEST_DEFINE(saveBackingBelongsOnlyToAssignedPlayer) {
 	_deinitFixture(&fixture);
 }
 
+M_TEST_DEFINE(rolePresentationSelectsDistinctVideoAndAudio) {
+	struct PairFixture fixture;
+	_initFixture(&fixture);
+	struct GBAReplicatedPair pair;
+	_install(&pair, &fixture);
+	pair.players[0].videoBuffer[0] = 0x00112233;
+	pair.players[1].videoBuffer[0] = 0x00445566;
+	const int16_t samples[2][2] = {
+		{ 1234, -1234 },
+		{ 2345, -2345 },
+	};
+	for (unsigned player = 0; player < 2; ++player) {
+		struct mAudioBuffer* audio =
+		    pair.players[player].core->getAudioBuffer(
+		        pair.players[player].core);
+		mAudioBufferClear(audio);
+		assert_int_equal(mAudioBufferWrite(
+		    audio, samples[player], 1), 1);
+		assert_int_equal(mAudioBufferPeek(audio, 0, 0),
+		    samples[player][0]);
+	}
+	assert_int_equal(
+	    GBAReplicatedPairVideoBuffer(&pair, 0)[0], 0x00112233);
+	assert_int_equal(
+	    GBAReplicatedPairVideoBuffer(&pair, 1)[0], 0x00445566);
+	assert_true(GBAReplicatedPairDrainShadowAudio(&pair, 0));
+	assert_int_equal(mAudioBufferAvailable(
+	    pair.players[0].core->getAudioBuffer(
+	        pair.players[0].core)), 1);
+	assert_int_equal(mAudioBufferAvailable(
+	    pair.players[1].core->getAudioBuffer(
+	        pair.players[1].core)), 0);
+
+	GBAReplicatedPairStop(&pair);
+	_deinitFixture(&fixture);
+}
+
 static void _exchangeAuthored(
 	struct GBAReplicatedRuntime* sender,
 	struct GBAReplicatedRuntime* receiver, uint16_t keys,
@@ -592,5 +629,6 @@ M_TEST_SUITE_DEFINE_SETUP_TEARDOWN(GBAReplicatedPair,
 	cmocka_unit_test(perFrameStateTraceIsRepeatable),
 	cmocka_unit_test(canonicalDigestsCoverFutureStateOnly),
 	cmocka_unit_test(saveBackingBelongsOnlyToAssignedPlayer),
+	cmocka_unit_test(rolePresentationSelectsDistinctVideoAndAudio),
 	cmocka_unit_test(frameRuntimeReleasesOnceAndPacketsScaleOnlyWithFrames),
 	cmocka_unit_test(invalidBundleOrderFailsWithoutPartialLifetime))

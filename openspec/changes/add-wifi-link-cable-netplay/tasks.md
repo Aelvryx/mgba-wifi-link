@@ -117,5 +117,5 @@
 - [x] 10.6 Reject noncanonical one-byte Boolean encodings for every wire Boolean and add focused codec vectors for `MODE_INTENT.deferred`, `MODE_COMMIT.jointlyReady`, and `COMPLETION_READY.hasDeferredMode`.
 - [x] 10.7 Correct the validation matrix to distinguish sampled packet trace lines from authoritative per-sender packet counts and report the verified total/rate.
 - [x] 10.8 Add CI that builds and runs the focused normal netplay suites and an ASan/UBSan configuration on the final review head.
-- [ ] 10.9 Move the checked-in test-ROM fixture out of a generated `build/` directory, add a reproducibility check against a freshly generated ROM, and keep project-only `.codex` helpers outside the eventual upstream-facing patch stack.
-- [ ] 10.10 Rebase the upstream-facing patch stack onto the selected current mGBA master, update `UPSTREAM.md`, split the header/common-SIO/protocol/driver/adapter/tests changes into reviewable commits, run strict OpenSpec plus normal and sanitizer validation, and record the final results.
+- [x] 10.9 Move the checked-in test-ROM fixture out of a generated `build/` directory, add a reproducibility check against a freshly generated ROM, and keep project-only `.codex` helpers outside the eventual upstream-facing patch stack.
+- [x] 10.10 Rebase the upstream-facing patch stack onto the selected current mGBA master, update `UPSTREAM.md`, split the header/common-SIO/protocol/driver/adapter/tests changes into reviewable commits, run strict OpenSpec plus normal and sanitizer validation, and record the final results.

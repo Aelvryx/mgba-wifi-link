@@ -156,13 +156,19 @@ Result: 8/8 tests passed with no sanitizer or leak finding.
 
 The complete normal suite passed 28 of 29 tests. Its sole failure is the known
 pinned-upstream `util-hash/stagedCrc32` case. That identical failure is recorded
-in the unmodified baseline and is unrelated to this change.
+in the unmodified baseline and is unrelated to this change. The full and
+focused suites, sanitizer suite, and fixture comparison were rerun after
+splitting the upstream-facing stack and rebasing it onto
+`71aa6c7dab7654bfdbbd57e696f704671a97e55d`.
 
 `.github/workflows/netplay-ci.yml` independently configures and builds these
 same eight focused tests on Ubuntu 24.04 in normal and ASan/UBSan jobs. A
 separate job runs strict OpenSpec validation and uses the SHA-256-pinned Arm
 GNU Toolchain 15.2.Rel1 archive to rebuild the CC0 ROM and compare it
 byte-for-byte with `tools/gba-link-test-rom/fixtures/gba-link-test.gba`.
+All three jobs also passed on upstream-facing head
+`a5a215929fbd5dffceaba2b1be9fc8f520e346bc` in
+[GitHub Actions run 30611295662](https://github.com/AnthonyStainer/mgba/actions/runs/30611295662).
 
 ## OpenSpec scenario audit
 

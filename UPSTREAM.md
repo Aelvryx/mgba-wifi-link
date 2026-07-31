@@ -1,31 +1,34 @@
 # Upstream and Patch-Stack Record
 
-## mGBA base
+## Branch roles and mGBA bases
 
 - Upstream repository: `https://github.com/mgba-emu/mgba.git`
 - Upstream source branch: `master`
-- Pinned upstream commit: `1d65391d3531f9338300f306c4e1d76c258ce657`
-- Pinned commit date: `2026-07-27T23:09:26-07:00`
-- Pinned commit subject: `Qt: Update translations`
-- Fork feature branch: `feature/wifi-link-netplay`
+- Upstream-facing branch: `feature/wifi-link-netplay-upstream`
+- Upstream-facing base: `71aa6c7dab7654bfdbbd57e696f704671a97e55d`
+- Upstream-facing base date: `2026-07-30T23:01:50-07:00`
+- Upstream-facing base subject: `Qt: Remove unneeded Qt Multimedia-only include`
+- Integration/evidence branch: `feature/wifi-link-netplay`
+- Integration branch base: `1d65391d3531f9338300f306c4e1d76c258ce657`
 - Initial OpenSpec/project-control commit: `7602ae97b`
 
-The repository was initialized directly from mGBA Git history. The feature
-branch was created at the pinned upstream commit and the existing OpenSpec and
-project-control files were committed on top:
+The repository was initialized directly from mGBA Git history. The published
+integration branch retains the complete OpenSpec, feasibility, device-evidence,
+and release history so the reviewed PR and alpha tag are not force-rewritten.
+The upstream-facing branch descends from the selected current upstream commit
+and contains eight focused product, test, CI, and documentation commits:
 
 ```sh
-git init
-git remote add upstream https://github.com/mgba-emu/mgba.git
 git fetch upstream master --tags
-git switch -c feature/wifi-link-netplay upstream/master
-git add .codex openspec
-git commit -m "docs: add Wi-Fi link netplay OpenSpec plan"
+git switch -c feature/wifi-link-netplay-upstream \
+  71aa6c7dab7654bfdbbd57e696f704671a97e55d
 ```
 
-No mGBA source snapshot was imported. Future upstream refreshes must fetch from
-`upstream`, rebase the feature patch stack onto an explicitly selected upstream
-commit, update the pin above, and rerun the recorded baseline and feature tests.
+Project-only `.codex` helpers, OpenSpec artifacts, and the temporary feasibility
+spike are deliberately absent from that upstream-facing stack. No mGBA source
+snapshot was imported. Future upstream refreshes must rebase the clean stack
+onto an explicitly selected upstream commit, update this record, and rerun the
+recorded baseline and feature tests.
 
 ## Patch-stack conventions
 
@@ -168,8 +171,14 @@ independent-workload evidence is recorded in
 `docs/netplay-validation-matrix.md`; build, installation, protocol, policy, and
 failure semantics are documented in `docs/wifi-link-netplay.md`.
 
-The final complete normal suite passed 28 of 29 tests. Its only failure remains
-the same pinned-upstream `util-hash/stagedCrc32` baseline case documented above.
-The focused normal and ASan/UBSan netplay/SIO/libretro suites each passed 8 of
-8 tests. Android NDK r27 builds passed for `arm64-v8a`, `armeabi-v7a`, `x86`,
-and `x86_64`.
+After splitting and rebasing the upstream-facing stack onto
+`71aa6c7dab7654bfdbbd57e696f704671a97e55d`, a clean Linux build produced the
+shared library, libretro core, and all test executables. The complete normal
+suite passed 28 of 29 tests; its only failure remains the same
+`util-hash/stagedCrc32` baseline case documented above. The focused normal and
+ASan/UBSan netplay/SIO/libretro suites each passed 8 of 8 tests, and Arm GNU
+Toolchain 15.2.Rel1 reproduced the committed 32 KiB test ROM byte-for-byte.
+
+Android NDK r27 builds passed for `arm64-v8a`, `armeabi-v7a`, `x86`, and
+`x86_64`; the ARM64 production core was validated on the two physical Android
+devices described in the validation matrix.

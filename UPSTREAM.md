@@ -168,13 +168,15 @@ independent-workload evidence is recorded in
 `docs/netplay-validation-matrix.md`; build, installation, protocol, policy, and
 failure semantics are documented in `docs/wifi-link-netplay.md`.
 
-After splitting and rebasing the upstream-facing stack onto
+After splitting and rebasing the first upstream-facing stack onto
 `71aa6c7dab7654bfdbbd57e696f704671a97e55d`, a clean Linux build produced the
 shared library, libretro core, and all test executables. The complete normal
 suite passed 28 of 29 tests; its only failure remains the same
-`util-hash/stagedCrc32` baseline case documented above. The focused normal and
-ASan/UBSan netplay/SIO/libretro suites each passed 8 of 8 tests, and Arm GNU
-Toolchain 15.2.Rel1 reproduced the committed 32 KiB test ROM byte-for-byte.
+`util-hash/stagedCrc32` baseline case documented above. Protocol v2 expands the
+focused set to 16 tests; all 16 pass normally, under ASan/UBSan with leak
+detection, and under TSan. Its real-adapter replay and 134,400-frame stock
+RetroArch soak are recorded in the validation matrix. Arm GNU Toolchain
+15.2.Rel1 reproduces the committed 32 KiB test ROM byte-for-byte.
 
 The previously qualified Android NDK r27 production source also built for
 `arm64-v8a`, `armeabi-v7a`, `x86`, and `x86_64`, with the ARM64 core validated

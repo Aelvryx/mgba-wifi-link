@@ -3,6 +3,47 @@
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+#ifdef M_LIBRETRO_NETPACKET_V2_INSTANCE_PREFIX
+#define M_NETPACKET_V2_JOIN_(A, B) A ## B
+#define M_NETPACKET_V2_JOIN(A, B) M_NETPACKET_V2_JOIN_(A, B)
+#define M_NETPACKET_V2_SYMBOL(NAME) \
+	M_NETPACKET_V2_JOIN(M_LIBRETRO_NETPACKET_V2_INSTANCE_PREFIX, NAME)
+#define mLibretroNetpacketV2Register M_NETPACKET_V2_SYMBOL(Register)
+#define mLibretroNetpacketV2RunBegin M_NETPACKET_V2_SYMBOL(RunBegin)
+#define mLibretroNetpacketV2RunFrame M_NETPACKET_V2_SYMBOL(RunFrame)
+#define mLibretroNetpacketV2ExecutionBlocked \
+	M_NETPACKET_V2_SYMBOL(ExecutionBlocked)
+#define mLibretroNetpacketV2OwnsExecution \
+	M_NETPACKET_V2_SYMBOL(OwnsExecution)
+#define mLibretroNetpacketV2PresentedCore \
+	M_NETPACKET_V2_SYMBOL(PresentedCore)
+#define mLibretroNetpacketV2PresentedVideo \
+	M_NETPACKET_V2_SYMBOL(PresentedVideo)
+#define mLibretroNetpacketV2ReportAudio \
+	M_NETPACKET_V2_SYMBOL(ReportAudio)
+#define mLibretroNetpacketV2Reset M_NETPACKET_V2_SYMBOL(Reset)
+#define mLibretroNetpacketV2Unload M_NETPACKET_V2_SYMBOL(Unload)
+#define mLibretroNetpacketV2SessionActive \
+	M_NETPACKET_V2_SYMBOL(SessionActive)
+#define mLibretroNetpacketV2RejectOperation \
+	M_NETPACKET_V2_SYMBOL(RejectOperation)
+#define mLibretroNetpacketV2TestPollReceive \
+	M_NETPACKET_V2_SYMBOL(TestPollReceive)
+#define mLibretroNetpacketV2TestSetTimeMs \
+	M_NETPACKET_V2_SYMBOL(TestSetTimeMs)
+#define mLibretroNetpacketV2TestCallbackGeneration \
+	M_NETPACKET_V2_SYMBOL(TestCallbackGeneration)
+#define mLibretroNetpacketV2TestPendingPacketCount \
+	M_NETPACKET_V2_SYMBOL(TestPendingPacketCount)
+#define mLibretroNetpacketV2TestPlayerForRole \
+	M_NETPACKET_V2_SYMBOL(TestPlayerForRole)
+#define mLibretroNetpacketV2TestInstallPair \
+	M_NETPACKET_V2_SYMBOL(TestInstallPair)
+#define mLibretroNetpacketV2TestPairCore \
+	M_NETPACKET_V2_SYMBOL(TestPairCore)
+#define mLibretroNetpacketV2TestFail M_NETPACKET_V2_SYMBOL(TestFail)
+#endif
+
 #include "netpacket-v2.h"
 
 #include <inttypes.h>
@@ -103,6 +144,9 @@ static struct mLibretroNetpacketV2Adapter _adapter = {
 };
 
 static uint64_t _monotonicTimeMs(void* context);
+static void _digestText(
+	const uint8_t digest[MGBA_SHA256_DIGEST_SIZE],
+	char text[MGBA_SHA256_DIGEST_SIZE * 2 + 1]);
 
 static uint8_t _playerForRole(enum GBALinkRole role) {
 	return role == GBA_LINK_ROLE_HOST ? 0 : 1;
@@ -452,6 +496,16 @@ static void _logRuntimeSummary(
 	    pair.waitEvents,
 	    pair.runLoops[0], pair.runLoops[1]);
 	_log(RETRO_LOG_INFO, message);
+	char traces[2][MGBA_SHA256_DIGEST_SIZE * 2 + 1];
+	_digestText(pair.stateTrace[0], traces[0]);
+	_digestText(pair.stateTrace[1], traces[1]);
+	for (unsigned player = 0; player < 2; ++player) {
+		snprintf(message, sizeof(message),
+		    "%s P%u trace%u=%s",
+		    event ? event : "runtime",
+		    adapter->session.localRole, player, traces[player]);
+		_log(RETRO_LOG_INFO, message);
+	}
 }
 
 static void _discardPair(void* context, bool committed) {

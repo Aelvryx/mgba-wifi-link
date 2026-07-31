@@ -116,9 +116,10 @@ void main(void) {
 	result->observableAttachments = 1;
 	result->status = STATUS_RUNNING;
 
-	for (unsigned baud = 0; baud < 4; ++baud) {
-		for (unsigned transfer = 0;
-		     transfer < TRANSFERS_PER_BAUD; ++transfer) {
+	do {
+		for (unsigned baud = 0; baud < 4; ++baud) {
+			for (unsigned transfer = 0;
+			     transfer < TRANSFERS_PER_BAUD; ++transfer) {
 			uint32_t spins;
 			uint16_t local =
 			    outgoingWord(playerId, baud, transfer);
@@ -212,15 +213,19 @@ void main(void) {
 				++result->duplicateIrqs;
 				REG_IF = IRQ_SERIAL;
 			}
-			++result->transfers;
-			result->baudMask |= 1U << baud;
-			if (result->dataErrors ||
-			    result->missedIrqs ||
-			    result->duplicateIrqs) {
-				fail(5);
+				++result->transfers;
+				result->baudMask |= 1U << baud;
+				if (result->dataErrors ||
+				    result->missedIrqs ||
+				    result->duplicateIrqs) {
+					fail(5);
+				}
 			}
 		}
-	}
+#ifdef GBA_LINK_CONTINUOUS
+	} while (1);
+#else
+	} while (0);
 
 	result->effectiveParticipants =
 	    result->received[0] != 0xFFFF &&
@@ -238,4 +243,5 @@ void main(void) {
 	fillScreen(playerId ? 0x7C00 : 0x03FF);
 	for (;;) {
 	}
+#endif
 }

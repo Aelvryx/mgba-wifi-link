@@ -15,14 +15,22 @@ Build it with a freestanding GNU Arm Embedded toolchain:
 make CROSS=arm-none-eabi-
 ```
 
-The generated output is `build/gba-link-test.gba`. A reviewed fixture is
-committed separately at `fixtures/gba-link-test.gba` so a clean checkout can
-run the two-core integration test without making an Arm toolchain a normal
+The normal generated output is `build/gba-link-test.gba`. Defining
+`GBA_LINK_CONTINUOUS` produces `build/gba-link-continuous.gba`, which repeats
+the checked transfer matrix indefinitely for scheduler and performance tests.
+Reviewed fixtures are committed separately under `fixtures/` so a clean
+checkout can run the two-core tests without making an Arm toolchain a normal
 mGBA test dependency. The generated `build/` directory remains ignored.
-Rebuilding should produce the same SHA-256:
+Rebuilding the normal fixture should produce the same SHA-256:
 
 ```text
 24b7ef2bee7ff95ebe00d487f06ff82ea10eaefa63f04760bdb71bf9c64ffbe8
+```
+
+The continuous fixture should produce:
+
+```text
+5d82dc1f4c62c99cf024c6978671fce4dbb23671658f4bfc8e8e52a124802e9d
 ```
 
 CI rebuilds the ROM with the GNU Arm Embedded toolchain and compares every

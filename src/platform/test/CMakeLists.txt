@@ -38,10 +38,25 @@ if(BUILD_SUITE)
 			target_compile_definitions(test-${TEST_NAME} PRIVATE
 				GBA_LINK_TEST_ROM_PATH="${PROJECT_SOURCE_DIR}/tools/gba-link-test-rom/fixtures/gba-link-test.gba")
 		endif()
+		if(TEST_NAME STREQUAL "gba-replicated-pair-spike")
+			target_compile_definitions(test-${TEST_NAME} PRIVATE
+				GBA_LINK_CONTINUOUS_ROM_PATH="${PROJECT_SOURCE_DIR}/tools/gba-link-test-rom/fixtures/gba-link-continuous.gba")
+		endif()
 		add_test(${TEST_NAME} test-${TEST_NAME})
 	endforeach()
 
 	if(BUILD_LIBRETRO AND M_CORE_GBA)
+		add_executable(test-libretro-replicated-pair-spike
+			${CMAKE_CURRENT_SOURCE_DIR}/libretro-replicated-pair-spike.c
+			${PROJECT_SOURCE_DIR}/src/platform/libretro/replicated-pair-spike.c)
+		target_include_directories(test-libretro-replicated-pair-spike PRIVATE
+			${PROJECT_SOURCE_DIR}/src/platform/libretro)
+		target_link_libraries(test-libretro-replicated-pair-spike
+			${BINARY_NAME} ${PLATFORM_LIBRARY} cmocka)
+		set_target_properties(test-libretro-replicated-pair-spike PROPERTIES
+			COMPILE_DEFINITIONS "${OS_DEFINES};${FEATURE_DEFINES};${FUNCTION_DEFINES};GBA_LINK_CONTINUOUS_ROM_PATH=\"${PROJECT_SOURCE_DIR}/tools/gba-link-test-rom/fixtures/gba-link-continuous.gba\"")
+		add_test(libretro-replicated-pair-spike test-libretro-replicated-pair-spike)
+
 		add_executable(test-libretro-netpacket
 			${CMAKE_CURRENT_SOURCE_DIR}/libretro-netpacket.c
 			${PROJECT_SOURCE_DIR}/src/platform/libretro/netpacket.c)

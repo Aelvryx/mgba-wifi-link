@@ -1,6 +1,6 @@
 # GBA Link Netplay Validation Matrix
 
-Date: 2026-07-30
+Date: 2026-07-31
 
 This document maps the MVP's automated evidence to protocol phases and failure
 classes. Test names below are cmocka case names inside the named source file.
@@ -31,14 +31,14 @@ two-player participation, or an incomplete baud matrix.
 
 | Protocol area | Test source and coverage |
 | --- | --- |
-| Packet codec | `netplay-protocol.c`: golden vectors, every message round trip, every byte truncation, trailing/oversized input, invalid enums/roles/IDs, arbitrary randomized input, and sequence exhaustion |
+| Packet codec | `netplay-protocol.c`: golden vectors, every message round trip, every byte truncation, trailing/oversized input, invalid enums/roles/IDs, exact `0`/`1` validation for every wire Boolean, arbitrary randomized input, and sequence exhaustion |
 | Copied transport | `netplay-transport.c`: ordered reliable delivery, stale generations, inbound/outbound exhaustion, oversized packets, send failure, poll re-entry, synchronous stop, invalid callback ordering, and sequence exhaustion |
 | Bilateral HELLO and acceptance | `netplay-session.c`: success, exact/conflicting duplicates, every individually dropped HELLO/ACCEPT/ACK/READY edge, ROM/profile/policy/version mismatch, third player, missing polling, and clean teardown |
-| Quiescent attachment | `netplay-session.c` and `libretro-netpacket.c`: busy/pending-completion rejection, both/one/neither initial MULTI snapshot, final-ack pause, synchronous start during registration, and the real RetroArch packet-before-admission callback order |
+| Quiescent attachment | `netplay-session.c` and `libretro-netpacket.c`: a scheduled standalone completion becoming quiescent before the admission-started deadline, permanently busy MULTI timing out without sending `HELLO`, callback/provisional-packet invalidation, both/one/neither initial MULTI snapshot, final-ack pause, synchronous start during registration, and the real RetroArch packet-before-admission callback order |
 | Host-leading grants | `netplay-driver.c`: one outstanding grant, delayed ACK, withheld ACK timeout, no client overrun, no host-behind state, past-event rejection, and start truncation |
 | Timing-pass pause | `netplay-driver.c`: `clientStartPauseInterruptsBeforeUncommittedCompletion` proves that reaching remote START interrupts the active timing pass and cannot consume the scheduled completion before COMMIT/catch-up |
 | Mode barriers | `netplay-driver.c`: host/client intent, delayed intent, initial generation, same-cycle START ordering, pre-START precedence, missing ACK, post-START deferred host/client modes, and intent discovered at completion |
-| TRANSFER_START | `netplay-driver.c`: pre-emission failure, client START acceptance, START undelivered, wrong/stale/future/conflicting sequence and cycle, independent player-one start, and not-ready host start |
+| TRANSFER_START | `netplay-driver.c`: pre-emission failure, client START acceptance, START undelivered, wrong/stale/future/conflicting sequence and cycle, explicitly tracked independent player-one start, consumption of that wait by a later remote START, and not-ready host start |
 | TRANSFER_READY | `netplay-driver.c`: READY success, READY withheld, stop before READY, duplicate/conflicting READY, and immutable-cycle abort |
 | TRANSFER_COMMIT | `netplay-driver.c`: success, send failure, stop after COMMIT, duplicate/conflicting COMMIT, and client remaining paused at `T` |
 | TRANSFER_ABORT | `netplay-driver.c`: delayed ABORT, lost transport after accepted START, local fallback to the retained `C`, and reset/unload cancellation |
@@ -46,7 +46,7 @@ two-player participation, or an incomplete baud matrix.
 | COMPLETION_READY | `netplay-driver.c`: success, withheld/lost READY, deferred-mode and abort aggregation, and timeout |
 | COMPLETION_DECISION | `netplay-driver.c`: success, send rejection, accepted-but-undelivered decision, decision-before-stop, authoritative outcome commit, and the explicitly permitted terminal role asymmetry |
 | COMPLETION_DECISION_ACK | `netplay-driver.c`: healthy final release, dropped acknowledgement preserving the committed result while closing the session, and no subsequent transfer after uncertain terminal delivery |
-| Detach | `netplay-driver.c`, `netplay-session.c`, and `libretro-netpacket.c`: graceful/abrupt peer loss, idle register cleanup, active-transfer failure, frontend stop, reset, unload, and generation invalidation |
+| Detach | `netplay-driver.c`, `netplay-session.c`, and `libretro-netpacket.c`: graceful/abrupt peer loss, idle register cleanup, synchronous cleanup of a player-one wait with no completion event, active-transfer failure, frontend stop, reset, unload, and generation invalidation |
 | Frontend adapter | `libretro-netpacket.c`: callback copy lifetime, reliable+flush ordering, synchronous stop during send/poll, pre-admission copied packets, wrong sender, oversize/exhaustion, all live-state save/load guards, frozen timing/cheats, reset, disconnect, and unload |
 
 Every blocking wait is bounded by its operation-specific `GBALinkDeadline`.
@@ -97,8 +97,15 @@ Measured wall-clock stalls from that clean host trace were:
 | `COMPLETION_DECISION` through final acknowledgement | 16 | 8 ms | 10.31 ms | 13 ms |
 | Complete START-through-final-ack transaction | 16 | 46 ms | 49.25 ms | 55 ms |
 
-The trace recorded 137 application messages from first HELLO through the final
-acknowledgement over 1.399 seconds, or 97.9 logged messages per second. The
+The authoritative per-sender packet sequences ended at host sequence 81 and
+client sequence 64. Because this successful run allocated one sequence for
+every application send without holes, it carried 145 application packets from
+first HELLO through the final acknowledgement over 1.399 seconds, or
+approximately 103.6 packets per second.
+
+The human-readable log contains 137 emitted trace lines, or 97.9 trace lines
+per second, because grant trace sampling suppressed four later
+`EXECUTION_GRANT` packets and four corresponding `GRANT_ACK` packets. The
 transfer phase itself carried 112 transfer/barrier messages over 1.056 seconds,
 or 106.1 messages per second. These are application-protocol measurements, not
 raw ICMP RTT or transport overhead.
@@ -151,10 +158,16 @@ The complete normal suite passed 28 of 29 tests. Its sole failure is the known
 pinned-upstream `util-hash/stagedCrc32` case. That identical failure is recorded
 in the unmodified baseline and is unrelated to this change.
 
+`.github/workflows/netplay-ci.yml` independently configures and builds these
+same eight focused tests on Ubuntu 24.04 in normal and ASan/UBSan jobs. A
+separate job runs strict OpenSpec validation and uses the SHA-256-pinned Arm
+GNU Toolchain 15.2.Rel1 archive to rebuild the CC0 ROM and compare it
+byte-for-byte with `tools/gba-link-test-rom/fixtures/gba-link-test.gba`.
+
 ## OpenSpec scenario audit
 
 `openspec validate add-wifi-link-cable-netplay --strict` passes. The final
-package contains 27 requirements, 127 scenarios, and 82 sequentially numbered
+package contains 27 requirements, 131 scenarios, and 92 sequentially numbered
 implementation tasks. Every requirement has at least one scenario; every
 scenario has both `WHEN` and `THEN` clauses; and neither capability spec has a
 duplicate scenario name.

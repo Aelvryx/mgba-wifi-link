@@ -9,7 +9,7 @@ CFLAGS := -mcpu=arm7tdmi -marm -Os -ffreestanding -fno-builtin \
 	-Wall -Wextra -Werror
 LDFLAGS := -nostdlib -Wl,--gc-sections -Wl,-T,linker.ld
 
-.PHONY: all clean
+.PHONY: all clean verify-fixture update-fixture
 
 all: build/gba-link-test.gba
 
@@ -28,6 +28,12 @@ build/gba-link-test.elf: build/header.o build/main.o linker.ld
 build/gba-link-test.gba: build/gba-link-test.elf fix-header.py
 	$(OBJCOPY) -O binary $< $@
 	$(PYTHON) fix-header.py $@
+
+verify-fixture: build/gba-link-test.gba
+	cmp build/gba-link-test.gba fixtures/gba-link-test.gba
+
+update-fixture: build/gba-link-test.gba
+	cp build/gba-link-test.gba fixtures/gba-link-test.gba
 
 clean:
 	rm -f build/header.o build/main.o build/gba-link-test.elf \

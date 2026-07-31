@@ -1,0 +1,119 @@
+name: GBA Wi-Fi link netplay
+
+on:
+  push:
+    branches:
+      - feature/wifi-link-netplay
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: netplay-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused-tests:
+    name: Focused tests (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: normal
+            build_dir: build-ci
+            sanitizers: false
+          - name: ASan + UBSan
+            build_dir: build-ci-sanitize
+            sanitizers: true
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes cmake ninja-build pkg-config libcmocka-dev
+
+      - name: Configure focused suite
+        shell: bash
+        run: |
+          sanitizer_flags=()
+          if [[ "${{ matrix.sanitizers }}" == "true" ]]; then
+            sanitizer_flags+=(
+              -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+              -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+              -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+              -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined"
+            )
+          fi
+
+          cmake -S . -B "${{ matrix.build_dir }}" -G Ninja \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DBUILD_QT=OFF -DBUILD_SDL=OFF -DBUILD_LIBRETRO=ON \
+            -DBUILD_TEST=ON -DBUILD_SUITE=ON -DBUILD_CINEMA=OFF \
+            -DBUILD_HEADLESS=OFF -DBUILD_EXAMPLE=OFF \
+            -DUSE_ZLIB=OFF -DUSE_MINIZIP=OFF -DUSE_PNG=OFF \
+            -DUSE_LIBZIP=OFF -DUSE_SQLITE3=OFF -DUSE_LZMA=OFF \
+            -DUSE_JSON_C=OFF -DUSE_FREETYPE=OFF -DUSE_FFMPEG=OFF \
+            -DUSE_ELF=OFF -DUSE_LUA=OFF -DENABLE_SCRIPTING=OFF \
+            -DUSE_DISCORD_RPC=OFF \
+            "${sanitizer_flags[@]}"
+
+      - name: Build focused suite
+        run: |
+          cmake --build "${{ matrix.build_dir }}" --parallel 2 --target \
+            test-gba-netplay-driver \
+            test-gba-netplay-identity \
+            test-gba-netplay-integration \
+            test-gba-netplay-protocol \
+            test-gba-netplay-session \
+            test-gba-netplay-transport \
+            test-gba-sio \
+            test-libretro-netpacket
+
+      - name: Run focused suite
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          ctest --test-dir "${{ matrix.build_dir }}" \
+            --output-on-failure \
+            --tests-regex 'gba-netplay|gba-sio|libretro-netpacket' \
+            --parallel 2
+
+  fixture-and-spec:
+    name: Fixture reproducibility and OpenSpec
+    runs-on: ubuntu-24.04
+    env:
+      ARM_TOOLCHAIN_ARCHIVE: arm-gnu-toolchain-15.2.rel1-x86_64-arm-none-eabi.tar.xz
+      ARM_TOOLCHAIN_SHA256: 597893282ac8c6ab1a4073977f2362990184599643b4c5ee34870a8215783a16
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install OpenSpec CLI
+        run: npm install --global @fission-ai/openspec@1.6.0
+
+      - name: Validate OpenSpec change
+        run: openspec validate add-wifi-link-cable-netplay --strict
+
+      - name: Download pinned GNU Arm toolchain
+        run: |
+          curl --fail --location --retry 3 \
+            --output "/tmp/${ARM_TOOLCHAIN_ARCHIVE}" \
+            "https://developer.arm.com/-/media/Files/downloads/gnu/15.2.rel1/binrel/${ARM_TOOLCHAIN_ARCHIVE}"
+          echo "${ARM_TOOLCHAIN_SHA256}  /tmp/${ARM_TOOLCHAIN_ARCHIVE}" \
+            | sha256sum --check -
+          mkdir -p /tmp/gba-link-arm-toolchain
+          tar -xJf "/tmp/${ARM_TOOLCHAIN_ARCHIVE}" \
+            -C /tmp/gba-link-arm-toolchain --strip-components=1
+
+      - name: Rebuild and compare test-ROM fixture
+        run: |
+          make -C tools/gba-link-test-rom verify-fixture \
+            CROSS=/tmp/gba-link-arm-toolchain/bin/arm-none-eabi-

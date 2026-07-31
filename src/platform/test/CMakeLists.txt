@@ -36,7 +36,7 @@ if(BUILD_SUITE)
 		set_target_properties(test-${TEST_NAME} PROPERTIES COMPILE_DEFINITIONS "${OS_DEFINES};${FEATURE_DEFINES};${FUNCTION_DEFINES}")
 		if(TEST_NAME STREQUAL "gba-netplay-integration")
 			target_compile_definitions(test-${TEST_NAME} PRIVATE
-				GBA_LINK_TEST_ROM_PATH="${PROJECT_SOURCE_DIR}/tools/gba-link-test-rom/build/gba-link-test.gba")
+				GBA_LINK_TEST_ROM_PATH="${PROJECT_SOURCE_DIR}/tools/gba-link-test-rom/fixtures/gba-link-test.gba")
 		endif()
 		add_test(${TEST_NAME} test-${TEST_NAME})
 	endforeach()

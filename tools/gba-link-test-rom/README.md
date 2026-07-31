@@ -15,14 +15,25 @@ Build it with a freestanding GNU Arm Embedded toolchain:
 make CROSS=arm-none-eabi-
 ```
 
-The output is `build/gba-link-test.gba`. A reproducible copy is committed at
-that path so a clean checkout can run the two-core integration test without
-making an Arm toolchain a normal mGBA test dependency. Rebuilding it should
-produce the same SHA-256:
+The generated output is `build/gba-link-test.gba`. A reviewed fixture is
+committed separately at `fixtures/gba-link-test.gba` so a clean checkout can
+run the two-core integration test without making an Arm toolchain a normal
+mGBA test dependency. The generated `build/` directory remains ignored.
+Rebuilding should produce the same SHA-256:
 
 ```text
 24b7ef2bee7ff95ebe00d487f06ff82ea10eaefa63f04760bdb71bf9c64ffbe8
 ```
+
+CI rebuilds the ROM with the GNU Arm Embedded toolchain and compares every
+byte with the reviewed fixture. Run the same check locally with:
+
+```sh
+make verify-fixture CROSS=arm-none-eabi-
+```
+
+After an intentional source change, inspect the generated image and replace
+the fixture explicitly with `make update-fixture`.
 
 The header tool pads the linked program to a 32 KiB power-of-two cartridge
 image with erased-ROM `0xFF` bytes. This keeps the fixture on mGBA's ordinary

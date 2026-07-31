@@ -9,12 +9,18 @@ classes. Test names below are cmocka case names inside the named source file.
 
 Protocol v2 replaces per-cable-event network barriers with one replicated
 P0/P1 pair on each endpoint and frame-authoritative input packets. The current
-integration branch has the following local evidence before exact-head Android
+integration branch has the following Linux evidence before exact-head Android
 qualification:
 
-- The complete normal suite passes 37/37 tests.
-- Focused input-ring, v2 codec/session, replica, pair, save-routing, and
-  libretro-adapter suites pass under ASan/UBSan with leak detection.
+- All 16 focused SIO, input-ring, v2 codec/session, replica, pair,
+  save-routing, and libretro-adapter test executables pass normally, under
+  ASan/UBSan with leak detection, and under TSan.
+- `test-libretro-netpacket-v2-replay` compiles the actual adapter twice into
+  one process and connects the independent host/client instances through an
+  ordered deterministic-latency wire. It covers a complete bilateral replica
+  exchange, 125 input frames, state checks, role presentation, every
+  attachment packet boundary, runtime input/check loss, detach, synchronous
+  stop, reset, and unload.
 - `canonicalDigestsCoverFutureStateOnly` detects injected one-bit P0 memory,
   P1 memory, timing, and save changes while ignoring presentation-buffer
   changes.
@@ -23,21 +29,85 @@ qualification:
 - `runtimeInputDeadlineFailsWithSpecificReason` and
   `missingPollingAndSynchronousStopFailClosed` cover bounded input wait and
   generation invalidation during a receive callback.
-- A stock-RetroArch localhost run exceeded 2,100 replicated frames with
-  matching P0/P1 state checks every 60 frames.
-- A second late-attach run completed 1,200 frames and approximately 1,100
-  generic MULTI transfers. Packet counts remained frame-scaled, both logical
-  cores produced audio for every presented frame, and no empty-audio callback
-  was recorded.
-- Peer timeout restored the retained single core to frame 1,200, the latest
-  jointly verified quiescent local-role state, while preserving its live local
-  save generation.
+- A stock-RetroArch localhost soak completed 134,400 replicated frames, or
+  37 minutes 20 seconds of emulated time. All 448 rolling trace digests (224
+  sampled frames times P0/P1) matched between endpoints, and 2,239 periodic
+  verification rounds completed on each endpoint without divergence.
+- The soak completed 124,680 generic MULTI transfers and 249,360 cable words.
+  Its 0.927679 transfers per replicated frame differed by only 0.002% from a
+  direct local-pair baseline of 100,187 transfers over 108,000 frames.
+- The host/client sent 136,680/136,679 application packets at the final
+  periodic sample: approximately 1.017 packets per endpoint per replicated
+  frame, independent of the much larger serial-word count.
+- Both logical cores produced audio for every completed frame (the periodic
+  log observes 134,399 presented frames immediately before frame 134,400) and
+  both endpoints recorded zero empty-audio frames. Copied-queue high-water
+  marks remained 34/32 packets and the maximum in-call rendezvous was 7/4 ms
+  on this localhost run.
+- Normal max-frame shutdown restored each retained single core to frame
+  134,400, the latest jointly verified quiescent state, while retaining its
+  live local save generation.
 
 The short structured summaries include cumulative packets/bytes, verification
 count, local SIO transfers/words/waits, input rendezvous timing, future input
-depth, queue high-water, audio samples/frames/empties, and per-core scheduler
-work. Exact arm64 artifact hashes and physical-device results remain pending
-until section 13 of `make-wifi-link-netplay-realtime` is executed.
+depth, queue high-water, audio samples/frames/empties, per-core scheduler work,
+and separate full rolling P0/P1 trace digests. The checked
+`tools/analyze-replicated-netplay.py` validator compares the two logs and the
+direct-pair baseline, enforcing the frame floor, every sampled trace, serial
+counters, state-check coverage, audio coverage, packet scaling, queue bound,
+and five-percent throughput limit. The soak used core SHA-256
+`62edfb5504f66e3ece28f18ed6418d4ae401ef24841abdacc61496d622d4be5d`
+and cartridge-sized continuous fixture SHA-256
+`c302487462e6f1241e038fab8b135a43909cfce9f07cfe7498a2b1fc7b4c8330`.
+Exact arm64 artifact hashes and physical-device results remain pending until
+section 13 of `make-wifi-link-netplay-realtime` is executed.
+
+The desktop soak is reproducible with a stock RetroArch executable, the built
+libretro core, and the continuous CC0 fixture. Copy the core-option templates
+to their disposable paths first: RetroArch rewrites a core-options file on
+unload even when the main configuration is read-only in intent.
+
+```sh
+install -d /tmp/mgba-v2-qualification-save \
+  /tmp/mgba-v2-qualification-state
+cp tools/netpacket-spike/qualification-core-options.cfg \
+  /tmp/mgba-v2-qualification-core-options.cfg
+
+retroarch=/path/to/retroarch
+core=/path/to/mgba_libretro.so
+rom=/path/to/gba-link-continuous.gba
+port=55448
+
+"$retroarch" -v \
+  --config tools/netpacket-spike/retroarch-qualification.cfg \
+  --host --port="$port" --max-frames=180000 \
+  -L "$core" "$rom" > /tmp/mgba-v2-host.log 2>&1 &
+host_pid=$!
+sleep 0.2
+"$retroarch" -v \
+  --config tools/netpacket-spike/retroarch-qualification.cfg \
+  --connect=127.0.0.1 --port="$port" --max-frames=180000 \
+  -L "$core" "$rom" > /tmp/mgba-v2-client.log 2>&1 &
+client_pid=$!
+wait "$host_pid"
+wait "$client_pid"
+
+cp tools/replicated-pair-diagnostic/core-options.cfg \
+  /tmp/mgba-replicated-pair-baseline-core-options.cfg
+"$retroarch" -v \
+  --config tools/replicated-pair-diagnostic/retroarch-desktop.cfg \
+  --max-frames=108000 -L "$core" "$rom" \
+  > /tmp/mgba-v2-baseline.log 2>&1
+
+python3 tools/analyze-replicated-netplay.py \
+  /tmp/mgba-v2-host.log /tmp/mgba-v2-client.log \
+  --baseline /tmp/mgba-v2-baseline.log
+```
+
+The analyzer exits nonzero for fewer than 108,000 common frames, a missing or
+different sampled trace, mismatched serial counters, inadequate verification
+or audio coverage, empty audio, non-frame-scaled packet counts, excessive
+queue growth, or more than five-percent serial-throughput difference.
 
 The remaining sections document protocol-v1 correctness and its earlier
 physical qualification. That code remains a diagnostic SIO oracle; it is not

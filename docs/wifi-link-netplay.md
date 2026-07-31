@@ -165,13 +165,20 @@ unsuitable for gameplay.
 
 ## Current validation
 
-The Linux suite passes 37/37 tests. Focused input, codec, session, replica,
-pair, save-routing, and libretro-adapter tests also pass under ASan/UBSan with
-leak detection. A stock-RetroArch localhost run from the current implementation
-passed more than 2,100 replicated frames with matching checks every 60 frames.
-Using the late-attach continuous fixture, 1,200 frames completed roughly 1,100
-generic MULTI transfers while packets remained frame-scaled and every
-presented frame produced audio.
+All 16 focused Linux SIO, protocol-v2, replica, pair, input, save-routing, and
+libretro-adapter tests pass normally, under ASan/UBSan with leak detection, and
+under TSan. This includes a paired replay of two actual adapter instances with
+deterministic latency/jitter and faults at every attachment, input,
+verification, detach, reset, stop, and unload boundary.
+
+A stock-RetroArch localhost soak completed 134,400 replicated frames (37
+minutes 20 seconds of emulated time), 2,239 matched verification rounds, and
+124,680 generic MULTI transfers. Every sampled rolling P0/P1 trace matched,
+both endpoints returned audio on every completed frame with zero empty-audio
+frames, packets remained frame-scaled, and serial throughput was within 0.002%
+of the direct local-pair baseline. The log validator and headless RetroArch
+qualification profiles are under `tools/` so the run can be repeated without
+game-specific input.
 
 Exact-head two-device Android and commercial-game qualification is recorded
 separately in `docs/netplay-validation-matrix.md`; older entries in that file

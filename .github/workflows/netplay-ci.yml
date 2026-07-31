@@ -83,7 +83,8 @@ jobs:
             test-gba-replicated-pair-spike \
             test-gba-sio \
             test-libretro-netpacket \
-            test-libretro-netpacket-v2
+            test-libretro-netpacket-v2 \
+            test-libretro-netpacket-v2-replay
 
       - name: Run focused suite
         env:

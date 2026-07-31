@@ -35,9 +35,18 @@ set(SOURCE_FILES
 	timer.c
 	video.c)
 
+set(NETPLAY_FILES
+	sio/netplay/driver.c
+	sio/netplay/identity.c
+	sio/netplay/protocol.c
+	sio/netplay/session.c
+	sio/netplay/timeline.c
+	sio/netplay/transport.c)
+
 set(SIO_FILES
 	sio/dolphin.c
-	sio/lockstep.c)
+	sio/lockstep.c
+	${NETPLAY_FILES})
 
 set(EXTRA_FILES
 	extra/battlechip.c
@@ -57,6 +66,7 @@ source_group("GBA tests" FILES ${TEST_FILES})
 
 export_directory(GBA SOURCE_FILES)
 export_directory(GBA_SIO SIO_FILES)
+export_directory(GBA_NETPLAY NETPLAY_FILES)
 export_directory(GBA_EXTRA EXTRA_FILES)
 export_directory(GBA_DEBUGGER DEBUGGER_FILES)
 export_directory(GBA_TEST TEST_FILES)

@@ -7,18 +7,18 @@
 - Pinned upstream commit: `71aa6c7dab7654bfdbbd57e696f704671a97e55d`
 - Pinned commit date: `2026-07-30T23:01:50-07:00`
 - Pinned commit subject: `Qt: Remove unneeded Qt Multimedia-only include`
-- Upstream-facing branch: `feature/wifi-link-netplay-upstream`
+- Upstream-facing protocol-v2 branch: `feature/wifi-link-netplay-v2`
 - Integration/evidence branch: `feature/wifi-link-netplay`
 
 The repository was initialized directly from mGBA Git history. The
-upstream-facing branch descends from the pinned commit above and contains only
-the reviewable product, test, CI, and user-documentation commits. Project-only
-OpenSpec and `.codex` material remains on the integration/evidence branch and
-is deliberately absent from this patch stack.
+protocol-v2 branch descends from the pinned commit above and contains the
+reviewable product, tests, CI, user documentation, and the active OpenSpec
+change. Project-local `.codex` helpers, device captures, logs, commercial ROMs,
+and generated build products remain outside this patch stack.
 
 ```sh
 git fetch upstream master --tags
-git switch -c feature/wifi-link-netplay-upstream \
+git switch -c feature/wifi-link-netplay-v2 \
   71aa6c7dab7654bfdbbd57e696f704671a97e55d
 ```
 
@@ -179,9 +179,21 @@ RetroArch soak are recorded in the validation matrix. Arm GNU Toolchain
 15.2.Rel1 reproduces the committed 32 KiB test ROM byte-for-byte.
 
 Android NDK r27 builds passed for `arm64-v8a`, `armeabi-v7a`, `x86`, and
-`x86_64`. The exact ARM64 protocol-v2 candidate from
+`x86_64`. The 8,029,120-byte release core built from production source commit
+`9c528d38965998b15c8e7325326fd96f74362088` (tree
+`0f36ec14bb94f26ab1a17a688c065908aa8d9dd6`) has SHA-256
+`9cbdf6adc49ada15fc670bea3e4c2bad64803fe7d5d749d3143e98773a0a14f8`.
+Its embedded version and commit strings were verified after installation on
+both physical Android devices. The exact-core smoke sustained 60 FPS with
+matching P0/P1 traces, normal audio delivery, and zero serial errors or
+timeouts. The same binary also passed Mario Kart peer-stop and explicit
+RetroArch disconnect checks with bounded teardown and verified local-state
+restoration. Detailed hashes and observations are in
+`docs/netplay-validation-matrix.md`.
+
+The earlier exact ARM64 candidate from
 `217c231f2b1152b9e7b8484b0245f2210ae709d0`, SHA-256
 `e045d614e5b2def408ee636c7cbffe46e94105edcb8abda65c8142879cca2989`,
-completed a 120,600-frame continuous-link run on the two physical Android
-devices described in the validation matrix. Both endpoints sustained 60.22
-FPS with matching traces, no empty audio frames, and no link error or timeout.
+completed the 120,600-frame continuous-link qualification recorded there.
+The later production commit removes completed feasibility switches without
+changing the qualified replicated scheduler or wire protocol.

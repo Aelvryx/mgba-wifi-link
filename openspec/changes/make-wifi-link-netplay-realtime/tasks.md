@@ -117,12 +117,12 @@
 - [x] 13.4 Run Four Swords through its linking screen and confirm the former one-FPS collapse is absent; record the lack of observed MULTI transfers separately rather than treating that dwell as a successful game link.
 - [x] 13.5 Capture p50/p95/max input rendezvous, negotiated delay, packet/byte rate, CPU, peak memory, temperature, throttling, audio behavior, and save persistence for both devices.
 - [x] 13.6 Confirm normal RetroArch controls/configuration and user saves remain untouched outside the installed release core.
-- [ ] 13.7 Run commercial-title peer-stop and graceful disconnect scenarios on the exact committed release candidate.
+- [x] 13.7 Run commercial-title peer-stop and graceful disconnect scenarios on the exact committed release candidate.
 
 ## 14. Release and review hygiene
 
 - [x] 14.1 Update README usage, limitations, host/join instructions, protocol incompatibility, input latency, diagnostics, save ownership, and safe disconnect guidance.
-- [ ] 14.2 Update `UPSTREAM.md`, protocol documentation, test matrix, build provenance, artifact hashes, and exact Android evidence.
-- [ ] 14.3 Remove disposable spike switches, test cores, temporary device files, and unsanitized diagnostic artifacts while retaining reproducible fixtures and summarized evidence.
-- [ ] 14.4 Rebase the upstream-facing patch stack and split pair infrastructure, bundle/codec, session/input, frontend/save routing, diagnostics, tests, and documentation into reviewable commits.
-- [ ] 14.5 Run strict OpenSpec validation, the complete CI matrix, and one final exact-build two-device smoke test before publishing the alpha core.
+- [x] 14.2 Update `UPSTREAM.md`, protocol documentation, test matrix, build provenance, artifact hashes, and exact Android evidence.
+- [x] 14.3 Remove disposable spike switches, test cores, temporary device files, and unsanitized diagnostic artifacts while retaining reproducible fixtures and summarized evidence.
+- [x] 14.4 Rebase the upstream-facing patch stack and split pair infrastructure, bundle/codec, session/input, frontend/save routing, diagnostics, tests, and documentation into reviewable commits.
+- [x] 14.5 Run strict OpenSpec validation, the complete CI matrix, and one final exact-build two-device smoke test before publishing the alpha core.

@@ -8,8 +8,8 @@ classes. Test names below are cmocka case names inside the named source file.
 ## Protocol-v2 real-time evidence
 
 Protocol v2 replaces per-cable-event network barriers with one replicated
-P0/P1 pair on each endpoint and frame-authoritative input packets. The current
-integration branch has the following automated and rendered-device evidence:
+P0/P1 pair on each endpoint and frame-authoritative input packets. The
+protocol-v2 branch has the following automated and rendered-device evidence:
 
 - All 17 focused SIO, input-ring, v2 codec/session, replica, pair,
   save-routing, and libretro-adapter test executables pass normally, under
@@ -78,8 +78,9 @@ unchanged as `525ff8644`. The qualification capture also recorded the dirty
 worktree's binary Git diff SHA-256 as
 `67998b9e7ba943f9fac878b493279dc29ce0dd989ac91f6bed1547e3999ed7eb`.
 Together the commit and captured build hash identify the physically exercised
-candidate while keeping commercial content outside the repository. A
-post-commit exact-build smoke is the final release gate.
+candidate while keeping commercial content outside the repository. The later
+clean production-core smoke and terminal-path checks that close the release
+gate are recorded below.
 
 The strict commercial-log analyzer result was:
 
@@ -198,6 +199,68 @@ The qualification fixture renders black while waiting and running, and dim
 red only on failure, avoiding a static bright OLED workload during long soaks.
 Both RetroArch processes were stopped after evidence capture and Android
 reported every built-in display panel `OFF`.
+
+### Final production-core smoke and disconnect qualification
+
+The production source commit used for the publishable ARM64 core is
+`9c528d38965998b15c8e7325326fd96f74362088` (tree
+`0f36ec14bb94f26ab1a17a688c065908aa8d9dd6`). The 8,029,120-byte
+`mgba_libretro.so` built with Android NDK r27 has SHA-256
+`9cbdf6adc49ada15fc670bea3e4c2bad64803fe7d5d749d3143e98773a0a14f8`.
+Both installed instances displayed the embedded version
+`0.11-feature/wifi-link-netplay-v2-9135-9c528d389` in stock RetroArch
+1.22.2. This build excludes the completed local-pair diagnostic runtime and
+its user-facing core option; the dedicated test targets retain the reusable
+coverage.
+
+A fresh two-device continuous-link smoke reached 1,800 common replicated
+frames before the deliberate peer-stop. Both endpoint logs contained the same
+sampled P0/P1 traces, 29 or more successful state checks, 895 matching fixture
+transfers per logical player, zero fixture errors/timeouts, and zero empty
+audio frames. The observed rates were 60.164 FPS on Thor and 60.315 FPS on
+Odin. Player two was then force-stopped. Player zero emitted its complete
+teardown summary, restored verified local state at frame 1,920, invalidated
+the session as peer-detached, and continued rendering instead of hanging.
+
+The same exact core was then exercised with Mario Kart: Super Circuit
+(RetroArch content CRC32 `ed316e37`) for both terminal paths. The test did not
+enter Multi-Pak again; the completed three-lap Multi-Pak race is recorded
+above. Its purpose was to prove commercial-content session teardown:
+
+- In the abrupt path, both peers attached and passed two periodic verification
+  intervals at approximately 60.3 FPS. Force-stopping player two caused player
+  zero to tear down at replicated frame 1,671 and restore its last jointly
+  verified state at frame 1,620 without a hang, crash, empty-audio frame, or
+  corruption of the ordinary ROM/save locations.
+- In the explicit path, player two selected RetroArch's **Disconnect from
+  Netplay Host** command after 49 successful state checks. The two roles
+  emitted teardown at frames 2,962/2,961 and both restored frame 2,940. The
+  client observed the frontend transport-stop reason and the host observed
+  peer-detached, which is the expected role-specific terminal diagnostic for
+  RetroArch's stop callback. Neither retained a replicated pair or transport
+  callback after teardown.
+
+The device tests used temporary configurations, saves, states, staged content
+copies, and logs. After evidence capture those paths, all diagnostic cores and
+ROMs, and the public installer copy were removed from both devices. The
+privately installed production core and ordinary ROM, save, and RetroArch
+configuration locations were retained; both displays were then put into the
+Android dozing state.
+
+Raw evidence remains outside the repository. Verification hashes for the
+final gate are:
+
+| Evidence | SHA-256 |
+| --- | --- |
+| Exact-smoke Thor log | `916f081d80f46c3f37c819fe160abe6016dbd32ae749e9aebb02901af39fef3f` |
+| Exact-smoke Odin log | `f8d9da354b225e46b8a7d92d517e94f54f39a70afc2eddc332dd529eec4bc34` |
+| Exact-smoke Thor screenshot | `40e471c748a3801c79f3683c2b2b284d92db1bbd714eac6ad69688fa72b79383` |
+| Exact-smoke Odin screenshot | `d020e631ac082a280faf6a6625f2cb07332fbdc4cf846c0c602e1ae3a7a77aa3` |
+| Mario Kart abrupt-stop Thor log | `454755461c68e579407b8843c8f494be1c265ee82b32a6c48f74bf214e230d20` |
+| Mario Kart abrupt-stop Odin log | `1087ea4375637a17f8cd67917fda090a8fb000ca866aa438536f6dc2d2ac6271` |
+| Mario Kart explicit-disconnect Thor log | `181a706bd5557c2579a3af864c668043e767bb9c6a075dedabee220426cad55d` |
+| Mario Kart explicit-disconnect Odin log | `83a891bb2f1f1fad942a60c10724fb21d4e15cc5991a7e3ad98a3f8fd6b0bc18` |
+| Explicit-disconnect menu screenshot | `cd074ba8e0a9f7b1da3a80d54c01ee6d1a716235f60b47fb240fbaf65c1ffee7` |
 
 The desktop soak is reproducible with a stock RetroArch executable, the built
 libretro core, and the continuous CC0 fixture. Copy the core-option templates

@@ -43,6 +43,15 @@ The original core remains intact until final readiness. Any earlier protocol,
 transport, allocation, digest, installation or deadline failure destroys only
 the provisional state and invalidates the transport generation.
 
+RetroArch's explicit disconnect command may synchronously stop the Netpacket
+transport before the core can exchange another application packet. Protocol
+v2 therefore treats both a local frontend stop and the corresponding remote
+peer-detached callback as bounded terminal events: each role invalidates its
+callback generation, discards the replicated pair, and restores its assigned
+core to the latest jointly verified state. The two roles may log different
+terminal reason codes; this is not an in-session state divergence because no
+later replicated frame is released.
+
 ## Runtime messages
 
 Protocol v2 admits only fixed-delay input batches, periodic pair-state checks

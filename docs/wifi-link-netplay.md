@@ -151,6 +151,14 @@ normal exit, leave any active transfer or linking screen, then stop hosting or
 close content. Do not load, create, or depend on a savestate while connected;
 the core rejects those operations for every live session state.
 
+RetroArch currently reports an explicit client disconnect to the client core
+as a frontend transport stop and to the host core as peer-detached. A short
+`Link failed` notification can therefore appear even for the menu's normal
+**Disconnect from Netplay Host** command. The teardown is still bounded and
+safe: both sides discard the pair and restore their latest jointly verified
+local state. This wording describes the current frontend callback semantics,
+not an invitation to continue after an unexplained mid-game link error.
+
 ## Diagnostics
 
 Normal logs emit short attach, ten-second periodic, and teardown records. The

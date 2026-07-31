@@ -20,6 +20,7 @@ set(SOURCE_FILES
 	io.c
 	memory.c
 	overrides.c
+	replica.c
 	renderers/cache-set.c
 	renderers/common.c
 	renderers/gl.c
@@ -67,6 +68,7 @@ set(TEST_FILES
 	test/netplay-protocol.c
 	test/netplay-session.c
 	test/netplay-transport.c
+	test/replica.c
 	test/replicated-pair-spike.c
 	test/sio.c)
 

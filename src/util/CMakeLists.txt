@@ -8,6 +8,7 @@ set(BASE_SOURCE_FILES
 	hash.c
 	md5.c
 	sha1.c
+	sha256.c
 	string.c
 	table.c
 	vector.c

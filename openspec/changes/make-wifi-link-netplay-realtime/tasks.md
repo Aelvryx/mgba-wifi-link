@@ -36,13 +36,13 @@
 
 ## 5. Define and implement canonical replica bundles
 
-- [ ] 5.1 Inventory mutable GBA state required to resume one logical cartridge, including CPU/memory, timing events, SIO, save-memory type/data, GPIO peripherals, and RTC mode/state.
-- [ ] 5.2 Define a versioned, endian-stable replica manifest and bundle format that excludes ROM bytes, frontend paths, presentation buffers, and network state.
-- [ ] 5.3 Implement bounded bundle creation at a quiescent local-core boundary without mutating the source core.
-- [ ] 5.4 Implement chunked bundle assembly with declared resource ceilings, overlap/hole checks, exact duplicate rules, and compressed/uncompressed digests.
-- [ ] 5.5 Implement fresh-core restoration from a verified bundle using the already identity-checked effective ROM.
-- [ ] 5.6 Add round-trip tests for SRAM, Flash variants, EEPROM variants, no-save carts, RTC state, GPIO peripherals, different local cycles, and games already in MULTI mode.
-- [ ] 5.7 Add malformed-manifest, oversize, truncated, overlap, decompression-bomb, digest-mismatch, wrong-player, and wrong-generation tests.
+- [x] 5.1 Inventory mutable GBA state required to resume one logical cartridge, including CPU/memory, timing events, SIO, save-memory type/data, GPIO peripherals, and RTC mode/state.
+- [x] 5.2 Define a versioned, endian-stable replica manifest and bundle format that excludes ROM bytes, frontend paths, presentation buffers, and network state.
+- [x] 5.3 Implement bounded bundle creation at a quiescent local-core boundary without mutating the source core.
+- [x] 5.4 Implement chunked bundle assembly with declared resource ceilings, overlap/hole checks, exact duplicate rules, and compressed/uncompressed digests.
+- [x] 5.5 Implement fresh-core restoration from a verified bundle using the already identity-checked effective ROM.
+- [x] 5.6 Add round-trip tests for SRAM, Flash variants, EEPROM variants, no-save carts, RTC state, GPIO peripherals, different local cycles, and games already in MULTI mode.
+- [x] 5.7 Add malformed-manifest, oversize, truncated, overlap, decompression-bomb, digest-mismatch, wrong-player, and wrong-generation tests.
 
 ## 6. Add protocol-v2 codec and attachment state machine
 

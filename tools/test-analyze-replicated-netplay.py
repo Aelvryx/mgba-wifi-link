@@ -17,24 +17,35 @@ sys.modules[SPEC.name] = ANALYZER
 SPEC.loader.exec_module(ANALYZER)
 
 
-def log(role: int, timeout: int = 0, fps_milli: int = 59_730) -> str:
+def log(
+    role: int,
+    timeout: int = 0,
+    fps_milli: int = 59_730,
+    fixture: bool = True,
+    transfers: int = 54_000,
+    lead0: int = 1,
+    lead1: int = 0,
+) -> str:
     trace0 = "01" * 32
     trace1 = "ab" * 32
-    return "\n".join(
-        [
+    lines = [
             f"periodic P{role} f=108000 pkt=110000/109999 "
-            "B=12500000/12499920 chk=1799 sio=54000/108000",
+            f"B=12500000/12499920 chk=1799 sio={transfers}/{transfers * 2}",
             f"periodic P{role} rv=120/840ms max=18 q=7 in=4/4 "
+            f"lead={lead0}/{lead1} "
             "audio=59250000/107999/0 wait=1000 run=80000000/79000000",
             f"periodic P{role} trace0={trace0}",
             f"periodic P{role} trace1={trace1}",
             f"periodic timing P{role} elapsed=1808135ms "
             f"fps-milli={fps_milli} rv-p50=5ms rv-p95=12ms rv-max=18ms",
+        ]
+    if fixture:
+        lines.append(
             f"periodic fixture P{role} status=00000003/00000003 "
             "transfers=53993/53993 errors=0/0 "
-            f"timeouts=0/{timeout} lines=00036009/0007601d",
-        ]
-    )
+            f"timeouts=0/{timeout} lines=00036009/0007601d"
+        )
+    return "\n".join(lines)
 
 
 def main() -> int:
@@ -59,6 +70,55 @@ def main() -> int:
         )
         assert any("58.999 FPS" in error for error in errors)
         assert any("transfer timeout" in error for error in errors)
+
+        host_path.write_text(log(0, fixture=False))
+        client_path.write_text(log(1, fixture=False))
+        commercial_host = ANALYZER.parse(host_path)
+        commercial_client = ANALYZER.parse(client_path)
+        assert not ANALYZER.validate(
+            commercial_host,
+            commercial_client,
+            108000,
+            None,
+            require_fixture=False,
+        )
+        errors = ANALYZER.validate(
+            commercial_host, commercial_client, 108000, None
+        )
+        assert any("missing the continuous-fixture" in error for error in errors)
+
+        host_path.write_text(log(0, fixture=False, transfers=0))
+        errors = ANALYZER.validate(
+            ANALYZER.parse(host_path),
+            commercial_client,
+            108000,
+            None,
+            require_fixture=False,
+        )
+        assert any("no MULTI transfers" in error for error in errors)
+
+        host_path.write_text(
+            log(0, fixture=False)
+            + "\nStatus: GBA replicated link: protocol-v2 session failed: reason=8\n"
+        )
+        errors = ANALYZER.validate(
+            ANALYZER.parse(host_path),
+            commercial_client,
+            108000,
+            None,
+            require_fixture=False,
+        )
+        assert any("explicit replicated-link failure" in error for error in errors)
+
+        host_path.write_text(log(0, fixture=False, lead0=2))
+        errors = ANALYZER.validate(
+            ANALYZER.parse(host_path),
+            commercial_client,
+            108000,
+            None,
+            require_fixture=False,
+        )
+        assert any("frame-lead counters differ" in error for error in errors)
     print("replicated netplay analyzer smoke test: pass")
     return 0
 

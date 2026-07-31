@@ -83,6 +83,7 @@ jobs:
             test-gba-replicated-pair \
             test-gba-replicated-pair-spike \
             test-gba-sio \
+            test-libretro-replicated-pair-spike \
             test-libretro-netpacket \
             test-libretro-netpacket-v2 \
             test-libretro-netpacket-v2-replay
@@ -96,7 +97,7 @@ jobs:
         run: |
           ctest --test-dir "${{ matrix.build_dir }}" \
             --output-on-failure \
-            --tests-regex 'gba-netplay|gba-replica|gba-sio|libretro-netpacket' \
+            --tests-regex 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' \
             --parallel 2
 
   fixture:

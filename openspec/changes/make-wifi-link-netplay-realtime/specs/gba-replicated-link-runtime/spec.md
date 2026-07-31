@@ -49,12 +49,22 @@ The accepted session SHALL assign physical host input to logical P0 and physical
 - **THEN** the receiver rejects the packet and fails closed
 
 ### Requirement: Deterministic pair-frame scheduler
-A transport-independent replicated-pair scheduler SHALL set both logical inputs and advance P0 and P1 to a common next video-frame boundary while servicing all local lockstep sleep and wake transitions. Repeated execution from identical P0/P1 bundles and frame inputs SHALL produce identical logical-player state traces regardless of endpoint role.
+A transport-independent replicated-pair scheduler SHALL set both logical inputs and advance P0 and P1 to persistent per-core next video-frame targets while servicing all local lockstep sleep and wake transitions. The targets SHALL be initialized from each restored core's own frame counter. Repeated execution from identical P0/P1 bundles and frame inputs SHALL produce identical logical-player state traces regardless of endpoint role.
 
 #### Scenario: Pair executes a transfer-heavy frame
 - **WHEN** both inputs are available and the games perform multiple SIO transfers before the next frame boundary
-- **THEN** the scheduler runs whichever logical core is runnable until both reach the boundary
+- **THEN** the scheduler runs whichever logical core is runnable until both reach their targets
 - **AND** it neither deadlocks nor lets one core bypass a required local lockstep wait
+
+#### Scenario: Cable servicing crosses one additional boundary
+- **WHEN** a logical core has reached its target but must continue to satisfy a local cable dependency before its peer reaches its target
+- **THEN** the scheduler accepts at most one additional video boundary after both targets have been reached
+- **AND** it records the recovered lead, rebases that core's next target from its observed counter, and advances the replicated pair frame exactly once
+
+#### Scenario: A logical core advances too far
+- **WHEN** either logical core is observed more than one video boundary beyond its current target
+- **THEN** the scheduler fails closed with its starting, target, and observed frame counters
+- **AND** neither endpoint continues a replica independently
 
 #### Scenario: Endpoint roles are reversed
 - **WHEN** one test pair presents P0 and another presents P1 from identical bundles and inputs
@@ -62,7 +72,7 @@ A transport-independent replicated-pair scheduler SHALL set both logical inputs 
 - **AND** their complete P1 state traces match one another
 
 ### Requirement: Bounded in-call frontend rendezvous
-While a protocol-v2 session is ready, `retro_run()` SHALL process generation-safe receive polling until the current replicated frame becomes runnable, an operation deadline expires, or synchronous transport stop invalidates the generation. A returned successful runtime call SHALL have advanced exactly one local-role emulated frame and SHALL not return repeated cached video with empty audio merely because a peer input is pending.
+While a protocol-v2 session is ready, `retro_run()` SHALL process generation-safe receive polling until the current replicated frame becomes runnable, an operation deadline expires, or synchronous transport stop invalidates the generation. A returned successful runtime call SHALL have advanced exactly one replicated pair frame and SHALL provide the local role's newly produced output, including any bounded video-boundary lead required by local cable servicing. It SHALL not return repeated cached video with empty audio merely because a peer input is pending.
 
 #### Scenario: Input arrives during receive polling
 - **WHEN** the missing current-frame input arrives before its deadline during `poll_receive_fn`

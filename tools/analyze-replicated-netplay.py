@@ -20,6 +20,7 @@ RUNTIME = re.compile(
     r"periodic P(?P<role>[01]) rv=(?P<waits>\d+)/(?P<wait_ms>\d+)ms "
     r"max=(?P<max_wait_ms>\d+) q=(?P<queue>\d+) "
     r"in=(?P<input0>\d+)/(?P<input1>\d+) "
+    r"(?:lead=(?P<lead0>\d+)/(?P<lead1>\d+) )?"
     r"audio=(?P<audio_samples>\d+)/(?P<audio_frames>\d+)/"
     r"(?P<empty_audio>\d+)"
 )
@@ -62,6 +63,8 @@ class Summary:
     queue: int = 0
     input0: int = 0
     input1: int = 0
+    lead0: int = 0
+    lead1: int = 0
     audio_samples: int = 0
     audio_frames: int = 0
     empty_audio: int = 0
@@ -91,10 +94,15 @@ class Log:
     traces: dict[tuple[int, int], str] = dataclasses.field(default_factory=dict)
     fixtures: dict[int, FixtureStatus] = dataclasses.field(default_factory=dict)
     divergence_lines: list[str] = dataclasses.field(default_factory=list)
+    failure_lines: list[str] = dataclasses.field(default_factory=list)
 
 
 def _values(match: re.Match[str]) -> dict[str, int]:
-    return {key: int(value) for key, value in match.groupdict().items()}
+    return {
+        key: int(value)
+        for key, value in match.groupdict().items()
+        if value is not None
+    }
 
 
 def parse(path: Path) -> Log:
@@ -104,6 +112,11 @@ def parse(path: Path) -> Log:
     for raw in path.read_text(errors="replace").splitlines():
         if "divergence frame=" in raw or "canonical state digest mismatch" in raw:
             result.divergence_lines.append(raw)
+        if (
+            "GBA replicated link: Link failed:" in raw
+            or "GBA replicated link: protocol-v2 session failed:" in raw
+        ):
+            result.failure_lines.append(raw)
         match = SUMMARY.search(raw)
         if match:
             values = _values(match)
@@ -176,10 +189,13 @@ def validate(
     client: Log,
     minimum_frames: int,
     baseline: tuple[int, int] | None,
+    require_fixture: bool = True,
 ) -> list[str]:
     errors: list[str] = []
     if host.divergence_lines or client.divergence_lines:
         errors.append("a log contains an explicit replica divergence")
+    if host.failure_lines or client.failure_lines:
+        errors.append("a log contains an explicit replicated-link failure")
     host_only = sorted(host.summaries.keys() - client.summaries.keys())
     client_only = sorted(client.summaries.keys() - host.summaries.keys())
     if host_only:
@@ -192,6 +208,7 @@ def validate(
     final_frame = common_frames[-1]
     if final_frame < minimum_frames:
         errors.append(f"only {final_frame} replicated frames; need {minimum_frames}")
+    previous_leads = {"host": (0, 0), "client": (0, 0)}
     for frame in common_frames:
         for player in range(2):
             key = (frame, player)
@@ -203,6 +220,18 @@ def validate(
         right = client.summaries[frame]
         if (left.transfers, left.words) != (right.transfers, right.words):
             errors.append(f"serial counters differ at frame {frame}")
+        if (left.lead0, left.lead1) != (right.lead0, right.lead1):
+            errors.append(f"recovered frame-lead counters differ at frame {frame}")
+        for label, summary in (("host", left), ("client", right)):
+            leads = (summary.lead0, summary.lead1)
+            if any(
+                current < previous
+                for current, previous in zip(leads, previous_leads[label])
+            ):
+                errors.append(
+                    f"{label} recovered frame-lead counter decreased at frame {frame}"
+                )
+            previous_leads[label] = leads
     for label, summary in (
         ("host", host.summaries[final_frame]),
         ("client", client.summaries[final_frame]),
@@ -229,9 +258,9 @@ def validate(
                 f"{label} ran at {summary.fps_milli / 1000:.3f} FPS; need 59 FPS"
             )
         fixture = (host if label == "host" else client).fixtures.get(final_frame)
-        if not fixture:
+        if require_fixture and not fixture:
             errors.append(f"{label} is missing the continuous-fixture summary")
-        else:
+        elif fixture:
             if (fixture.status0, fixture.status1) != (3, 3):
                 errors.append(
                     f"{label} fixture status is "
@@ -243,6 +272,14 @@ def validate(
                 errors.append(f"{label} fixture reported data/line/IRQ errors")
             if fixture.timeouts0 or fixture.timeouts1:
                 errors.append(f"{label} fixture reported a transfer timeout")
+    if not require_fixture:
+        final = host.summaries[final_frame]
+        if not final.transfers:
+            errors.append("commercial run completed no MULTI transfers")
+        elif final.words != final.transfers * 2:
+            errors.append(
+                "commercial run serial word count does not match two-player MULTI"
+            )
     if baseline:
         baseline_frame, baseline_transfers = baseline
         if baseline_frame <= 0:
@@ -264,6 +301,11 @@ def main() -> int:
     parser.add_argument("client", type=Path)
     parser.add_argument("--minimum-frames", type=int, default=108_000)
     parser.add_argument("--baseline", type=Path)
+    parser.add_argument(
+        "--commercial",
+        action="store_true",
+        help="validate a real-game run without the CC0 fixture result block",
+    )
     args = parser.parse_args()
     try:
         host = parse(args.host)
@@ -272,7 +314,13 @@ def main() -> int:
     except (OSError, ValueError) as error:
         print(error, file=sys.stderr)
         return 2
-    errors = validate(host, client, args.minimum_frames, baseline)
+    errors = validate(
+        host,
+        client,
+        args.minimum_frames,
+        baseline,
+        require_fixture=not args.commercial,
+    )
     common_frames = sorted(host.summaries.keys() & client.summaries.keys())
     if common_frames:
         frame = common_frames[-1]
@@ -305,6 +353,7 @@ def main() -> int:
             f"packet_rate={host_pps:.3f}/{client_pps:.3f}pps "
             f"byte_rate={host_bytes_per_second:.1f}/"
             f"{client_bytes_per_second:.1f}Bps "
+            f"lead={left.lead0}/{left.lead1} "
             f"trace_samples={len(common_frames)}{baseline_text}"
         )
     for error in errors:

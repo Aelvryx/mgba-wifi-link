@@ -92,21 +92,23 @@ The runtime uses fixed-delay deterministic input synchronization. Session accept
 
 At replicated frame `F`, each endpoint samples its assigned physical controller for logical frame `F + D` and sends one reliable flushed `INPUT_BATCH` containing that frame plus a short redundancy window of recent local inputs. Each endpoint may execute frame `F` only when authoritative inputs for both P0 and P1 at `F` are installed. An exact duplicate is idempotent; conflicting input for an installed frame fails the session.
 
-Input ownership is fixed by the accepted assignment: host packets can author P0 only and client packets can author P1 only. The local value is applied to the local-role core and the received value to the shadow-role core. Both cores then run to the next common video-frame boundary under the local lockstep scheduler.
+Input ownership is fixed by the accepted assignment: host packets can author P0 only and client packets can author P1 only. The local value is applied to the local-role core and the received value to the shadow-role core. Both cores then run to their persistent next video-frame targets under the local lockstep scheduler.
 
 One packet per player per frame keeps ordinary wire traffic O(video frames), independent of the number of SIO transfers. The short redundancy window is not required for reliability but makes trace diagnosis and duplicate behavior explicit.
 
 ### 5. Wait inside a bounded `retro_run()` rendezvous
 
-The libretro adapter SHALL not repeatedly return empty blocked calls while a required input is expected within its operation deadline. `retro_run()` polls receive through the generation-safe wrapper and processes the copied queue until the current frame is runnable, the deadline expires, or stop invalidates the generation. Once runnable, it advances exactly one displayed logical frame and supplies that local-role core's video and audio.
+The libretro adapter SHALL not repeatedly return empty blocked calls while a required input is expected within its operation deadline. `retro_run()` polls receive through the generation-safe wrapper and processes the copied queue until the current frame is runnable, the deadline expires, or stop invalidates the generation. Once runnable, it advances exactly one replicated pair frame and supplies the local-role core's newly produced video and audio.
 
 This same bounded in-call rendezvous is first implemented against protocol v1 frame grants as a tactical regression fixture. That proves the audio-starvation diagnosis and provides a small safe improvement for the retained fallback. It is not considered a solution to active commercial-game throughput.
 
 Polling remains bounded and handles synchronous `receive` and `stop` re-entry. If polling is unavailable, the replicated runtime is not advertised as supported. A missed input deadline tears down the session; it does not emit silence indefinitely, guess input, or run either replica alone.
 
-### 6. Use a deterministic pair scheduler and common frame boundary
+### 6. Use a deterministic pair scheduler and persistent per-core frame targets
 
-The pair owns a monotonically increasing replicated frame number. A frame begins only after both inputs exist. The scheduler sets both cores' keys, advances P0 and P1 until each reaches the same next video-frame boundary, and lets the local coordinator arbitrate any SIO sleeps and wakes between them. It does not assume that both cores consume the same number of CPU cycles or emit video at the same instant.
+The pair owns a monotonically increasing replicated frame number. A frame begins only after both inputs exist. The scheduler sets both cores' keys, advances P0 and P1 until each reaches its persistent next video-frame target, and lets the local coordinator arbitrate any SIO sleeps and wakes between them. The targets are initialized from each restored core's own frame counter; the authoritative replicas are not required to have been captured at equal raw video counters.
+
+Servicing an outstanding local cable dependency can require a logical core that has reached its target to cross one additional video boundary before its peer reaches its own target. The scheduler accepts that bounded lead only after both targets have been reached, records it in diagnostics, and rebases only the affected core's next target from the observed counter. Advancing more than one boundary beyond a target fails closed. The replicated pair frame still advances exactly once, and identical endpoint pairs make the same recovery and produce the same state traces. This exception is explicit because treating any lead as a fatal overshoot caused a deterministic commercial-game failure, while stopping the leading core would deadlock the in-process cable.
 
 The selected spike scheduler becomes a small transport-independent `GBAReplicatedPair` module. It owns both cores, the coordinator, two lockstep drivers/users, frame state, and deterministic construction/destruction. Netpacket, input queues, and libretro callbacks remain outside this module. Unit tests can therefore drive the pair with scripted inputs and compare its logical-player states without RetroArch.
 
@@ -154,7 +156,7 @@ The release gate on the exact Android build and device pair is:
 - serial throughput within 5% of the same build's two-core localhost lockstep baseline;
 - ordinary network traffic scaling with frames rather than serial words, with no v1 transfer packets;
 - no checksum mismatch in a 30-minute continuous test-ROM run;
-- successful fresh-connect, multiplayer entry, gameplay, and clean detach in Bomberman and Four Swords;
+- successful fresh-connect, multiplayer entry, gameplay, and clean detach in the selected fast-entry title and Four Swords;
 - recorded input delay, p95 rendezvous duration, CPU, peak memory, temperature, and absence of sustained thermal throttling.
 
 ## Risks / Trade-offs
@@ -177,7 +179,7 @@ The release gate on the exact Android build and device pair is:
 4. If the spike passes, add the replica bundle codec and pair construction tests without changing the default runtime.
 5. Add protocol-v2 snapshot, delayed-input, checksum, save-ownership, and teardown state machines behind an experimental core option.
 6. Run deterministic replay, fault injection, normal CI, ASan/UBSan, fixture ROM, and save-type round-trip suites.
-7. Install the exact build on both devices and qualify the test ROM, Bomberman, and Four Swords against the performance gates.
+7. Install the exact build on both devices and qualify the test ROM, the selected fast-entry title, and Four Swords against the performance gates.
 8. Make v2 the default only after the evidence is committed; retain an explicit v1 diagnostic option for rollback.
 9. Remove v1 runtime code in a later change after equivalent coverage and field confidence exist.
 

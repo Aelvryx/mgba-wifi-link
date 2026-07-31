@@ -39,7 +39,7 @@ Within each replicated pair, logical P0 SHALL be attached as primary/master devi
 
 ### Requirement: Bidirectionally safe execution grants
 **Reason**: Per-endpoint cable horizons are unnecessary once both logical GBAs and all cable events exist locally.
-**Migration**: Gate replicated frames on authoritative P0/P1 input availability, then execute both local cores to their common frame boundary.
+**Migration**: Gate replicated frames on authoritative P0/P1 input availability, then execute both local cores to their persistent per-core next-frame targets.
 
 ### Requirement: Barrier-committed MULTI mode readiness
 **Reason**: MULTI mode changes no longer cross a transport boundary and are ordered directly by the existing in-process SIO lockstep coordinator.

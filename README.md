@@ -22,10 +22,13 @@ Status
 - Sixty-frame canonical state verification and bounded failure handling.
 - Linux libretro and Android `arm64-v8a`, `armeabi-v7a`, `x86`, and `x86_64`
   builds.
-- Protocol-v2 passed an exact-build, 120,600-frame continuous-link run on two
+- Protocol v2 passed an exact-build, 120,600-frame continuous-link run on two
   physical Android handhelds at 60.22 FPS with matching state traces, normal
-  audio delivery, and no link errors or timeouts. Commercial-game
-  qualification remains in progress.
+  audio delivery, and no link errors or timeouts.
+- A two-device Mario Kart: Super Circuit Multi-Pak session completed a full
+  three-lap VS race at 60.23 FPS. The run completed 45,127 synchronized cable
+  transactions with matching state traces and no empty-audio frame, timeout,
+  divergence, or disconnect.
 
 The first release intentionally excludes Single-Pak multiboot, the GBA
 Wireless Adapter/RFU, NORMAL8/NORMAL32 networking, three- or four-player
@@ -43,10 +46,27 @@ cmake -S . -B build-netplay \
 cmake --build build-netplay --target mgba_libretro --parallel
 ```
 
-Install that core on both devices, load the same GBA ROM bytes on each, then
-use RetroArch's **Netplay → Host** and **Connect to Netplay Host** actions.
-Wait for the player-one/player-two link-ready messages before starting the
-game's multiplayer flow.
+On Android, rename the result to `mgba_libretro_android.so`, copy it to each
+device, then use **Load Core → Install or Restore a Core** in RetroArch. Install
+the identical build on both devices.
+
+To play:
+
+1. Put both devices on the same LAN and load the same ROM revision with the
+   installed core.
+2. Open RetroArch's **Netplay** menu on both devices. On player one, enable the
+   host and start hosting. On player two, choose **Connect to Netplay Host**
+   and select the LAN host or enter its IP address.
+3. Wait for `GBA replicated link ready: player 1` on the host and
+   `GBA replicated link ready: player 2` on the client.
+4. Return to the game without closing content. Enter its Multi-Pak mode on
+   both devices; player one makes any leader-only selections.
+
+This alpha supports exactly one host and one client. Do not choose Single-Pak,
+Wireless Adapter, or RetroArch's ordinary input-synchronizing netplay modes.
+If controller autodetection is unreliable, configure each device's normal
+RetroArch controller profile before connecting; the core does not replace
+frontend controller mappings.
 
 Project documentation
 ---------------------
@@ -54,13 +74,16 @@ Project documentation
 - [Build, installation, operation, compatibility, and failure semantics](docs/wifi-link-netplay.md)
 - [Automated and two-device validation evidence](docs/netplay-validation-matrix.md)
 - [GBA SIO register characterization](docs/gba-sio-characterization.md)
+- [Netpacket and Android feasibility results](docs/netpacket-feasibility-spike.md)
 - [Pinned upstream and libretro revisions](UPSTREAM.md)
+- [Active real-time OpenSpec change](openspec/changes/make-wifi-link-netplay-realtime/)
+- [Archived cable-v1 OpenSpec change](openspec/changes/archive/2026-07-31-add-wifi-link-cable-netplay/)
 - [Redistributable GBA link-test ROM](tools/gba-link-test-rom/)
 
 The principal implementation lives in `src/gba/sio/netplay`, with the
 transport-neutral interfaces in `include/mgba/internal/gba/sio/netplay` and
-the release libretro adapter in `src/platform/libretro/netpacket-v2.c`. Tests are under
-`src/gba/test` and `src/platform/test`.
+the release libretro adapter in `src/platform/libretro/netpacket-v2.c`. Tests
+are under `src/gba/test` and `src/platform/test`.
 
 Upstream mGBA
 =============

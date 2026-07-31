@@ -173,7 +173,7 @@ After splitting and rebasing the first upstream-facing stack onto
 shared library, libretro core, and all test executables. The complete normal
 suite passed 28 of 29 tests; its only failure remains the same
 `util-hash/stagedCrc32` baseline case documented above. Protocol v2 expands the
-focused set to 16 tests; all 16 pass normally, under ASan/UBSan with leak
+focused set to 17 tests; all 17 pass normally, under ASan/UBSan with leak
 detection, and under TSan. Its real-adapter replay and 134,400-frame stock
 RetroArch soak are recorded in the validation matrix. Arm GNU Toolchain
 15.2.Rel1 reproduces the committed 32 KiB test ROM byte-for-byte.

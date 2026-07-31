@@ -496,6 +496,8 @@ void GBAHardwareSerialize(const struct GBACartridgeHardware* hw, struct GBASeria
 
 	GBASerializedHWFlags3 flags3 = 0;
 	flags3 = GBASerializedHWFlags3SetRtcSioOutput(flags3, hw->rtc.sioOutput);
+	flags3 = GBASerializedHWFlags3SetSioTransferMode(flags3, hw->p->sio.transferMode & 0xF);
+	flags3 = GBASerializedHWFlags3FillSioTransferModeValid(flags3);
 	state->hw.flags3 = flags3;
 
 	STORE_32(hw->rtc.bytesRemaining, 0, &state->hw.rtcBytesRemaining);
@@ -550,6 +552,29 @@ void GBAHardwareDeserialize(struct GBACartridgeHardware* hw, const struct GBASer
 	}
 
 	hw->rtc.sioOutput = GBASerializedHWFlags3GetRtcSioOutput(state->hw.flags3);
+	if (GBASerializedHWFlags3IsSioTransferModeValid(state->hw.flags3)) {
+		int transferMode = GBASerializedHWFlags3GetSioTransferMode(state->hw.flags3);
+		switch (transferMode) {
+		case GBA_SIO_NORMAL_8:
+		case GBA_SIO_NORMAL_32:
+		case GBA_SIO_MULTI:
+		case GBA_SIO_UART:
+		case GBA_SIO_GPIO:
+		case GBA_SIO_JOYBUS:
+			hw->p->sio.transferMode = transferMode;
+			break;
+		case 0xF:
+			hw->p->sio.transferMode = -1;
+			break;
+		default:
+			hw->p->sio.transferMode = hw->p->sio.mode;
+			break;
+		}
+	} else {
+		// Savestates created before the transfer-mode latch used the current
+		// SIO mode for completion dispatch.
+		hw->p->sio.transferMode = hw->p->sio.mode;
+	}
 
 	LOAD_32(hw->rtc.bytesRemaining, 0, &state->hw.rtcBytesRemaining);
 	LOAD_32(hw->rtc.bitsRead, 0, &state->hw.rtcBitsRead);

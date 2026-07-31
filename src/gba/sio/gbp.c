@@ -16,7 +16,7 @@ static uint16_t _gbpRead(struct mKeyCallback*);
 static uint16_t _gbpSioWriteSIOCNT(struct GBASIODriver* driver, uint16_t value);
 static bool _gbpSioHandlesMode(struct GBASIODriver* driver, enum GBASIOMode mode);
 static int _gbpSioConnectedDevices(struct GBASIODriver* driver);
-static bool _gbpSioStart(struct GBASIODriver* driver);
+static struct GBASIOStartResult _gbpSioStart(struct GBASIODriver* driver);
 static uint32_t _gbpSioFinishNormal32(struct GBASIODriver* driver);
 
 static const uint8_t _logoPalette[] = {
@@ -106,7 +106,7 @@ uint16_t _gbpSioWriteSIOCNT(struct GBASIODriver* driver, uint16_t value) {
 	return value & 0x78FB;
 }
 
-bool _gbpSioStart(struct GBASIODriver* driver) {
+struct GBASIOStartResult _gbpSioStart(struct GBASIODriver* driver) {
 	struct GBASIOPlayer* gbp = (struct GBASIOPlayer*) driver;
 	uint32_t rx = gbp->p->memory.io[GBA_REG(SIODATA32_LO)] | (gbp->p->memory.io[GBA_REG(SIODATA32_HI)] << 16);
 	if (gbp->txPosition < 12 && gbp->txPosition > 0) {
@@ -121,7 +121,10 @@ bool _gbpSioStart(struct GBASIODriver* driver) {
 			gbp->p->lastRumble = currentTime;
 		}
 	}
-	return true;
+	return (struct GBASIOStartResult) {
+		.ownership = GBA_SIO_START_COMMON,
+		.effectivePeerCount = 1,
+	};
 }
 
 static bool _gbpSioHandlesMode(struct GBASIODriver* driver, enum GBASIOMode mode) {

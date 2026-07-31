@@ -1,5 +1,66 @@
-mGBA
-====
+mGBA Wi-Fi Link Netplay Fork
+============================
+
+This experimental mGBA fork adds deterministic two-device GBA link-cable
+multiplayer to the libretro core through RetroArch's Netpacket API. RetroArch
+provides the LAN transport and host/join UI; the core synchronizes GBA SIO
+mode, timing, transferred words, completion, and failure behavior.
+
+The implementation is based on upstream mGBA commit
+`71aa6c7dab7654bfdbbd57e696f704671a97e55d` and preserves upstream Git
+ancestry for review and future rebasing.
+
+Status
+------
+
+- Two-player GBA Multi-Pak play over a local network.
+- Generic GBA MULTI-mode emulation rather than per-game protocol shims.
+- Stock RetroArch 1.22.2 or another frontend implementing the current
+  Netpacket command-78 callback contract.
+- Exact effective-ROM matching, with independent saves and inputs.
+- Host-led conservative synchronization with bounded failure handling.
+- Linux libretro and Android `arm64-v8a`, `armeabi-v7a`, `x86`, and `x86_64`
+  builds.
+- Validated on two physical Android handhelds at every MULTI baud rate and
+  against an independently authored LinkCable workload.
+
+The first release intentionally excludes Single-Pak multiboot, the GBA
+Wireless Adapter/RFU, NORMAL8/NORMAL32 networking, three- or four-player
+sessions, internet relay/NAT traversal, reconnection, host migration, and
+savestates during a live link session.
+
+Quick start
+-----------
+
+Build the libretro core:
+
+```sh
+cmake -S . -B build-netplay \
+  -DBUILD_QT=OFF -DBUILD_SDL=OFF -DBUILD_LIBRETRO=ON
+cmake --build build-netplay --target mgba_libretro --parallel
+```
+
+Install that core on both devices, load the same GBA ROM bytes on each, then
+use RetroArch's **Netplay → Host** and **Connect to Netplay Host** actions.
+Wait for the player-one/player-two link-ready messages before starting the
+game's multiplayer flow.
+
+Project documentation
+---------------------
+
+- [Build, installation, operation, compatibility, and failure semantics](docs/wifi-link-netplay.md)
+- [Automated and two-device validation evidence](docs/netplay-validation-matrix.md)
+- [GBA SIO register characterization](docs/gba-sio-characterization.md)
+- [Pinned upstream and libretro revisions](UPSTREAM.md)
+- [Redistributable GBA link-test ROM](tools/gba-link-test-rom/)
+
+The principal implementation lives in `src/gba/sio/netplay`, with the
+transport-neutral interfaces in `include/mgba/internal/gba/sio/netplay` and
+the libretro adapter in `src/platform/libretro/netpacket.c`. Tests are under
+`src/gba/test` and `src/platform/test`.
+
+Upstream mGBA
+=============
 
 mGBA is an emulator for running Game Boy Advance games. It aims to be faster and more accurate than many existing Game Boy Advance emulators, as well as adding features that other emulators lack. It also supports Game Boy and Game Boy Color games.
 
@@ -15,7 +76,8 @@ Features
 - Game Boy/Game Boy Color hardware support.
 - Fast emulation. Known to run at full speed even on low end hardware, such as netbooks.
 - Qt and SDL ports for a heavy-weight and a light-weight frontend.
-- Local (same computer) link cable support.
+- Local (same computer) link cable support, plus two-device Wi-Fi Multi-Pak
+  support in this fork's libretro core.
 - Save type detection, even for flash memory size[<sup>[2]</sup>](#flashdetect).
 - Support for cartridges with motion sensors and rumble (only usable with game controllers).
 - Real-time clock support, even without configuration.
@@ -76,9 +138,8 @@ The following mappers are partially supported:
 - Li Cheng (missing logo switching)
 - Sintax (missing logo switching)
 
-### Planned features
+### Upstream planned features
 
-- Networked multiplayer link cable support.
 - Dolphin/JOY bus link cable support.
 - MP2k audio mixing, for higher quality sound than hardware.
 - Re-recording support for tool-assist runs.

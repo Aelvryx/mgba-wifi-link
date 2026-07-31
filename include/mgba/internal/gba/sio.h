@@ -70,6 +70,7 @@ struct GBASIO {
 
 	uint16_t rcnt;
 	uint16_t siocnt;
+	enum GBASIOMode transferMode;
 
 	struct GBASIOPlayer gbp;
 	struct mTimingEvent completeEvent;
@@ -80,6 +81,8 @@ void GBASIODeinit(struct GBASIO* sio);
 void GBASIOReset(struct GBASIO* sio);
 
 void GBASIOSetDriver(struct GBASIO* sio, struct GBASIODriver* driver);
+bool GBASIODriverHandlesMode(struct GBASIO* sio, enum GBASIOMode mode);
+bool GBASIOIsExecutionBlocked(struct GBASIO* sio);
 
 void GBASIOWriteRCNT(struct GBASIO* sio, uint16_t value);
 void GBASIOWriteSIOCNT(struct GBASIO* sio, uint16_t value);

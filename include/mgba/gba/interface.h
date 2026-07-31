@@ -79,6 +79,16 @@ struct GBASIO;
 struct GBAVideoRenderer;
 struct VFile;
 
+enum GBASIOStartOwnership {
+	GBA_SIO_START_COMMON,
+	GBA_SIO_START_DRIVER
+};
+
+struct GBASIOStartResult {
+	enum GBASIOStartOwnership ownership;
+	int effectivePeerCount;
+};
+
 extern MGBA_EXPORT const int GBA_LUX_LEVELS[10];
 
 enum {
@@ -119,11 +129,12 @@ struct GBASIODriver {
 	void (*saveState)(struct GBASIODriver* renderer, void** state, size_t* size);
 	void (*setMode)(struct GBASIODriver* driver, enum GBASIOMode mode);
 	bool (*handlesMode)(struct GBASIODriver* driver, enum GBASIOMode mode);
+	bool (*isExecutionBlocked)(struct GBASIODriver* driver);
 	int (*connectedDevices)(struct GBASIODriver* driver);
 	int (*deviceId)(struct GBASIODriver* driver);
 	uint16_t (*writeSIOCNT)(struct GBASIODriver* driver, uint16_t value);
 	uint16_t (*writeRCNT)(struct GBASIODriver* driver, uint16_t value);
-	bool (*start)(struct GBASIODriver* driver);
+	struct GBASIOStartResult (*start)(struct GBASIODriver* driver);
 	void (*finishMultiplayer)(struct GBASIODriver* driver, uint16_t data[4]);
 	uint8_t (*finishNormal8)(struct GBASIODriver* driver);
 	uint32_t (*finishNormal32)(struct GBASIODriver* driver);

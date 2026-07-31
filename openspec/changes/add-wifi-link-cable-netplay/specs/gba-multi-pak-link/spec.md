@@ -45,14 +45,19 @@ After atomic session attachment, player zero SHALL be assigned primary/master de
 #### Scenario: Attached session is queried before mode commit
 - **WHEN** the session is attached but both MULTI modes are not committed
 - **THEN** session state reports one topological peer while SIO reports zero effective participants
-- **AND** SIO ready state does not claim a jointly ready MULTI cable
+- **AND** SIOCNT ready is zero, slave is one, and ID is zero
 
 #### Scenario: Ready two-player link is queried
 - **WHEN** both peers have committed MULTI mode
 - **THEN** player zero reads ID zero and primary status
 - **AND** player one reads ID one and secondary status
-- **AND** both read jointly ready cable state
+- **AND** both read SIOCNT ready one
 - **AND** SIO reports one effective participant
+
+#### Scenario: Detached pulled-up lines are queried
+- **WHEN** no network session is observably attached
+- **THEN** SIOCNT ready is one, slave is one, and ID is zero
+- **AND** software distinguishes this from joint readiness using the role lines rather than the ready bit alone
 
 #### Scenario: Not-ready start is scheduled
 - **WHEN** player zero writes start before joint readiness
@@ -189,12 +194,19 @@ Only player zero SHALL initiate a network MULTI transfer. Its `GBASIODriver.star
 - **WHEN** player one writes a MULTI start condition independently
 - **THEN** the network driver does not create a transfer sequence
 - **AND** player zero remains the sole cable-clock initiator
-- **AND** the write retains existing non-initiating secondary line and ID state without a network-created completion event or IRQ
+- **AND** the write retains busy as an existing wait-for-primary condition plus committed secondary line and ID state
+- **AND** it creates no network completion event or IRQ until a valid remote primary start arrives
 
 #### Scenario: Primary starts before joint mode readiness
 - **WHEN** player zero writes MULTI start while attached but joint MULTI readiness is not committed
 - **THEN** no transfer sequence or `TRANSFER_START` is created
 - **AND** common SIO follows the characterized ordinary no-driver/no-peer start path
+
+#### Scenario: Ordinary no-peer completion retains baseline behavior
+- **WHEN** a pre-START failure releases a primary start to the pinned no-driver/no-peer path
+- **THEN** common SIO initializes all receive words to `0xFFFF` and schedules the selected zero-peer duration
+- **AND** common completion installs zero receive words, clears busy, leaves error clear, exposes ready one, slave one, ID zero, and RCNT SC high
+- **AND** it raises exactly one SIO IRQ when locally enabled
 
 #### Scenario: A prior mode intent exists
 - **WHEN** player zero starts a transfer while an earlier mode intent is unresolved
@@ -219,7 +231,7 @@ Only player zero SHALL initiate a network MULTI transfer. Its `GBASIODriver.star
 #### Scenario: Transfer start path terminates
 - **WHEN** any local or remote MULTI start path is processed
 - **THEN** it ends in exactly one successful network completion, characterized erroneous completion, ordinary no-driver/no-peer behavior, or reset/unload cancellation
-- **AND** no path leaves busy set without a scheduled or cancelled terminal transition
+- **AND** no path other than the characterized secondary wait-for-primary condition leaves busy set without a scheduled or cancelled terminal transition
 
 ### Requirement: Secondary remote-start scheduling
 Upon a valid `TRANSFER_START`, player one SHALL reach the mapped start boundary without passing it, set local MULTI busy, capture `SIOMLT_SEND`, retain the announced completion cycle, schedule the existing `sio->completeEvent` for that cycle, and send exactly one matching `TRANSFER_READY`. If it encounters an earlier unreported mode intent, it SHALL stop there and report the intent instead of accepting START. It SHALL not manually reproduce common completion behavior.
@@ -262,7 +274,7 @@ After valid readiness, player zero SHALL send one reliable flushed commit contai
 - **THEN** the receiver rejects the session before installing that result
 
 ### Requirement: Common-path hardware completion
-Completion SHALL be host-led. After host common scheduling, player zero SHALL execute first from START cycle `T` to completion cycle `C`, enter `finishMultiplayer`, send `COMPLETION_CATCHUP` for the transfer/completion sequence and pending outcome, and remain paused at `C`. Only receipt of that message SHALL authorize player one to execute from `T` to `C` while transport is healthy. Player one SHALL enter its completion hook, send `COMPLETION_READY` with local abort/deferred-mode status, and remain paused. Player zero SHALL select and send `COMPLETION_DECISION`; that message SHALL be the authoritative outcome commit point. The host hook MAY return after the active transport accepts the decision, and the client hook SHALL return only after receiving it. Each returning hook SHALL let normal mGBA `GBASIOMultiplayerFinishTransfer()` install the decided words, clear busy, restore line and device-ID state, and raise exactly one local serial IRQ when enabled.
+Completion SHALL be host-led. After host common scheduling, player zero SHALL execute first from START cycle `T` to completion cycle `C`, enter `finishMultiplayer`, send `COMPLETION_CATCHUP` for the transfer/completion sequence and pending outcome, and remain paused at `C`. Only receipt of that message SHALL authorize player one to execute from `T` to `C` while transport is healthy. Player one SHALL enter its completion hook, send `COMPLETION_READY` with local abort/deferred-mode status, and remain paused. Player zero SHALL select and send `COMPLETION_DECISION`; that message SHALL be the authoritative outcome commit point. Player one SHALL validate the decision, send `COMPLETION_DECISION_ACK`, and return its hook. Player zero SHALL remain in its hook until the matching acknowledgement arrives or terminal delivery failure resolves; losing only the final acknowledgement SHALL close the session without rewriting the committed outcome. Each returning hook SHALL let normal mGBA `GBASIOMultiplayerFinishTransfer()` install the decided words, clear busy, restore line and device-ID state, and raise exactly one local serial IRQ when enabled.
 
 #### Scenario: Both peers reach successful completion
 - **WHEN** player zero reaches `C`, player one catches up under `COMPLETION_CATCHUP`, player zero receives `COMPLETION_READY`, and player one receives a successful `COMPLETION_DECISION`
@@ -282,8 +294,19 @@ Completion SHALL be host-led. After host common scheduling, player zero SHALL ex
 
 #### Scenario: Authoritative completion decision arrives
 - **WHEN** player one receives a valid `COMPLETION_DECISION` for its current completion sequence
-- **THEN** it returns the decided success or error result to common SIO exactly once
+- **THEN** it sends one matching `COMPLETION_DECISION_ACK`
+- **AND** it returns the decided success or error result to common SIO exactly once
 - **AND** a pending transfer commit alone cannot release the hook
+
+#### Scenario: Host receives the completion decision acknowledgement
+- **WHEN** player zero receives the valid acknowledgement for its committed completion sequence
+- **THEN** it returns the same decided result to common SIO exactly once
+- **AND** the session may return to ready state for the next transfer
+
+#### Scenario: Final acknowledgement is lost
+- **WHEN** player one installed the decision and sent its acknowledgement but the host does not receive it
+- **THEN** both peers preserve the already committed completion outcome at `C`
+- **AND** player zero fails the session at the decision-delivery deadline so no later transfer can start
 
 #### Scenario: Completion peer is late
 - **WHEN** player zero sends catch-up but does not receive matching completion readiness while the transport remains healthy
@@ -291,7 +314,7 @@ Completion SHALL be host-led. After host common scheduling, player zero SHALL ex
 - **AND** neither hook returns before the authoritative decision
 
 #### Scenario: Healthy decision delivery
-- **WHEN** the transport generation remains healthy through delivery of `COMPLETION_DECISION`
+- **WHEN** the transport generation remains healthy through delivery of `COMPLETION_DECISION` and its acknowledgement
 - **THEN** both hooks return the same authoritative outcome at `C`
 
 #### Scenario: Terminal failure interrupts final decision delivery

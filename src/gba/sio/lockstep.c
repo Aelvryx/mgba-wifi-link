@@ -91,7 +91,7 @@ static int GBASIOLockstepDriverConnectedDevices(struct GBASIODriver* driver);
 static int GBASIOLockstepDriverDeviceId(struct GBASIODriver* driver);
 static uint16_t GBASIOLockstepDriverWriteSIOCNT(struct GBASIODriver* driver, uint16_t value);
 static uint16_t GBASIOLockstepDriverWriteRCNT(struct GBASIODriver* driver, uint16_t value);
-static bool GBASIOLockstepDriverStart(struct GBASIODriver* driver);
+static struct GBASIOStartResult GBASIOLockstepDriverStart(struct GBASIODriver* driver);
 static void GBASIOLockstepDriverFinishMultiplayer(struct GBASIODriver* driver, uint16_t data[4]);
 static uint8_t GBASIOLockstepDriverFinishNormal8(struct GBASIODriver* driver);
 static uint32_t GBASIOLockstepDriverFinishNormal32(struct GBASIODriver* driver);
@@ -539,10 +539,13 @@ static uint16_t GBASIOLockstepDriverWriteRCNT(struct GBASIODriver* driver, uint1
 	return value;
 }
 
-static bool GBASIOLockstepDriverStart(struct GBASIODriver* driver) {
+static struct GBASIOStartResult GBASIOLockstepDriverStart(struct GBASIODriver* driver) {
 	struct GBASIOLockstepDriver* lockstep = (struct GBASIOLockstepDriver*) driver;
 	struct GBASIOLockstepCoordinator* coordinator = lockstep->coordinator;
-	bool ret = false;
+	struct GBASIOStartResult result = {
+		.ownership = GBA_SIO_START_DRIVER,
+		.effectivePeerCount = 0,
+	};
 	MutexLock(&coordinator->mutex);
 	if (coordinator->transferActive) {
 		mLOG(GBA_SIO, GAME_ERROR, "Transfer restarted unexpectedly");
@@ -560,20 +563,22 @@ static bool GBASIOLockstepDriverStart(struct GBASIODriver* driver) {
 	mLOG(GBA_SIO, DEBUG, "Transfer starting at %08X", coordinator->cycle);
 	memset(coordinator->multiData, 0xFF, sizeof(coordinator->multiData));
 	_setData(coordinator, 0, player->driver->d.p);
+	int effectivePeerCount = coordinator->nAttached - 1;
 
 	int32_t timestamp = GBASIOLockstepTime(player);
 	struct GBASIOLockstepEvent event = {
 		.type = SIO_EV_TRANSFER_START,
 		.timestamp = timestamp,
-		.finishCycle = timestamp + GBASIOTransferCycles(player->mode, player->driver->d.p->siocnt, coordinator->nAttached - 1),
+		.finishCycle = timestamp + GBASIOTransferCycles(player->mode, player->driver->d.p->siocnt, effectivePeerCount),
 	};
 	_enqueueEvent(coordinator, &event, TARGET_SECONDARY);
 	GBASIOLockstepCoordinatorWaitOnPlayers(coordinator, player);
 	coordinator->transferActive = true;
-	ret = true;
+	result.ownership = GBA_SIO_START_COMMON;
+	result.effectivePeerCount = effectivePeerCount;
 out:
 	MutexUnlock(&coordinator->mutex);
-	return ret;
+	return result;
 }
 
 static void GBASIOLockstepDriverFinishMultiplayer(struct GBASIODriver* driver, uint16_t data[4]) {
@@ -965,6 +970,7 @@ void _lockstepEvent(struct mTiming* timing, void* context, uint32_t cyclesLate) 
 			_setData(coordinator, player->playerId, sio);
 			nextEvent = event->finishCycle - GBASIOLockstepTime(player) - cyclesLate;
 			player->driver->d.p->siocnt |= 0x80;
+			sio->transferMode = coordinator->transferMode;
 			mTimingDeschedule(&sio->p->timing, &sio->completeEvent);
 			mTimingSchedule(&sio->p->timing, &sio->completeEvent, nextEvent);
 			GBASIOLockstepCoordinatorAckPlayer(coordinator, player);

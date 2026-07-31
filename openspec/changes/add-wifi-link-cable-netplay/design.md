@@ -172,7 +172,7 @@ Payloads carry their relevant domain counter; “message or transfer sequence”
 
 Session messages are `HELLO`, `ACCEPT`, `ACCEPT_ACK`, `SESSION_READY`, `SESSION_READY_ACK`, `REJECT`, `DETACH`, and `DETACH_ACK`.
 
-Runtime messages are `EXECUTION_GRANT`, `GRANT_ACK`, `MODE_INTENT`, `MODE_COMMIT`, `MODE_ACK`, `TRANSFER_START`, `TRANSFER_READY`, `TRANSFER_COMMIT`, `TRANSFER_ABORT`, `COMPLETION_CATCHUP`, `COMPLETION_READY`, and `COMPLETION_DECISION`. `TRANSFER_ABORT` carries the transfer sequence, immutable authoritative completion cycle, and a stable reason code. Completion messages carry both transfer and completion-barrier sequences; the decision carries the authoritative success/error outcome. All use reliable ordered delivery; latency-sensitive messages use the flush hint.
+Runtime messages are `EXECUTION_GRANT`, `GRANT_ACK`, `MODE_INTENT`, `MODE_COMMIT`, `MODE_ACK`, `TRANSFER_START`, `TRANSFER_READY`, `TRANSFER_COMMIT`, `TRANSFER_ABORT`, `COMPLETION_CATCHUP`, `COMPLETION_READY`, `COMPLETION_DECISION`, and `COMPLETION_DECISION_ACK`. `TRANSFER_ABORT` carries the transfer sequence, immutable authoritative completion cycle, and a stable reason code. Completion messages carry both transfer and completion-barrier sequences; the decision carries the authoritative success/error outcome and the final acknowledgement confirms that player one installed that decision. All use reliable ordered delivery; latency-sensitive messages use the flush hint.
 
 ### 8. Separate local scheduling, network grants, and hard barriers
 
@@ -193,6 +193,12 @@ Wire timestamps use a monotonic 64-bit virtual cable clock with an explicit mapp
 5. At that barrier, player one either reaches `T` and sends `TRANSFER_READY`, or stops at an earlier mode intent `C < T`; the mode generation resolves before the transfer can continue.
 
 Consequently, a valid `TRANSFER_START` cannot arrive in player one's past. Receiving one in the past remains a fail-closed invariant check, not an expected latency outcome. Grant cadence is a runtime performance policy; single-flight host-leading order is a protocol invariant.
+
+When any of these boundaries puts a player to sleep from inside an `mTiming`
+callback, the driver interrupts the active GBA timing pass before returning.
+This is the same wake/sleep pattern used by local lockstep and prevents later
+events already queued in that pass—especially a remote SIO completion—from
+running after the new pause became effective.
 
 ### 9. Commit mode readiness through a barrier
 
@@ -230,8 +236,9 @@ Player zero is the only transfer initiator.
 4. The host returns `GBASIOStartResult(COMMON, 1)`. Common mGBA `_startTransfer()` uses that explicit effective count to schedule the host's existing completion event for `C`. The network driver does not manually clear host busy or raise its IRQ.
 5. Player zero executes first from `T` to `C`. On entering its `finishMultiplayer` hook, it sends `COMPLETION_CATCHUP(transfer_sequence, completion_sequence, C, pending_outcome)` and remains paused at `C`.
 6. Receipt of valid `COMPLETION_CATCHUP` is the client's sole authorization to execute from `T` to `C` while transport remains healthy. Player one reaches its scheduled completion hook, sends `COMPLETION_READY` with its local abort/deferred-mode status, and remains paused at `C`.
-7. Player zero validates readiness, chooses the authoritative success or error result, and sends `COMPLETION_DECISION`. This decision is the outcome commit point. The host finish hook may return after the active transport accepts the decision; the client finish hook may return only after receiving and validating it.
-8. Each returning hook supplies the decided words to common `GBASIOMultiplayerFinishTransfer()`, which installs data, clears busy, restores line/ID state, and raises each local IRQ once when enabled.
+7. Player zero validates readiness, chooses the authoritative success or error result, and sends `COMPLETION_DECISION`. This decision is the outcome commit point. Player one validates and installs it, sends `COMPLETION_DECISION_ACK`, and then returns its finish hook.
+8. Player zero remains in its finish hook until it receives the matching acknowledgement or the terminal delivery deadline/failure resolves. A lost final acknowledgement closes the session but does not rewrite an already committed host outcome.
+9. Each returning hook supplies the decided words to common `GBASIOMultiplayerFinishTransfer()`, which installs data, clears busy, restores line/ID state, and raises each local IRQ once when enabled.
 
 Selecting driver-owned host completion is rejected because it duplicates common completion semantics. The remote client path necessarily schedules the existing completion event because its transfer starts from a network event rather than a local start write.
 
@@ -242,7 +249,7 @@ Every MULTI start path is classified before it changes state:
 | Player zero starts while detached or before committed joint MULTI readiness | No network sequence or START; the characterized ordinary no-driver/no-peer start path runs with `effective_transfer_peer_count = 0`. |
 | An earlier mode barrier resolves to not-both-MULTI while host `start()` is waiting | No START; `start()` releases to the same ordinary no-peer path with effective count zero. |
 | Player zero starts while ready | Successful network completion, post-START erroneous completion, or reset/unload cancellation. |
-| Player one independently writes start | Existing non-initiating secondary behavior: no network sequence, no remote start, no completion event or IRQ created by the network driver, and committed slave line/ID state is retained. |
+| Player one independently writes start | Existing non-initiating secondary wait behavior: busy remains set while waiting for a primary clock, but there is no network sequence, remote start, completion event, or IRQ created by the network driver, and committed slave line/ID state is retained. |
 | Either peer leaves MULTI after START emission | The intent is deferred without blocking progress, the transfer error-completes at its announced completion cycle, and the mode generation commits before the next grant. |
 | A scheduled remote START and CPU mode write share cycle `T` | The already-scheduled START event runs first; the CPU write is a post-START deferred intent and makes the outcome erroneous at `C`. |
 | A scheduled completion and CPU mode write share a virtual cycle | Existing `mTiming` ordering is frozen by test: the already-due completion runs before the subsequent register write creates a new mode intent. |
@@ -266,13 +273,13 @@ The point of no return is successful `TRANSFER_START` emission into the reliable
 - If the completion boundary is reached while waiting, emulated execution remains paused there until the success/error result is resolved under its deadline; no later wall-clock instant becomes the emulated completion cycle.
 - If transport terminates after the client accepted START but before `COMPLETION_CATCHUP`, the healthy-protocol grant invariant no longer applies: the client locally advances only to retained cycle `C` to perform the required error completion.
 
-While the transport generation remains healthy through delivery of `COMPLETION_DECISION`, both peers complete at `C` with the same authoritative outcome. Bounded distributed commit cannot guarantee identical observations if the generation terminates during final decision delivery:
+While the transport generation remains healthy through delivery of `COMPLETION_DECISION`, both peers complete at `C` with the same authoritative outcome. `COMPLETION_DECISION_ACK` lets the host confirm that player one installed the decision, but bounded distributed commit still cannot guarantee identical observations if the generation terminates during final decision delivery:
 
 - If the decision send is rejected before the host commits it, the host selects local error at `C`; the client also follows terminal post-START error handling.
-- Once the active transport accepts the decision, the host may return the decided outcome. If transport then dies before player one receives it, player one error-completes locally at `C` after stop/deadline. A successful host outcome and erroneous client outcome are therefore an explicitly permitted asymmetric terminal observation.
-- If player one receives a valid decision before termination, it returns that decision and both outcomes match.
+- Once the active transport accepts the decision, the host outcome is committed but its hook remains blocked for the acknowledgement. If transport then dies before player one receives the decision, the host returns that committed outcome while player one error-completes locally at `C` after stop/deadline. A successful host outcome and erroneous client outcome are therefore an explicitly permitted asymmetric terminal observation.
+- If player one receives a valid decision before termination, it returns that decision and both outcomes match. If only its final acknowledgement is lost, the host preserves the same committed outcome but fails the session so no subsequent transfer can begin.
 
-No additional acknowledgement is used to claim impossible atomic delivery; it would only move the final-message failure window.
+The acknowledgement narrows diagnostics and release ordering; it does not claim impossible atomic delivery and merely makes the acknowledgement itself the final-message failure window.
 
 The error finish hook and common completion path produce this deterministic state:
 
@@ -285,11 +292,13 @@ The error finish hook and common completion path produce this deterministic stat
 - exactly one SIO IRQ is raised if the local IRQ-enable bit is set;
 - the session topology detaches, the effective cable/transfer peer count becomes zero, and subsequent writes follow no-peer behavior.
 
-This models a completed erroneous transfer with invalid pulled-up data, rather than fabricated peer data or an eternal busy wait. An early SIO characterization test must compare every bit and register against the GBA programming manual, mGBA's no-driver behavior, and, where practical, hardware traces before transfer implementation is accepted.
+This models a completed erroneous transfer with invalid pulled-up data, rather than fabricated peer data or an eternal busy wait. The frozen evidence, register tables, timing values, and evidence limits are recorded in `docs/gba-sio-characterization.md` and enforced by `src/gba/test/sio.c`.
+
+The ordinary pre-START no-driver/no-peer path is deliberately distinct. The pinned mGBA baseline initializes its words to `0xFFFF`, schedules the zero-peer duration, and then installs zero words with error clear at common completion. The network error table must not be applied to that compatibility path.
 
 Reset and unload are different: they cancel pending events and tear down immediately because the reset/unloaded machine cannot observe a completion IRQ.
 
-An idle detach has no transfer completion and raises no SIO IRQ. At the detach barrier—or immediately on an abrupt local transport failure—the driver synchronously installs the hardware-characterized disconnected line state for SIOCNT ID/ready/slave and RCNT SC while busy is already clear. It preserves receive words because no transfer completed. Register reads immediately after detach must observe disconnected state without requiring a later SIOCNT write.
+An idle detach has no transfer completion and raises no SIO IRQ. At the detach barrier—or immediately on an abrupt local transport failure—the driver synchronously installs the hardware-characterized disconnected line state for SIOCNT ID/ready/slave and RCNT SC while busy is already clear. It preserves the communication-error flag and receive words because no transfer completed. Register reads immediately after detach must observe disconnected state without requiring a later SIOCNT write.
 
 ### 12. Use operation-specific bounded waits and transport generations
 
@@ -309,6 +318,26 @@ Separate configurable deadlines cover:
 - graceful detach.
 
 Defaults are selected from spike measurements and each remains below a three-second safety ceiling. Tests inject a fake monotonic clock and configure each deadline independently. User messages can say “link timed out,” while logs identify the operation and generation.
+
+The production defaults selected from localhost and two-device Wi-Fi
+qualification are:
+
+| Operation | Default |
+| --- | ---: |
+| Handshake | 1,500 ms |
+| Attachment | 3,000 ms |
+| Grant | 1,500 ms |
+| Mode barrier | 1,500 ms |
+| Transfer readiness | 3,000 ms |
+| Transfer commit | 3,000 ms |
+| Completion catch-up | 3,000 ms |
+| Completion readiness | 3,000 ms |
+| Completion decision/acknowledgement | 3,000 ms |
+| Graceful detach | 1,000 ms |
+
+The candidate horizon is one GBA video frame (`280896` cycles), the local
+scheduler quantum remains `4096` cycles, and periodic health barriers remain
+disabled. These are runtime policy and do not alter wire compatibility.
 
 No worker thread calls frontend functions, no SIO/session lock is held across a frontend callback, and an empty poll loop yields. Missing receive polling prevents attachment.
 
@@ -362,9 +391,12 @@ Testing proceeds in layers:
 
 Rollback removes Netpacket registration and new network modules while retaining any independently accepted common SIO dispatch fix. Existing local lockstep formats and user data require no migration.
 
-## Open Questions
+## Resolved Qualification Questions
 
-- Which exact upstream mGBA commit and canonical libretro header revision will be pinned?
-- What frame-oriented candidate-horizon cadence, optional health-barrier policy, and per-operation deadline defaults are supported by the Phase 0 Linux/Android measurements?
-- Which hardware capture or authoritative conformance fixture will supplement the programming manual and mGBA no-peer path for freezing the abort register table?
-- Which freely distributable commercial-like homebrew titles should supplement the purpose-built test ROM?
+- Production uses a one-frame candidate horizon, no periodic health barrier,
+  and the operation defaults listed above.
+- The CC0 purpose-built ROM is supplemented by afska's independently authored
+  MIT-licensed LinkCable `basic` example from release `v8.0.3`. It continuously
+  exercised rapid back-to-back transfers on two stock Android RetroArch
+  devices and exposed the timing-pass pause defect that the slower fixture had
+  masked.

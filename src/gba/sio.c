@@ -57,7 +57,7 @@ static void _switchMode(struct GBASIO* sio) {
 		int id = 0;
 		switch (newMode) {
 		case GBA_SIO_MULTI:
-			if (sio->driver && sio->driver->deviceId) {
+			if (GBASIODriverHandlesMode(sio, newMode) && sio->driver->deviceId) {
 				id = sio->driver->deviceId(sio->driver);
 			}
 			sio->rcnt = GBASIORegisterRCNTSetSi(sio->rcnt, !!id);
@@ -96,6 +96,7 @@ void GBASIOReset(struct GBASIO* sio) {
 	sio->rcnt = RCNT_INITIAL;
 	sio->siocnt = 0;
 	sio->mode = -1;
+	sio->transferMode = -1;
 	_switchMode(sio);
 
 	GBASIOPlayerReset(&sio->gbp);
@@ -119,11 +120,20 @@ void GBASIOSetDriver(struct GBASIO* sio, struct GBASIODriver* driver) {
 	}
 }
 
+bool GBASIODriverHandlesMode(struct GBASIO* sio, enum GBASIOMode mode) {
+	return sio->driver && sio->driver->handlesMode && sio->driver->handlesMode(sio->driver, mode);
+}
+
+bool GBASIOIsExecutionBlocked(struct GBASIO* sio) {
+	return sio->driver && sio->driver->isExecutionBlocked &&
+	       sio->driver->isExecutionBlocked(sio->driver);
+}
+
 void GBASIOWriteRCNT(struct GBASIO* sio, uint16_t value) {
 	sio->rcnt &= 0x1FF;
 	sio->rcnt |= value & 0xC000;
 	_switchMode(sio);
-	if (sio->driver && sio->driver->writeRCNT) {
+	if (GBASIODriverHandlesMode(sio, sio->mode) && sio->driver->writeRCNT) {
 		switch (sio->mode) {
 		case GBA_SIO_GPIO:
 			sio->rcnt = (sio->driver->writeRCNT(sio->driver, value) & 0x01FF) | (sio->rcnt & 0xC000);
@@ -141,18 +151,23 @@ void GBASIOWriteRCNT(struct GBASIO* sio, uint16_t value) {
 }
 
 static void _startTransfer(struct GBASIO* sio) {
-	if (sio->driver && sio->driver->start) {
-		if (!sio->driver->start(sio->driver)) {
-			// Transfer completion is handled internally to the driver
+	struct GBASIOStartResult result = {
+		.ownership = GBA_SIO_START_COMMON,
+		.effectivePeerCount = 0,
+	};
+	bool driverHandlesMode = GBASIODriverHandlesMode(sio, sio->mode);
+	if (driverHandlesMode && sio->driver->start) {
+		result = sio->driver->start(sio->driver);
+		if (result.ownership == GBA_SIO_START_DRIVER) {
 			return;
 		}
+	} else if (driverHandlesMode && sio->driver->connectedDevices) {
+		result.effectivePeerCount = sio->driver->connectedDevices(sio->driver);
 	}
-	int connected = 0;
-	if (sio->driver && sio->driver->connectedDevices) {
-		connected = sio->driver->connectedDevices(sio->driver);
-	}
+	sio->transferMode = sio->mode;
 	mTimingDeschedule(&sio->p->timing, &sio->completeEvent);
-	mTimingSchedule(&sio->p->timing, &sio->completeEvent, GBASIOTransferCycles(sio->mode, sio->siocnt, connected));
+	mTimingSchedule(&sio->p->timing, &sio->completeEvent,
+	                GBASIOTransferCycles(sio->mode, sio->siocnt, result.effectivePeerCount));
 }
 
 void GBASIOWriteSIOCNT(struct GBASIO* sio, uint16_t value) {
@@ -163,15 +178,14 @@ void GBASIOWriteSIOCNT(struct GBASIO* sio, uint16_t value) {
 	int id = 0;
 	int connected = 0;
 	bool handled = false;
-	if (sio->driver) {
-		handled = sio->driver->handlesMode(sio->driver, sio->mode);
-		if (handled) {
-			if (sio->driver->deviceId) {
-				id = sio->driver->deviceId(sio->driver);
-			}
-			connected = sio->driver->connectedDevices(sio->driver);
-			handled = !!sio->driver->writeSIOCNT;
+	if (GBASIODriverHandlesMode(sio, sio->mode)) {
+		if (sio->driver->deviceId) {
+			id = sio->driver->deviceId(sio->driver);
 		}
+		if (sio->driver->connectedDevices) {
+			connected = sio->driver->connectedDevices(sio->driver);
+		}
+		handled = !!sio->driver->writeSIOCNT;
 	}
 
 	switch (sio->mode) {
@@ -218,7 +232,14 @@ void GBASIOWriteSIOCNT(struct GBASIO* sio, uint16_t value) {
 		// TODO
 		break;
 	}
-	if (handled) {
+	/*
+	 * A driver start hook may fail the session and detach itself. Recheck
+	 * dispatch after transfer initiation instead of dereferencing the
+	 * driver solely because it handled the beginning of this register
+	 * write.
+	 */
+	if (handled && GBASIODriverHandlesMode(sio, sio->mode) &&
+	    sio->driver->writeSIOCNT) {
 		value = sio->driver->writeSIOCNT(sio->driver, value);
 	} else {
 		// Dummy drivers
@@ -240,7 +261,7 @@ void GBASIOWriteSIOCNT(struct GBASIO* sio, uint16_t value) {
 
 uint16_t GBASIOWriteRegister(struct GBASIO* sio, uint32_t address, uint16_t value) {
 	int id = 0;
-	if (sio->driver && sio->driver->deviceId) {
+	if (GBASIODriverHandlesMode(sio, sio->mode) && sio->driver->deviceId) {
 		id = sio->driver->deviceId(sio->driver);
 	}
 
@@ -370,7 +391,7 @@ int32_t GBASIOTransferCycles(enum GBASIOMode mode, uint16_t siocnt, int connecte
 
 void GBASIOMultiplayerFinishTransfer(struct GBASIO* sio, uint16_t data[4], uint32_t cyclesLate) {
 	int id = 0;
-	if (sio->driver && sio->driver->deviceId) {
+	if (GBASIODriverHandlesMode(sio, GBA_SIO_MULTI) && sio->driver->deviceId) {
 		id = sio->driver->deviceId(sio->driver);
 	}
 	sio->p->memory.io[GBA_REG(SIOMULTI0)] = data[0];
@@ -408,33 +429,40 @@ void GBASIONormal32FinishTransfer(struct GBASIO* sio, uint32_t data, uint32_t cy
 static void _sioFinish(struct mTiming* timing, void* user, uint32_t cyclesLate) {
 	UNUSED(timing);
 	struct GBASIO* sio = user;
+	enum GBASIOMode transferMode = sio->transferMode;
+	sio->transferMode = -1;
+	if (transferMode == (enum GBASIOMode) -1) {
+		mLOG(GBA_SIO, WARN, "SIO completion was not associated with a transfer mode");
+		transferMode = sio->mode;
+	}
 	union {
 		uint16_t multi[4];
 		uint8_t normal8;
 		uint32_t normal32;
 	} data = {0};
-	switch (sio->mode) {
+	bool driverHandlesMode = GBASIODriverHandlesMode(sio, transferMode);
+	switch (transferMode) {
 	case GBA_SIO_MULTI:
-		if (sio->driver && sio->driver->finishMultiplayer) {
+		if (driverHandlesMode && sio->driver->finishMultiplayer) {
 			sio->driver->finishMultiplayer(sio->driver, data.multi);
 		}
 		GBASIOMultiplayerFinishTransfer(sio, data.multi, cyclesLate);
 		break;
 	case GBA_SIO_NORMAL_8:
-		if (sio->driver && sio->driver->finishNormal8) {
+		if (driverHandlesMode && sio->driver->finishNormal8) {
 			data.normal8 = sio->driver->finishNormal8(sio->driver);
 		}
 		GBASIONormal8FinishTransfer(sio, data.normal8, cyclesLate);
 		break;
 	case GBA_SIO_NORMAL_32:
-		if (sio->driver && sio->driver->finishNormal32) {
+		if (driverHandlesMode && sio->driver->finishNormal32) {
 			data.normal32 = sio->driver->finishNormal32(sio->driver);
 		}
 		GBASIONormal32FinishTransfer(sio, data.normal32, cyclesLate);
 		break;
 	default:
 		// TODO
-		mLOG(GBA_SIO, STUB, "No dummy finish implemented for mode %s", _modeName(sio->mode));
+		mLOG(GBA_SIO, STUB, "No dummy finish implemented for mode %s", _modeName(transferMode));
 		break;
 	}
 }

@@ -27,6 +27,11 @@
 #include <mgba-util/vfs.h>
 
 #include "libretro_core_options.h"
+#ifdef MGBA_NETPACKET_SPIKE
+#include "netpacket-spike.h"
+#else
+#include "netpacket.h"
+#endif
 
 #define GB_SAMPLES 512
 /* An alpha factor of 1/180 is *somewhat* equivalent
@@ -95,6 +100,7 @@ static unsigned imcapWidth;
 static unsigned imcapHeight;
 static size_t camStride;
 static bool deferredSetup = false;
+static bool gameLoaded;
 static bool useBitmasks = true;
 static bool envVarsUpdated;
 static int32_t tiltX = 0;
@@ -546,6 +552,11 @@ void retro_run(void) {
 	if (deferredSetup) {
 		_doDeferredSetup();
 	}
+#ifdef MGBA_NETPACKET_SPIKE
+	mNetpacketSpikeTimingBoundary();
+#else
+	mLibretroNetpacketRunBegin();
+#endif
 	uint16_t keys;
 
 	inputPollCallback();
@@ -558,7 +569,13 @@ void retro_run(void) {
 			.key = "mgba_allow_opposing_directions",
 			.value = 0
 		};
-		if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
+		if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value &&
+#ifndef MGBA_NETPACKET_SPIKE
+		    !mLibretroNetpacketRejectTimingChange("input-direction")
+#else
+		    true
+#endif
+		) {
 			mCoreConfigSetIntValue(&core->config, "allowOpposingDirections", strcmp(var.value, "yes") == 0);
 			core->reloadConfigOption(core, "allowOpposingDirections", NULL);
 		}
@@ -612,7 +629,16 @@ void retro_run(void) {
 		}
 	}
 
+#ifndef MGBA_NETPACKET_SPIKE
+	if (!mLibretroNetpacketExecutionBlocked()) {
+		core->runFrame(core);
+	}
+#else
 	core->runFrame(core);
+#endif
+#ifndef MGBA_NETPACKET_SPIKE
+	mLibretroNetpacketRunEnd();
+#endif
 	unsigned width, height;
 	core->currentVideoSize(core, &width, &height);
 	videoCallback(outputBuffer, width, height, BYTES_PER_PIXEL * 256);
@@ -837,12 +863,16 @@ static void _setupMaps(struct mCore* core) {
 }
 
 void retro_reset(void) {
+#ifndef MGBA_NETPACKET_SPIKE
+	mLibretroNetpacketReset();
+#endif
 	core->reset(core);
 	mRumbleIntegratorReset(&rumble);
 	_setupMaps(core);
 }
 
 bool retro_load_game(const struct retro_game_info* game) {
+	gameLoaded = false;
 	struct VFile* rom;
 	if (game->data) {
 		data = anonymousMemoryMap(game->size);
@@ -991,10 +1021,22 @@ bool retro_load_game(const struct retro_game_info* game) {
 	core->reset(core);
 	_setupMaps(core);
 
+#ifdef MGBA_NETPACKET_SPIKE
+	mNetpacketSpikeRegister(environCallback);
+#else
+	mLibretroNetpacketRegister(environCallback, core);
+#endif
+	gameLoaded = true;
 	return true;
 }
 
 void retro_unload_game(void) {
+	gameLoaded = false;
+#ifdef MGBA_NETPACKET_SPIKE
+	mNetpacketSpikeUnload();
+#else
+	mLibretroNetpacketUnload();
+#endif
 	if (!core) {
 		return;
 	}
@@ -1018,6 +1060,11 @@ size_t retro_serialize_size(void) {
 }
 
 bool retro_serialize(void* data, size_t size) {
+#ifndef MGBA_NETPACKET_SPIKE
+	if (mLibretroNetpacketRejectStateOperation("Saving state")) {
+		return false;
+	}
+#endif
 	if (deferredSetup) {
 		_doDeferredSetup();
 	}
@@ -1036,6 +1083,11 @@ bool retro_serialize(void* data, size_t size) {
 }
 
 bool retro_unserialize(const void* data, size_t size) {
+#ifndef MGBA_NETPACKET_SPIKE
+	if (mLibretroNetpacketRejectStateOperation("Loading state")) {
+		return false;
+	}
+#endif
 	if (deferredSetup) {
 		_doDeferredSetup();
 	}
@@ -1046,10 +1098,20 @@ bool retro_unserialize(const void* data, size_t size) {
 }
 
 void retro_cheat_reset(void) {
+#ifndef MGBA_NETPACKET_SPIKE
+	if (mLibretroNetpacketRejectCheatChange()) {
+		return;
+	}
+#endif
 	mCheatDeviceClear(core->cheatDevice(core));
 }
 
 void retro_cheat_set(unsigned index, bool enabled, const char* code) {
+#ifndef MGBA_NETPACKET_SPIKE
+	if (mLibretroNetpacketRejectCheatChange()) {
+		return;
+	}
+#endif
 	UNUSED(index);
 	UNUSED(enabled);
 	struct mCheatDevice* device = core->cheatDevice(core);
@@ -1251,6 +1313,13 @@ static void _postAudioBuffer(struct mAVStream* stream, struct mAudioBuffer* buff
 
 static void _audioRateChanged(struct mAVStream* stream, unsigned rate) {
 	UNUSED(stream);
+	UNUSED(rate);
+	/* The frontend queries the final AV information after retro_load_game()
+	 * returns. Notifying it while content is still loading can re-enter video
+	 * initialization before the first driver setup has completed. */
+	if (!gameLoaded) {
+		return;
+	}
 	struct retro_system_av_info info;
 	retro_get_system_av_info(&info);
 	environCallback(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info);

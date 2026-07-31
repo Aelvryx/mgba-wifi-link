@@ -228,7 +228,7 @@ Handshake, attachment, mode barrier, transfer readiness, transfer commit, comple
 - **AND** the user receives an unsupported-frontend diagnostic
 
 ### Requirement: Session teardown
-Stopping transport, unloading content, losing the peer, reset, or protocol failure SHALL transition the session to a safe disconnected state. Outside a transfer, detach SHALL immediately install the hardware-characterized disconnected SIOCNT ID/ready/slave and RCNT SC line state while preserving receive words and raising no transfer IRQ. The MVP SHALL not reconnect or migrate the host within the same emulation run.
+Stopping transport, unloading content, losing the peer, reset, or protocol failure SHALL transition the session to a safe disconnected state. Outside a transfer, detach SHALL immediately install the hardware-characterized disconnected SIOCNT ID/ready/slave and RCNT SC line state while preserving the communication-error flag and receive words and raising no transfer IRQ. The MVP SHALL not reconnect or migrate the host within the same emulation run.
 
 #### Scenario: Peer disconnects while idle
 - **WHEN** the remote peer disconnects outside a transfer

@@ -861,16 +861,27 @@ static void _GBACoreRunFrame(struct mCore* core) {
 	struct GBA* gba = core->board;
 	uint32_t frameCounter = gba->video.frameCounter;
 	uint32_t startCycle = mTimingCurrentTime(&gba->timing);
-	while (gba->video.frameCounter == frameCounter && mTimingCurrentTime(&gba->timing) - startCycle < VIDEO_TOTAL_LENGTH + VIDEO_HORIZONTAL_LENGTH) {
+	while (!GBASIOIsExecutionBlocked(&gba->sio) &&
+	       gba->video.frameCounter == frameCounter &&
+	       mTimingCurrentTime(&gba->timing) - startCycle <
+	           VIDEO_TOTAL_LENGTH + VIDEO_HORIZONTAL_LENGTH) {
 		ARMRunLoop(core->cpu);
 	}
 }
 
 static void _GBACoreRunLoop(struct mCore* core) {
+	struct GBA* gba = core->board;
+	if (GBASIOIsExecutionBlocked(&gba->sio)) {
+		return;
+	}
 	ARMRunLoop(core->cpu);
 }
 
 static void _GBACoreStep(struct mCore* core) {
+	struct GBA* gba = core->board;
+	if (GBASIOIsExecutionBlocked(&gba->sio)) {
+		return;
+	}
 	ARMRun(core->cpu);
 }
 

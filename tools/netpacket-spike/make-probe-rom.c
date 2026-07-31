@@ -1,4 +1,6 @@
-/* Generates the smallest fixture needed to keep the spike core running.
+/* SPDX-License-Identifier: CC0-1.0
+ *
+ * Generates the smallest fixture needed to keep the spike core running.
  * It is not a functional game and must not be used for cable emulation tests. */
 #include <stdio.h>
 #include <string.h>

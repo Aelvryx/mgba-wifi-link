@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: CC0-1.0
 """Pad a test cartridge image and patch its GBA header complement byte."""
 
 from pathlib import Path

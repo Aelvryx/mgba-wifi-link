@@ -11,7 +11,7 @@ Protocol v2 replaces per-cable-event network barriers with one replicated
 P0/P1 pair on each endpoint and frame-authoritative input packets. The current
 integration branch has the following automated and rendered-device evidence:
 
-- All 16 focused SIO, input-ring, v2 codec/session, replica, pair,
+- All 17 focused SIO, input-ring, v2 codec/session, replica, pair,
   save-routing, and libretro-adapter test executables pass normally, under
   ASan/UBSan with leak detection, and under TSan.
 - `test-libretro-netpacket-v2-replay` compiles the actual adapter twice into
@@ -59,6 +59,72 @@ and five-percent throughput limit. The soak used core SHA-256
 and cartridge-sized continuous fixture SHA-256
 `c302487462e6f1241e038fab8b135a43909cfce9f07cfe7498a2b1fc7b4c8330`.
 The exact ARM64 physical-device qualification is recorded below.
+
+### Mario Kart Multi-Pak commercial qualification
+
+A human-assisted two-device run used stock RetroArch 1.22.2 on an AYN Thor
+host and AYN Odin2 Portal client over the same Wi-Fi LAN. Both devices loaded
+the same effective Mario Kart: Super Circuit image (RetroArch content CRC32
+`ed316e37`) from isolated qualification paths, connected through protocol v2,
+entered Multi-Pak, selected a two-player VS race, chose separate characters,
+and completed all three laps. The captured round-one results ranked P1 first
+and P2 second on both endpoints.
+
+The installed 8,067,160-byte ARM64 candidate had SHA-256
+`54e37896117762430efad018a51c38a69153ecf93974a931794d9096ff35db21`.
+It was built from integration base `6bfd68439e199fb5686d399748e8328caf4a8f51`
+plus the production scheduler/diagnostic changes subsequently committed
+unchanged as `525ff8644`. The qualification capture also recorded the dirty
+worktree's binary Git diff SHA-256 as
+`67998b9e7ba943f9fac878b493279dc29ce0dd989ac91f6bed1547e3999ed7eb`.
+Together the commit and captured build hash identify the physically exercised
+candidate while keeping commercial content outside the repository. A
+post-commit exact-build smoke is the final release gate.
+
+The strict commercial-log analyzer result was:
+
+```text
+frames=31200 checks=519/519 packets=31756/31755
+serial=45127/90254 audio_empty=0/0 fps=60.234/60.237
+rv_p50=5/8ms rv_p95=13/23ms rv_max=84/30ms
+packet_rate=61.308/61.309pps byte_rate=7765.1/7765.3Bps
+lead=1/1 trace_samples=52
+```
+
+The session ran for 517.98/517.95 seconds at the last common sample. All 52
+P0 and all 52 P1 rolling state digests matched between endpoints. Cable
+traffic began only when the game entered Multi-Pak: the frame-8,400 sample had
+zero transfers and frame 9,000 had 1,326. The final sample contained 45,127
+completed two-player MULTI transactions and 90,254 transferred words. Both
+logical cores remained in MULTI mode throughout gameplay. Each endpoint
+reported audio for 31,199 of the 31,200 sampled frames and zero empty-audio
+frames. No link failure, protocol error, timeout, divergence, mismatch, or
+disconnect appeared in either log.
+
+The host measured an 82 ms attachment round trip and selected a fixed
+five-frame input delay. Runtime input rendezvous was 5/13/84 ms p50/p95/max on
+Thor and 8/23/30 ms on Odin. One bounded scheduler lead was recovered for each
+logical core; the lead counters then remained stable through the race. The
+human players completed the race normally without reporting an audiovisual or
+control fault.
+
+Raw logs and screenshots remain outside the repository. Their verification
+hashes are:
+
+| Evidence | SHA-256 |
+| --- | --- |
+| Thor result screenshot | `51c9a8f3febc09504f692dfdb2a8df46d6663f576060f77026e54c5900f48bf6` |
+| Odin result screenshot | `571cc37bcf932fc7fbdc8582bc64c9d9fd3241fcca0e9b0398fa43b9fa8c03a7` |
+| Thor RetroArch/core log | `64ae30a83cea624cd16bfdbcb93c55de667692059ff7a84ad13888d6dadef376` |
+| Odin RetroArch/core log | `aa4deaea89320ba8eb4d4a93cd0e0136ff6da4349596f8b5dde8be1d03c36a07` |
+
+The analyzer command for a real-game run is:
+
+```sh
+python3 tools/analyze-replicated-netplay.py \
+  /path/to/host.log /path/to/client.log \
+  --minimum-frames 30000 --commercial
+```
 
 ### Exact-build Android continuous-link qualification
 

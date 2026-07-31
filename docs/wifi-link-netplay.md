@@ -84,6 +84,17 @@ The core maps those roles to GBA P0/primary and P1/secondary respectively.
 Only one frontend controller is sampled on each physical device; RetroArch's
 normal controller remapping remains authoritative.
 
+On Android, the host IP address is the device's IPv4 address on the active
+Wi-Fi network. It is normally shown in Android's details for that network.
+RetroArch LAN discovery may avoid entering it manually. The core itself does
+not open a separate socket or provide another address.
+
+Connect before entering the game's cable menu, but after both devices have
+loaded content. In games with leader-driven menus, player two may show `WAIT`
+while player one chooses the mode, speed, course, or other settings. That is
+normal. Multi-Pak means each device loads its own identical game image;
+Single-Pak download play is outside this alpha's scope.
+
 ## Compatibility and session policy
 
 The handshake compares SHA-1 and byte length over the effective ROM, not its
@@ -135,7 +146,10 @@ never used after their generation is invalidated.
 
 An abrupt peer exit may show a short error notification on the remaining
 device. It does not leave a network cable driver or shadow core attached. The
-single-player core resumes from the latest safe state described above.
+single-player core resumes from the latest safe state described above. For a
+normal exit, leave any active transfer or linking screen, then stop hosting or
+close content. Do not load, create, or depend on a savestate while connected;
+the core rejects those operations for every live session state.
 
 ## Diagnostics
 
@@ -165,7 +179,7 @@ unsuitable for gameplay.
 
 ## Current validation
 
-All 16 focused Linux SIO, protocol-v2, replica, pair, input, save-routing, and
+All 17 focused Linux SIO, protocol-v2, replica, pair, input, save-routing, and
 libretro-adapter tests pass normally, under ASan/UBSan with leak detection, and
 under TSan. This includes a paired replay of two actual adapter instances with
 deterministic latency/jitter and faults at every attachment, input,

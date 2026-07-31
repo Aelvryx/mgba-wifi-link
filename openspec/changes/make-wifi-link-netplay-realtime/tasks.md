@@ -59,7 +59,7 @@
 
 - [x] 7.1 Create a transport-independent pair module owning two cores, coordinator, lockstep drivers/users, logical assignments, frame number, and deterministic lifecycle.
 - [x] 7.2 Move the selected spike scheduler into the pair module and delete the unselected production candidate while retaining comparative evidence.
-- [x] 7.3 Add APIs to install authoritative P0/P1 bundles, set both frame inputs, run to the next common frame boundary, query role output, and stop safely.
+- [x] 7.3 Add APIs to install authoritative P0/P1 bundles, set both frame inputs, run to persistent per-core next-frame targets, query role output, and stop safely.
 - [x] 7.4 Ensure SIO mode changes and every MULTI transfer use only the local lockstep coordinator in protocol v2.
 - [x] 7.5 Add per-frame deterministic state traces and local SIO transfer/word/wait counters for tests and diagnostics.
 - [x] 7.6 Verify common SIO mode gating, completion ownership, player IDs, line state, receive words, busy clearing, and IRQ behavior against existing local-lockstep tests.
@@ -69,8 +69,8 @@
 - [x] 8.1 Negotiate a fixed whole-frame input delay from a versioned supported range and recorded handshake RTT/jitter, and freeze it for the session.
 - [x] 8.2 Add bounded per-player input rings keyed by 64-bit replicated frame number with ownership checks and exact/conflicting duplicate handling.
 - [x] 8.3 Sample only the assigned physical controller and author it for frame `F + D` with a short redundancy window in one reliable flushed `INPUT_BATCH`.
-- [x] 8.4 Release frame `F` only after both authoritative inputs exist, set both cores once, and advance the pair exactly once.
-- [x] 8.5 Integrate bounded in-call receive rendezvous so a healthy `retro_run()` returns one newly advanced local-role frame with normal audio/video.
+- [x] 8.4 Release frame `F` only after both authoritative inputs exist, set both cores once, and advance the replicated pair frame exactly once, with a recorded and bounded per-core video lead when local cable servicing requires it.
+- [x] 8.5 Integrate bounded in-call receive rendezvous so a healthy `retro_run()` advances one replicated pair frame and returns newly produced local-role audio/video.
 - [x] 8.6 Add deterministic jitter, reordering-within-ordered-delivery, duplicate, conflicting duplicate, missed-input, timeout, and stop-during-wait tests.
 - [x] 8.7 Assert ordinary v2 packet counts scale with frames and remain unchanged when fixture serial-word volume increases.
 
@@ -113,14 +113,15 @@
 
 - [x] 13.1 Build and hash the exact arm64 release candidate from the reviewed head and install only that core on both devices.
 - [x] 13.2 Run a 30-minute continuous-transfer session and verify at least 59 displayed/emulated FPS, matching state checks, normal audio delivery, frame-scaled packets, and serial throughput within five percent of local baseline.
-- [ ] 13.3 Run fresh-connect, multiplayer entry, gameplay, idle, peer-stop, and clean-exit scenarios in Bomberman as the fast-entry commercial title.
-- [ ] 13.4 Run the equivalent Four Swords qualification and confirm the former linking-screen one-FPS collapse is absent.
-- [ ] 13.5 Capture p50/p95/max input rendezvous, negotiated delay, packet/byte rate, CPU, peak memory, temperature, throttling, audio behavior, and save persistence for both devices.
+- [x] 13.3 Run fresh-connect, Multi-Pak entry, leader/client idle waits, a complete three-lap VS race, and coordinated exit in Mario Kart: Super Circuit as the fast-entry commercial title.
+- [x] 13.4 Run Four Swords through its linking screen and confirm the former one-FPS collapse is absent; record the lack of observed MULTI transfers separately rather than treating that dwell as a successful game link.
+- [x] 13.5 Capture p50/p95/max input rendezvous, negotiated delay, packet/byte rate, CPU, peak memory, temperature, throttling, audio behavior, and save persistence for both devices.
 - [x] 13.6 Confirm normal RetroArch controls/configuration and user saves remain untouched outside the installed release core.
+- [ ] 13.7 Run commercial-title peer-stop and graceful disconnect scenarios on the exact committed release candidate.
 
 ## 14. Release and review hygiene
 
-- [ ] 14.1 Update README usage, limitations, host/join instructions, protocol incompatibility, input latency, diagnostics, save ownership, and safe disconnect guidance.
+- [x] 14.1 Update README usage, limitations, host/join instructions, protocol incompatibility, input latency, diagnostics, save ownership, and safe disconnect guidance.
 - [ ] 14.2 Update `UPSTREAM.md`, protocol documentation, test matrix, build provenance, artifact hashes, and exact Android evidence.
 - [ ] 14.3 Remove disposable spike switches, test cores, temporary device files, and unsanitized diagnostic artifacts while retaining reproducible fixtures and summarized evidence.
 - [ ] 14.4 Rebase the upstream-facing patch stack and split pair infrastructure, bundle/codec, session/input, frontend/save routing, diagnostics, tests, and documentation into reviewable commits.

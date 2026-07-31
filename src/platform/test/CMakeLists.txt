@@ -34,8 +34,25 @@ if(BUILD_SUITE)
 		add_executable(test-${TEST_NAME} ${TEST})
 		target_link_libraries(test-${TEST_NAME} ${BINARY_NAME} ${PLATFORM_LIBRARY} cmocka)
 		set_target_properties(test-${TEST_NAME} PROPERTIES COMPILE_DEFINITIONS "${OS_DEFINES};${FEATURE_DEFINES};${FUNCTION_DEFINES}")
+		if(TEST_NAME STREQUAL "gba-netplay-integration")
+			target_compile_definitions(test-${TEST_NAME} PRIVATE
+				GBA_LINK_TEST_ROM_PATH="${PROJECT_SOURCE_DIR}/tools/gba-link-test-rom/fixtures/gba-link-test.gba")
+		endif()
 		add_test(${TEST_NAME} test-${TEST_NAME})
 	endforeach()
+
+	if(BUILD_LIBRETRO AND M_CORE_GBA)
+		add_executable(test-libretro-netpacket
+			${CMAKE_CURRENT_SOURCE_DIR}/libretro-netpacket.c
+			${PROJECT_SOURCE_DIR}/src/platform/libretro/netpacket.c)
+		target_include_directories(test-libretro-netpacket PRIVATE
+			${PROJECT_SOURCE_DIR}/src/platform/libretro)
+		target_link_libraries(test-libretro-netpacket
+			${BINARY_NAME} ${PLATFORM_LIBRARY} cmocka)
+		set_target_properties(test-libretro-netpacket PROPERTIES
+			COMPILE_DEFINITIONS "${OS_DEFINES};${FEATURE_DEFINES};${FUNCTION_DEFINES};M_LIBRETRO_NETPACKET_TEST")
+		add_test(libretro-netpacket test-libretro-netpacket)
+	endif()
 endif()
 
 if(BUILD_CINEMA)

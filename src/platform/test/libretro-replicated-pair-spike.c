@@ -34,6 +34,18 @@ struct PairSpikeFixture {
 	mColor* video;
 };
 
+static struct mLogger _silentLogger;
+
+static void _discardLog(
+		struct mLogger* logger, int category,
+		enum mLogLevel level, const char* format, va_list args) {
+	UNUSED(logger);
+	UNUSED(category);
+	UNUSED(level);
+	UNUSED(format);
+	UNUSED(args);
+}
+
 static int _setup(void** state) {
 	struct PairSpikeFixture* fixture =
 	    calloc(1, sizeof(*fixture));
@@ -114,12 +126,8 @@ M_TEST_DEFINE(rejectsUnsupportedCoreAndIsIdempotent) {
 }
 
 int main(void) {
-	struct mStandardLogger logger;
-	mStandardLoggerInit(&logger);
-	logger.logToStdout = true;
-	logger.d.filter->defaultLevels =
-	    mLOG_FATAL | mLOG_ERROR | mLOG_WARN;
-	mLogSetDefaultLogger(&logger.d);
+	_silentLogger.log = _discardLog;
+	mLogSetDefaultLogger(&_silentLogger);
 	const struct CMUnitTest tests[] = {
 		cmocka_unit_test_setup_teardown(
 		    runsOneFreshPairedFramePerCall, _setup, _teardown),
@@ -129,6 +137,5 @@ int main(void) {
 	};
 	int result = cmocka_run_group_tests(tests, NULL, NULL);
 	mLogSetDefaultLogger(NULL);
-	mStandardLoggerDeinit(&logger);
 	return result;
 }

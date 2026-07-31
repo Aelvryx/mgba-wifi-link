@@ -59,6 +59,7 @@ struct GBAReplicatedPairMetrics {
 	uint64_t sleeps[2];
 	uint64_t wakes[2];
 	uint64_t saveGenerations[2];
+	uint64_t recoveredFrameLeads[2];
 	uint64_t transferStarts;
 	uint64_t transferCompletions;
 	uint64_t transferredWords;
@@ -77,6 +78,13 @@ struct GBAReplicatedPair {
 	uint64_t inputFrame;
 	uint16_t inputs[2];
 	uint8_t stateTrace[2][MGBA_SHA256_DIGEST_SIZE];
+	uint32_t nextFrameCounters[2];
+	uint64_t recoveredFrameLeads[2];
+	/* Diagnostic-only state from the most recent frame attempt. */
+	enum GBAReplicatedPairResult lastRunResult;
+	uint64_t failureIteration;
+	uint32_t startingFrames[2];
+	uint32_t observedFrames[2];
 	bool initialized;
 	bool installed;
 	bool inputsReady;

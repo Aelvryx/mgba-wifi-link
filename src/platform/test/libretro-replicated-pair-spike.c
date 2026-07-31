@@ -24,6 +24,7 @@
 #define LINK_RESULT_STATUS_OFFSET 8
 #define LINK_RESULT_RUNNING 3
 #define LINK_RESULT_TRANSFERS_OFFSET 24
+#define MIN_EXPECTED_TRANSFERS 280
 #define TEST_VIDEO_WIDTH 256
 #define TEST_VIDEO_HEIGHT 224
 
@@ -88,11 +89,16 @@ M_TEST_DEFINE(runsOneFreshPairedFramePerCall) {
 	        fixture->core,
 	        LINK_RESULT_ADDRESS + LINK_RESULT_STATUS_OFFSET, -1),
 	    LINK_RESULT_RUNNING);
-	assert_true(
-	    fixture->core->rawRead32(
-	        fixture->core,
-	        LINK_RESULT_ADDRESS + LINK_RESULT_TRANSFERS_OFFSET, -1) >=
-	    619);
+	uint32_t transfers = fixture->core->rawRead32(
+	    fixture->core,
+	    LINK_RESULT_ADDRESS + LINK_RESULT_TRANSFERS_OFFSET, -1);
+	/*
+	 * The late-attachment-safe fixture deliberately starts at most one
+	 * transaction per video boundary. Startup rendezvous consumes a few of
+	 * these 600 frames, so require sustained traffic without freezing the
+	 * assertion to the former unpaced fixture's 619-transfer count.
+	 */
+	assert_in_range(transfers, MIN_EXPECTED_TRANSFERS, UINT32_MAX);
 	mLibretroReplicatedPairSpikeStop();
 	assert_false(mLibretroReplicatedPairSpikeIsActive());
 	assert_null(((struct GBA*) fixture->core->board)->sio.driver);

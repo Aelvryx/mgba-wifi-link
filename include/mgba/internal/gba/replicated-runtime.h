@@ -38,6 +38,7 @@ struct GBAReplicatedRuntime {
 	struct GBALinkInputSync input;
 	struct GBAReplicatedRuntimeMetrics metrics;
 	enum GBALinkRole localRole;
+	enum GBAReplicatedPairResult lastPairResult;
 	bool initialized;
 	bool seeded;
 	bool authoredCurrentFrame;

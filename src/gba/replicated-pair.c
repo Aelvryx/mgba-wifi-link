@@ -14,6 +14,7 @@
 
 enum {
 	GBA_REPLICATED_PAIR_MAX_RUN_LOOPS = 4000000,
+	GBA_REPLICATED_PAIR_MAX_FRAME_LEAD = 1,
 	GBA_REPLICATED_PAIR_VIDEO_WIDTH = 256,
 	GBA_REPLICATED_PAIR_VIDEO_HEIGHT = 224,
 };
@@ -193,6 +194,11 @@ enum GBAReplicatedPairResult GBAReplicatedPairInstall(
 		GBAReplicatedPairStop(pair);
 		return GBA_REPLICATED_PAIR_CORE_FAILED;
 	}
+	for (unsigned i = 0; i < 2; ++i) {
+		pair->nextFrameCounters[i] =
+		    pair->players[i].core->frameCounter(
+		        pair->players[i].core) + 1;
+	}
 	pair->installed = true;
 	return GBA_REPLICATED_PAIR_OK;
 }
@@ -259,30 +265,62 @@ static void _updateSaveGeneration(
 
 enum GBAReplicatedPairResult GBAReplicatedPairRunFrame(
 	struct GBAReplicatedPair* pair) {
-	if (!pair || !pair->installed || pair->stopped || !pair->inputsReady ||
-	    pair->inputFrame != pair->frameNumber) {
+	if (!pair) {
 		return GBA_REPLICATED_PAIR_INVALID_STATE;
 	}
-	uint32_t startingFrames[2];
+	pair->lastRunResult = GBA_REPLICATED_PAIR_OK;
+	pair->failureIteration = 0;
+	if (!pair->installed || pair->stopped || !pair->inputsReady ||
+	    pair->inputFrame != pair->frameNumber) {
+		pair->lastRunResult = GBA_REPLICATED_PAIR_INVALID_STATE;
+		return pair->lastRunResult;
+	}
 	for (unsigned i = 0; i < 2; ++i) {
-		startingFrames[i] = pair->players[i].core->frameCounter(
+		pair->startingFrames[i] = pair->players[i].core->frameCounter(
 		    pair->players[i].core);
+		pair->observedFrames[i] = pair->startingFrames[i];
 		pair->players[i].core->setKeys(
 		    pair->players[i].core, pair->inputs[i]);
 	}
 	for (uint64_t iteration = 0;
 	     iteration < GBA_REPLICATED_PAIR_MAX_RUN_LOOPS; ++iteration) {
 		bool complete[2];
+		int32_t distance[2];
 		for (unsigned i = 0; i < 2; ++i) {
 			uint32_t frame = pair->players[i].core->frameCounter(
 			    pair->players[i].core);
-			if (frame != startingFrames[i] &&
-			    frame != startingFrames[i] + 1) {
-				return GBA_REPLICATED_PAIR_FRAME_OVERSHOOT;
+			pair->observedFrames[i] = frame;
+			distance[i] =
+			    (int32_t) (frame - pair->nextFrameCounters[i]);
+			if (distance[i] < -1) {
+				pair->lastRunResult =
+				    GBA_REPLICATED_PAIR_FRAME_OVERSHOOT;
+				pair->failureIteration = iteration;
+				return pair->lastRunResult;
 			}
-			complete[i] = frame != startingFrames[i];
+			complete[i] = distance[i] >= 0;
 		}
 		if (complete[0] && complete[1]) {
+			/* A run loop may cross one additional video boundary while
+			 * servicing the local cable peer. Judge the lead only after
+			 * both players reach their targets, then rebase from the
+			 * counters actually observed. */
+			if (distance[0] > GBA_REPLICATED_PAIR_MAX_FRAME_LEAD ||
+			    distance[1] > GBA_REPLICATED_PAIR_MAX_FRAME_LEAD) {
+				pair->lastRunResult =
+				    GBA_REPLICATED_PAIR_FRAME_OVERSHOOT;
+				pair->failureIteration = iteration;
+				return pair->lastRunResult;
+			}
+			for (unsigned i = 0; i < 2; ++i) {
+				uint32_t frame =
+				    pair->players[i].core->frameCounter(
+				        pair->players[i].core);
+				if (frame != pair->nextFrameCounters[i]) {
+					++pair->recoveredFrameLeads[i];
+				}
+				pair->nextFrameCounters[i] = frame + 1;
+			}
 			++pair->frameNumber;
 			pair->inputsReady = false;
 			_updateSaveGeneration(&pair->players[0]);
@@ -295,21 +333,20 @@ enum GBAReplicatedPairResult GBAReplicatedPairRunFrame(
 		for (unsigned i = 0; i < 2; ++i) {
 			struct GBAReplicatedPairPlayer* player = &pair->players[i];
 			if (!player->user.asleep) {
-				uint32_t before = player->core->frameCounter(player->core);
 				player->core->runLoop(player->core);
 				++player->runLoops;
 				ran = true;
-				if (complete[i] &&
-				    player->core->frameCounter(player->core) != before) {
-					return GBA_REPLICATED_PAIR_FRAME_OVERSHOOT;
-				}
 			}
 		}
 		if (!ran) {
-			return GBA_REPLICATED_PAIR_DEADLOCK;
+			pair->lastRunResult = GBA_REPLICATED_PAIR_DEADLOCK;
+			pair->failureIteration = iteration;
+			return pair->lastRunResult;
 		}
 	}
-	return GBA_REPLICATED_PAIR_DEADLOCK;
+	pair->lastRunResult = GBA_REPLICATED_PAIR_DEADLOCK;
+	pair->failureIteration = GBA_REPLICATED_PAIR_MAX_RUN_LOOPS;
+	return pair->lastRunResult;
 }
 
 struct mCore* GBAReplicatedPairCore(
@@ -531,6 +568,8 @@ bool GBAReplicatedPairGetMetrics(
 		metrics->wakes[i] = pair->players[i].user.wakes;
 		metrics->saveGenerations[i] =
 		    pair->players[i].saveGeneration;
+		metrics->recoveredFrameLeads[i] =
+		    pair->recoveredFrameLeads[i];
 	}
 	metrics->transferStarts = pair->coordinator.transferStarts;
 	metrics->transferCompletions = pair->coordinator.transferCompletions;

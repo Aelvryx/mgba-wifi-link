@@ -130,3 +130,8 @@ jobs:
         run: |
           make -C tools/gba-link-test-rom verify-fixture \
             CROSS=/tmp/gba-link-arm-toolchain/bin/arm-none-eabi-
+
+      - name: Validate structured-log analyzers
+        run: |
+          python3 tools/test-analyze-link-netplay-log.py
+          python3 tools/test-analyze-replicated-netplay.py

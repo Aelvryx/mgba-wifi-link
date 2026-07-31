@@ -71,6 +71,8 @@
 
 enum {
 	NETPACKET_V2_VERIFICATION_INTERVAL = 60,
+	NETPACKET_V2_RENDEZVOUS_HISTOGRAM_MAX_MS = 3000,
+	NETPACKET_V2_LINK_TEST_MAGIC = 0x31544B4C,
 };
 
 struct mLibretroNetpacketV2Metrics {
@@ -84,6 +86,8 @@ struct mLibretroNetpacketV2Metrics {
 	uint64_t rendezvousCount;
 	uint64_t rendezvousTotalMs;
 	uint64_t rendezvousMaxMs;
+	uint32_t rendezvousHistogram[
+	    NETPACKET_V2_RENDEZVOUS_HISTOGRAM_MAX_MS + 1];
 	uint64_t verificationMatches;
 	uint64_t audioFrames;
 	uint64_t audioSamples;
@@ -147,6 +151,38 @@ static uint64_t _monotonicTimeMs(void* context);
 static void _digestText(
 	const uint8_t digest[MGBA_SHA256_DIGEST_SIZE],
 	char text[MGBA_SHA256_DIGEST_SIZE * 2 + 1]);
+
+static void _recordRendezvous(
+		struct mLibretroNetpacketV2Adapter* adapter,
+		uint64_t duration) {
+	++adapter->metrics.rendezvousCount;
+	adapter->metrics.rendezvousTotalMs += duration;
+	if (duration > adapter->metrics.rendezvousMaxMs) {
+		adapter->metrics.rendezvousMaxMs = duration;
+	}
+	size_t bucket = duration > NETPACKET_V2_RENDEZVOUS_HISTOGRAM_MAX_MS
+	    ? NETPACKET_V2_RENDEZVOUS_HISTOGRAM_MAX_MS : (size_t) duration;
+	++adapter->metrics.rendezvousHistogram[bucket];
+}
+
+static uint64_t _rendezvousPercentile(
+		const struct mLibretroNetpacketV2Adapter* adapter,
+		unsigned percentile) {
+	if (!adapter->metrics.rendezvousCount) {
+		return 0;
+	}
+	uint64_t target =
+	    (adapter->metrics.rendezvousCount * percentile + 99) / 100;
+	uint64_t seen = 0;
+	for (size_t i = 0;
+	     i <= NETPACKET_V2_RENDEZVOUS_HISTOGRAM_MAX_MS; ++i) {
+		seen += adapter->metrics.rendezvousHistogram[i];
+		if (seen >= target) {
+			return i;
+		}
+	}
+	return NETPACKET_V2_RENDEZVOUS_HISTOGRAM_MAX_MS;
+}
 
 static uint8_t _playerForRole(enum GBALinkRole role) {
 	return role == GBA_LINK_ROLE_HOST ? 0 : 1;
@@ -446,6 +482,41 @@ static void _restoreVerifiedLocalState(
 	_log(RETRO_LOG_INFO, message);
 }
 
+static void _logLinkTestStatus(
+		struct mLibretroNetpacketV2Adapter* adapter,
+		const char* event) {
+	uint32_t status[2];
+	uint32_t transfers[2];
+	uint32_t errors[2];
+	uint32_t timeouts[2];
+	uint32_t lines[2];
+	for (unsigned player = 0; player < 2; ++player) {
+		struct mCore* core = GBAReplicatedPairCore(
+		    &adapter->pair, player);
+		if (!core || core->rawRead32(core, 0x02000000, -1) !=
+		        NETPACKET_V2_LINK_TEST_MAGIC) {
+			return;
+		}
+		status[player] = core->rawRead32(core, 0x02000008, -1);
+		transfers[player] = core->rawRead32(core, 0x02000018, -1);
+		errors[player] = core->rawRead32(core, 0x02000020, -1);
+		timeouts[player] = core->rawRead32(core, 0x02000030, -1);
+		lines[player] = core->rawRead32(core, 0x02000034, -1);
+	}
+	char message[256];
+	snprintf(message, sizeof(message),
+	    "%s fixture P%u status=%08" PRIx32 "/%08" PRIx32
+	    " transfers=%" PRIu32 "/%" PRIu32
+	    " errors=%" PRIu32 "/%" PRIu32
+	    " timeouts=%" PRIu32 "/%" PRIu32
+	    " lines=%08" PRIx32 "/%08" PRIx32,
+	    event ? event : "runtime", adapter->session.localRole,
+	    status[0], status[1], transfers[0], transfers[1],
+	    errors[0], errors[1], timeouts[0], timeouts[1],
+	    lines[0], lines[1]);
+	_log(RETRO_LOG_INFO, message);
+}
+
 static void _logRuntimeSummary(
 	struct mLibretroNetpacketV2Adapter* adapter,
 	const char* event) {
@@ -506,6 +577,22 @@ static void _logRuntimeSummary(
 		    adapter->session.localRole, player, traces[player]);
 		_log(RETRO_LOG_INFO, message);
 	}
+	uint64_t now = _monotonicTimeMs(adapter);
+	uint64_t elapsed = adapter->metrics.readyAtMs &&
+	                           now >= adapter->metrics.readyAtMs
+	    ? now - adapter->metrics.readyAtMs : 0;
+	uint64_t fpsMilli = elapsed
+	    ? runtime.framesReleased * UINT64_C(1000000) / elapsed : 0;
+	snprintf(message, sizeof(message),
+	    "%s timing P%u elapsed=%" PRIu64 "ms fps-milli=%" PRIu64
+	    " rv-p50=%" PRIu64 "ms rv-p95=%" PRIu64
+	    "ms rv-max=%" PRIu64 "ms",
+	    event ? event : "runtime", adapter->session.localRole,
+	    elapsed, fpsMilli, _rendezvousPercentile(adapter, 50),
+	    _rendezvousPercentile(adapter, 95),
+	    adapter->metrics.rendezvousMaxMs);
+	_log(RETRO_LOG_INFO, message);
+	_logLinkTestStatus(adapter, event);
 }
 
 static void _discardPair(void* context, bool committed) {
@@ -1129,11 +1216,7 @@ bool mLibretroNetpacketV2RunFrame(uint16_t keys) {
 	if (waited) {
 		uint64_t duration =
 		    _monotonicTimeMs(&_adapter) - waitStarted;
-		++_adapter.metrics.rendezvousCount;
-		_adapter.metrics.rendezvousTotalMs += duration;
-		if (duration > _adapter.metrics.rendezvousMaxMs) {
-			_adapter.metrics.rendezvousMaxMs = duration;
-		}
+		_recordRendezvous(&_adapter, duration);
 	}
 	if (!_adapter.runtime.authoredCurrentFrame) {
 		struct GBALinkV2Packet packets[
@@ -1183,11 +1266,7 @@ bool mLibretroNetpacketV2RunFrame(uint16_t keys) {
 	if (waited) {
 		uint64_t duration =
 		    _monotonicTimeMs(&_adapter) - waitStarted;
-		++_adapter.metrics.rendezvousCount;
-		_adapter.metrics.rendezvousTotalMs += duration;
-		if (duration > _adapter.metrics.rendezvousMaxMs) {
-			_adapter.metrics.rendezvousMaxMs = duration;
-		}
+		_recordRendezvous(&_adapter, duration);
 	}
 	GBALinkV2SessionRuntimeDeadlineSatisfied(
 	    &_adapter.session, GBA_LINK_V2_DEADLINE_INPUT);

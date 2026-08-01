@@ -386,6 +386,21 @@ M_TEST_DEFINE(identityMismatchPreservesBothOriginalCores) {
 	_deinitPair(&pair);
 }
 
+M_TEST_DEFINE(experimentalPolicyMismatchFailsBeforeReplicaExchange) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.client.session.config.experimentalRuntime = false;
+	_startPair(&pair);
+	_pump(&pair, 3);
+	assert_true(pair.host.failureCalls || pair.client.failureCalls);
+	assert_true(
+	    pair.host.failureReason == GBA_LINK_V2_REASON_RUNTIME_MISMATCH ||
+	    pair.client.failureReason == GBA_LINK_V2_REASON_RUNTIME_MISMATCH);
+	assert_int_equal(pair.host.installCalls + pair.client.installCalls, 0);
+	assert_int_equal(pair.host.captureCalls + pair.client.captureCalls, 0);
+	_deinitPair(&pair);
+}
+
 M_TEST_DEFINE(corruptReplicaFailsBeforeProvisionalInstallation) {
 	struct V2Pair pair;
 	_initPair(&pair);
@@ -521,6 +536,8 @@ M_TEST_SUITE_DEFINE(GBALinkSessionV2,
 	cmocka_unit_test(handshakeRttAndJitterFreezeOneSharedInputDelay),
 	cmocka_unit_test(attachmentDeadlineBeginsBeforeQuiescentCapture),
 	cmocka_unit_test(identityMismatchPreservesBothOriginalCores),
+	cmocka_unit_test(
+	    experimentalPolicyMismatchFailsBeforeReplicaExchange),
 	cmocka_unit_test(corruptReplicaFailsBeforeProvisionalInstallation),
 	cmocka_unit_test(missingFinalAckDiscardsOnlyProvisionalPairs),
 	cmocka_unit_test(synchronousStopAtEveryReplicaBoundaryFailsClosed),

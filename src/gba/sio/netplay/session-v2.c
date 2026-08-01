@@ -319,7 +319,9 @@ static bool _helloCompatible(
 	if (hello->runtimeCompatibilityVersion !=
 	        GBA_LINK_V2_RUNTIME_COMPATIBILITY_VERSION ||
 	    hello->emulationCompatibilityVersion !=
-	        session->config.emulationCompatibilityVersion) {
+	        session->config.emulationCompatibilityVersion ||
+	    hello->experimentalRuntime !=
+	        session->config.experimentalRuntime) {
 		GBALinkV2SessionFail(
 		    session, GBA_LINK_V2_REASON_RUNTIME_MISMATCH,
 		    "protocol-v2 runtime compatibility mismatch");

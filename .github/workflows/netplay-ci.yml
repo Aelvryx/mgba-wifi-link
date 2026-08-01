@@ -182,6 +182,11 @@ jobs:
           python3 tools/test-analyze-link-netplay-log.py
           python3 tools/test-analyze-replicated-netplay.py
 
+      - name: Validate Android qualification helper
+        run: |
+          bash -n tools/four-swords-discovery/android-qualification.sh
+          python3 tools/four-swords-discovery/test-qualification-helper.py
+
   android-arm64:
     name: Android arm64 libretro build
     runs-on: ubuntu-24.04

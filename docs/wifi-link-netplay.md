@@ -33,7 +33,7 @@ architecture:
 | LinkCable compatibility workload | Verified |
 | Mario Kart: Super Circuit Multi-Pak | Verified — full race |
 | Advance Wars | User playtest passed |
-| Zelda: Four Swords | Known failure — stalls during cable discovery |
+| Zelda: Four Swords | Verified — discovery and brief shared gameplay |
 | Other Multi-Pak titles | Untested |
 
 ## Why protocol v2 is real-time
@@ -229,6 +229,36 @@ automation owns evidence extraction, analysis, teardown, and cleanup. This
 keeps scarce human interaction focused and prevents slow hybrid testing that
 is neither repeatable automation nor effective manual play.
 
+### Canonical Android controller preflight
+
+Never use `adb shell input`, injected key events, or injected taps before or
+during a controller-qualified RetroArch process. Android exposes those events
+through a synthetic `Virtual` input device. RetroArch can assign that device to
+port 1 and move the handheld's physical AYN controller to port 2, leaving the
+game apparently unresponsive despite an otherwise valid configuration.
+
+For every human-assisted Android run:
+
+1. Clone each device's current normal RetroArch config; do not substitute a
+   generic controller or menu profile.
+2. Change only isolated save/state/log paths and documented diagnostic options.
+3. Enable the existing touchscreen overlay on both endpoints as a fallback,
+   without changing its layout or physical bindings.
+4. Launch content directly without any ADB input injection.
+5. Have the human press one physical button on each device.
+6. Require the log to show the real AYN controller `configured in port 1` on
+   each endpoint and capture one private screenshot proving both overlays are
+   visible.
+7. Only then perform host/join and game navigation. On this stock Android
+   frontend, host/join remains human-owned; do not replace it with improvised
+   hotkeys or menu-driving automation.
+
+If a log instead shows `Virtual ... configured` or the AYN device in port 2,
+stop RetroArch and relaunch cleanly. Do not compensate by changing the joypad
+index: the injected virtual device is transient and the workaround will break
+the next clean launch. The Four Swords change provides the checked helper at
+`tools/four-swords-discovery/android-qualification.sh`.
+
 ## Current validation
 
 All 17 focused Linux SIO, protocol-v2, replica, pair, input, save-routing, and
@@ -253,6 +283,8 @@ are explicitly protocol-v1 historical evidence.
 The post-review release candidate at `c9b181aa2` also passed a fresh physical
 Android continuous-link smoke and a 15,600-frame Mario Kart Multi-Pak gameplay
 smoke. Both ran at approximately 60.24 FPS with matching sampled state traces,
-normal audio delivery, and no serial, timeout, or divergence fault. Four
-Swords remains the named compatibility investigation for this experimental
-alpha.
+normal audio delivery, and no serial, timeout, or divergence fault. The same
+alpha.2 runtime subsequently passed Four Swords discovery and brief shared
+gameplay over 27,000 synchronized frames at approximately 60.28 FPS, with
+110,852 completed transfers, matching sampled traces, normal audio, and no
+protocol, SIO, timeout, or divergence fault.

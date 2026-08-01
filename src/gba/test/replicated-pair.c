@@ -11,6 +11,7 @@
 #include <mgba/core/log.h>
 #include <mgba/gba/core.h>
 #include <mgba/internal/gba/gba.h>
+#include <mgba/internal/gba/io.h>
 #include <mgba/internal/gba/replicated-pair.h>
 #include <mgba/internal/gba/replicated-runtime.h>
 #include <mgba-util/audio-buffer.h>
@@ -277,20 +278,24 @@ M_TEST_DEFINE(detachedMultiSnapshotsExposeAttachedLinesBeforeExecution) {
 	_install(&pair, &fixture);
 	for (unsigned player = 0; player < 2; ++player) {
 		struct GBA* gba = pair.players[player].core->board;
+		uint16_t guestSIOCNT = GBAIORead(gba, GBA_REG_SIOCNT);
+		uint16_t guestRCNT = GBAIORead(gba, GBA_REG_RCNT);
+		assert_int_equal(guestSIOCNT, gba->sio.siocnt);
+		assert_int_equal(guestRCNT, gba->sio.rcnt);
 		assert_int_equal(gba->sio.mode, GBA_SIO_MULTI);
-		assert_false(GBASIOMultiplayerIsBusy(gba->sio.siocnt));
-		assert_true(GBASIOMultiplayerIsReady(gba->sio.siocnt));
+		assert_false(GBASIOMultiplayerIsBusy(guestSIOCNT));
+		assert_true(GBASIOMultiplayerIsReady(guestSIOCNT));
 		assert_int_equal(
-		    GBASIOMultiplayerGetId(gba->sio.siocnt), player);
+		    GBASIOMultiplayerGetId(guestSIOCNT), player);
 		if (player) {
-			assert_true(GBASIOMultiplayerIsSlave(gba->sio.siocnt));
-			assert_true(GBASIORegisterRCNTIsSi(gba->sio.rcnt));
+			assert_true(GBASIOMultiplayerIsSlave(guestSIOCNT));
+			assert_true(GBASIORegisterRCNTIsSi(guestRCNT));
 		} else {
-			assert_false(GBASIOMultiplayerIsSlave(gba->sio.siocnt));
-			assert_false(GBASIORegisterRCNTIsSi(gba->sio.rcnt));
+			assert_false(GBASIOMultiplayerIsSlave(guestSIOCNT));
+			assert_false(GBASIORegisterRCNTIsSi(guestRCNT));
 		}
-		assert_true(GBASIORegisterRCNTIsSd(gba->sio.rcnt));
-		assert_true(GBASIORegisterRCNTIsSc(gba->sio.rcnt));
+		assert_true(GBASIORegisterRCNTIsSd(guestRCNT));
+		assert_true(GBASIORegisterRCNTIsSc(guestRCNT));
 		assert_false(mTimingIsScheduled(
 		    &gba->timing, &gba->sio.completeEvent));
 		unsigned lockstepId = pair.players[player].driver.lockstepId;

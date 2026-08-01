@@ -17,7 +17,7 @@ delta-requirement review at task 4.9.
 | Core SHA-256 | `14978106a3978ab4ef6ec025add82e0e9a38decda72404e3dc8c02b3373f179d` |
 | Frontend | Stock RetroArch `1.22.2_GIT`, package `com.retroarch.aarch64` |
 | Thor | AYN Thor, ADB `11c5b80`, Android 13; live identity reconfirmed 2026-08-01 |
-| Odin | AYN Odin2 Portal, ADB `6986c674`; known qualification device, live reconfirmation pending |
+| Odin | AYN Odin2 Portal, ADB `6986c674`, Android 13; live identity reconfirmed 2026-08-01 |
 | Current Four Swords status | Known failure: remains in cable discovery; not yet rerun on topology-settled alpha.2 |
 
 The exact core artifact above is the alpha.2 build under test. Its hash must be
@@ -54,3 +54,27 @@ all game navigation and gameplay.
   through the observer and deterministic diagnostic ladder.
 
 No result from this run directly authorizes production behavior changes.
+
+## Android controller preflight correction
+
+The first 2026-08-01 staging attempt used an injected Android key while
+RetroArch was running. Android exposed that event as a synthetic `Virtual`
+controller, which RetroArch assigned ahead of the Thor's physical controls.
+The log showed `Virtual` as the fallback device and the real `Ayn Odin`
+controller in port 2. That attempt was stopped before qualification and is not
+valid evidence about Four Swords.
+
+The clean rerun introduced no ADB input. Both device-native configurations
+were retained, the existing touchscreen overlay was made visible on both
+endpoints as a fallback, and the controller gate required these log records
+before handoff:
+
+```text
+Thor: Ayn Odin configured in port 1.
+Odin: Ayn Odin (Xbox Mode) configured in port 1.
+```
+
+The checked workflow is
+`tools/four-swords-discovery/android-qualification.sh`. Future physical runs
+must use its controller gate and must not compensate for a transient virtual
+device by changing a joypad index.

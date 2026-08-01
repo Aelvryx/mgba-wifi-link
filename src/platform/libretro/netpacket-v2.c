@@ -27,6 +27,8 @@
 	M_NETPACKET_V2_SYMBOL(SessionActive)
 #define mLibretroNetpacketV2RejectOperation \
 	M_NETPACKET_V2_SYMBOL(RejectOperation)
+#define mLibretroNetpacketV2RejectLatencyPolicyChange \
+	M_NETPACKET_V2_SYMBOL(RejectLatencyPolicyChange)
 #define mLibretroNetpacketV2TestPollReceive \
 	M_NETPACKET_V2_SYMBOL(TestPollReceive)
 #define mLibretroNetpacketV2TestSetTimeMs \
@@ -46,6 +48,8 @@
 #define mLibretroNetpacketV2TestFailNextCheckpointAllocation \
 	M_NETPACKET_V2_SYMBOL(TestFailNextCheckpointAllocation)
 #define mLibretroNetpacketV2TestFail M_NETPACKET_V2_SYMBOL(TestFail)
+#define mLibretroNetpacketV2TestGetMetrics \
+	M_NETPACKET_V2_SYMBOL(TestGetMetrics)
 #endif
 
 #include "netpacket-v2.h"
@@ -68,6 +72,7 @@
 #include <mgba/internal/gba/savedata.h>
 #include <mgba/internal/gba/serialize.h>
 #include <mgba/internal/gba/sio/netplay/identity.h>
+#include <mgba/internal/gba/sio/netplay/rtc-sync.h>
 #include <mgba/internal/gba/sio/netplay/session-v2.h>
 #include <mgba/internal/gba/sio/netplay/transport.h>
 #include <mgba-util/audio-buffer.h>
@@ -77,6 +82,7 @@
 enum {
 	NETPACKET_V2_VERIFICATION_INTERVAL = 60,
 	NETPACKET_V2_RENDEZVOUS_HISTOGRAM_MAX_MS = 3000,
+	NETPACKET_V2_INPUT_WAIT_HISTOGRAM_MAX_US = 30000,
 	NETPACKET_V2_LINK_TEST_MAGIC = 0x31544B4C,
 };
 
@@ -88,11 +94,33 @@ struct mLibretroNetpacketV2Metrics {
 	uint64_t receivedPackets;
 	uint64_t receivedBytes;
 	uint64_t receivePolls;
+	uint64_t calibrationSentPackets;
+	uint64_t calibrationSentBytes;
+	uint64_t calibrationReceivedPackets;
+	uint64_t calibrationReceivedBytes;
 	uint64_t rendezvousCount;
 	uint64_t rendezvousTotalMs;
 	uint64_t rendezvousMaxMs;
 	uint32_t rendezvousHistogram[
 	    NETPACKET_V2_RENDEZVOUS_HISTOGRAM_MAX_MS + 1];
+	uint64_t releasedFrames;
+	uint64_t inputWaitedFrames;
+	uint64_t inputWaitTotalUs;
+	uint64_t inputWaitMaxUs;
+	uint64_t inputDeadlineMisses;
+	uint64_t telemetryClockFailures;
+	uint32_t inputWaitHistogram[
+	    NETPACKET_V2_INPUT_WAIT_HISTOGRAM_MAX_US + 2];
+	uint64_t inputPollSendCount;
+	uint64_t inputPollSendTotalUs;
+	uint64_t inputPollSendMaxUs;
+	uint64_t inputInsertions[2];
+	uint64_t inputLeadFramesTotal[2];
+	uint64_t inputLeadFramesMax[2];
+	uint64_t inputLeadUsTotal[2];
+	uint64_t inputLeadUsMax[2];
+	uint64_t lastInsertionFrame[2];
+	bool hasLastInsertionFrame[2];
 	uint64_t verificationMatches;
 	uint64_t audioFrames;
 	uint64_t audioSamples;
@@ -108,6 +136,8 @@ struct mLibretroNetpacketV2Checkpoint {
 	enum GBASavedataType saveType;
 	enum mRTCGenericType rtcType;
 	int64_t rtcValue;
+	enum mRTCGenericType restoreRtcType;
+	int64_t restoreRtcValue;
 	time_t cartridgeRtcLastLatch;
 	time_t cartridgeRtcOffset;
 	uint64_t frame;
@@ -149,6 +179,8 @@ struct mLibretroNetpacketV2Adapter {
 	bool verificationPending;
 	bool remoteVerificationReceived;
 	struct mLibretroNetpacketV2Checkpoint verifiedCheckpoint;
+	struct GBALinkV2RTCNormalization rtcNormalization;
+	bool rtcNormalizationValid;
 	uint64_t localSaveGeneration;
 	struct mLibretroNetpacketV2Metrics metrics;
 #ifdef M_LIBRETRO_NETPACKET_V2_TEST
@@ -164,6 +196,7 @@ static struct mLibretroNetpacketV2Adapter _adapter = {
 };
 
 static uint64_t _monotonicTimeMs(void* context);
+static bool _monotonicTimeUs(void* context, uint64_t* timestamp);
 static void _digestText(
 	const uint8_t digest[MGBA_SHA256_DIGEST_SIZE],
 	char text[MGBA_SHA256_DIGEST_SIZE * 2 + 1]);
@@ -200,8 +233,100 @@ static uint64_t _rendezvousPercentile(
 	return NETPACKET_V2_RENDEZVOUS_HISTOGRAM_MAX_MS;
 }
 
+static void _recordInputWait(
+		struct mLibretroNetpacketV2Adapter* adapter,
+		uint64_t durationUs) {
+	++adapter->metrics.inputWaitedFrames;
+	adapter->metrics.inputWaitTotalUs += durationUs;
+	if (durationUs > adapter->metrics.inputWaitMaxUs) {
+		adapter->metrics.inputWaitMaxUs = durationUs;
+	}
+	size_t bucket = durationUs > NETPACKET_V2_INPUT_WAIT_HISTOGRAM_MAX_US
+	    ? NETPACKET_V2_INPUT_WAIT_HISTOGRAM_MAX_US + 1
+	    : (size_t) durationUs;
+	++adapter->metrics.inputWaitHistogram[bucket];
+}
+
+static uint64_t _inputWaitPercentile(
+		const struct mLibretroNetpacketV2Adapter* adapter,
+		unsigned percentile) {
+	if (!adapter->metrics.inputWaitedFrames) {
+		return 0;
+	}
+	uint64_t target =
+	    (adapter->metrics.inputWaitedFrames * percentile + 99) / 100;
+	uint64_t seen = 0;
+	for (size_t i = 0;
+	     i <= NETPACKET_V2_INPUT_WAIT_HISTOGRAM_MAX_US + 1; ++i) {
+		seen += adapter->metrics.inputWaitHistogram[i];
+		if (seen >= target) {
+			return i;
+		}
+	}
+	return NETPACKET_V2_INPUT_WAIT_HISTOGRAM_MAX_US + 1;
+}
+
+static uint64_t _leadMicroseconds(uint64_t frames) {
+#if defined(__SIZEOF_INT128__)
+	__uint128_t value = (__uint128_t) frames * 280896 * 1000000;
+	return value / 16777216;
+#else
+	if (frames > UINT64_MAX / 280896) {
+		return UINT64_MAX;
+	}
+	uint64_t cycles = frames * 280896;
+	uint64_t seconds = cycles / 16777216;
+	uint64_t remainder = cycles % 16777216;
+	if (seconds > UINT64_MAX / 1000000) {
+		return UINT64_MAX;
+	}
+	return seconds * 1000000 + remainder * 1000000 / 16777216;
+#endif
+}
+
+static void _recordInputInsertions(
+		struct mLibretroNetpacketV2Adapter* adapter,
+		const struct GBALinkV2InputBatch* batch) {
+	if (!adapter || !batch || batch->player > 1 ||
+	    !adapter->runtimeInitialized) {
+		return;
+	}
+	uint8_t player = batch->player;
+	for (unsigned i = 0; i < batch->count; ++i) {
+		uint64_t frame = batch->records[i].frame;
+		if (frame < adapter->runtime.input.nextFrame ||
+		    (adapter->metrics.hasLastInsertionFrame[player] &&
+		     frame <= adapter->metrics.lastInsertionFrame[player])) {
+			continue;
+		}
+		uint64_t leadFrames = frame - adapter->runtime.input.nextFrame;
+		uint64_t leadUs = _leadMicroseconds(leadFrames);
+		++adapter->metrics.inputInsertions[player];
+		adapter->metrics.inputLeadFramesTotal[player] += leadFrames;
+		adapter->metrics.inputLeadUsTotal[player] += leadUs;
+		if (leadFrames > adapter->metrics.inputLeadFramesMax[player]) {
+			adapter->metrics.inputLeadFramesMax[player] = leadFrames;
+		}
+		if (leadUs > adapter->metrics.inputLeadUsMax[player]) {
+			adapter->metrics.inputLeadUsMax[player] = leadUs;
+		}
+		adapter->metrics.lastInsertionFrame[player] = frame;
+		adapter->metrics.hasLastInsertionFrame[player] = true;
+	}
+}
+
 static uint8_t _playerForRole(enum GBALinkRole role) {
 	return role == GBA_LINK_ROLE_HOST ? 0 : 1;
+}
+
+static bool _calibrationWirePacket(const void* data, size_t size) {
+	if (!data || size < GBA_LINK_V2_HEADER_SIZE) {
+		return false;
+	}
+	const uint8_t* bytes = data;
+	uint16_t type = bytes[6] | (uint16_t) bytes[7] << 8;
+	return type >= GBA_LINK_V2_MESSAGE_CALIBRATION_BEGIN &&
+	       type <= GBA_LINK_V2_MESSAGE_LATENCY_REPORT;
 }
 
 static void _log(enum retro_log_level level, const char* message) {
@@ -258,6 +383,50 @@ static uint64_t _monotonicTimeMs(void* context) {
 #endif
 }
 
+static bool _monotonicTimeUs(void* context, uint64_t* timestamp) {
+	UNUSED(context);
+	if (!timestamp) {
+		return false;
+	}
+#ifdef M_LIBRETRO_NETPACKET_V2_TEST
+	if (_adapter.testClockEnabled) {
+		if (_adapter.testNowMs > UINT64_MAX / 1000) {
+			return false;
+		}
+		*timestamp = _adapter.testNowMs * 1000;
+		return true;
+	}
+#endif
+#ifdef _WIN32
+	LARGE_INTEGER counter;
+	LARGE_INTEGER frequency;
+	if (!QueryPerformanceFrequency(&frequency) || frequency.QuadPart <= 0 ||
+	    !QueryPerformanceCounter(&counter) || counter.QuadPart < 0) {
+		return false;
+	}
+	uint64_t ticks = counter.QuadPart;
+	uint64_t frequencyValue = frequency.QuadPart;
+	uint64_t seconds = ticks / frequencyValue;
+	uint64_t remainder = ticks % frequencyValue;
+	if (seconds > UINT64_MAX / UINT64_C(1000000) ||
+	    remainder > UINT64_MAX / UINT64_C(1000000)) {
+		return false;
+	}
+	*timestamp = seconds * UINT64_C(1000000) +
+	             remainder * UINT64_C(1000000) / frequencyValue;
+	return true;
+#else
+	struct timespec now;
+	if (clock_gettime(CLOCK_MONOTONIC, &now) != 0 || now.tv_sec < 0 ||
+	    (uint64_t) now.tv_sec > UINT64_MAX / UINT64_C(1000000)) {
+		return false;
+	}
+	*timestamp = (uint64_t) now.tv_sec * UINT64_C(1000000) +
+	             (uint64_t) now.tv_nsec / 1000;
+	return true;
+#endif
+}
+
 static bool _sendReliable(
 	void* context, const void* data, size_t size, bool flush) {
 	struct mLibretroNetpacketV2Adapter* adapter = context;
@@ -279,6 +448,10 @@ static bool _sendReliable(
 	if (valid) {
 		++adapter->metrics.sentPackets;
 		adapter->metrics.sentBytes += size;
+		if (_calibrationWirePacket(data, size)) {
+			++adapter->metrics.calibrationSentPackets;
+			adapter->metrics.calibrationSentBytes += size;
+		}
 	}
 	return valid;
 }
@@ -381,6 +554,7 @@ static const struct GBALinkTransportVTable _transportVTable = {
 	.pollReceive = _pollReceive,
 	.yield = _yield,
 	.monotonicTimeMs = _monotonicTimeMs,
+	.monotonicTimeUs = _monotonicTimeUs,
 	.diagnostic = _diagnostic,
 	.stop = _transportStop,
 };
@@ -406,8 +580,32 @@ static enum GBAReplicaResult _captureReplica(
 	enum GBAReplicaEncoding encoding, uint32_t chunkSize,
 	struct GBAReplicaBundle* bundle) {
 	struct mLibretroNetpacketV2Adapter* adapter = context;
-	return GBAReplicaCapture(
+	if (!adapter->sessionConfig.deterministicCapabilities.contentRequiresRtc) {
+		return GBAReplicaCapture(
+		    adapter->core, player, generation, encoding, chunkSize, bundle);
+	}
+	struct GBALinkV2RTCNormalization normalization;
+	enum GBALinkV2RTCResult rtcResult = GBALinkV2RTCNormalize(
+	    &adapter->core->rtc, adapter->gba->video.frameCounter,
+	    adapter->core->frameCycles(adapter->core),
+	    adapter->core->frequency(adapter->core), &normalization);
+	if (rtcResult != GBA_LINK_V2_RTC_OK ||
+	    !GBALinkV2RTCApplyNormalized(
+	        &adapter->core->rtc, &normalization)) {
+		return GBA_REPLICA_UNSUPPORTED;
+	}
+	enum GBAReplicaResult result = GBAReplicaCapture(
 	    adapter->core, player, generation, encoding, chunkSize, bundle);
+	if (!GBALinkV2RTCRestoreOriginal(
+	        &adapter->core->rtc, &normalization)) {
+		GBAReplicaBundleDeinit(bundle);
+		return GBA_REPLICA_RESTORE_FAILED;
+	}
+	if (result == GBA_REPLICA_OK) {
+		adapter->rtcNormalization = normalization;
+		adapter->rtcNormalizationValid = true;
+	}
+	return result;
 }
 
 static void _checkpointDeinit(
@@ -453,6 +651,12 @@ static bool _captureLocalCheckpoint(
 	    replacement.saveBackingSize);
 	replacement.rtcType = core->rtc.override;
 	replacement.rtcValue = core->rtc.value;
+	replacement.restoreRtcType = adapter->rtcNormalizationValid
+	    ? adapter->rtcNormalization.originalType
+	    : core->rtc.override;
+	replacement.restoreRtcValue = adapter->rtcNormalizationValid
+	    ? adapter->rtcNormalization.originalValue
+	    : core->rtc.value;
 	replacement.cartridgeRtcLastLatch = gba->memory.hw.rtc.lastLatch;
 	replacement.cartridgeRtcOffset = gba->memory.hw.rtc.offset;
 	replacement.frame = frame;
@@ -567,8 +771,10 @@ static void _restoreVerifiedLocalState(
 		    adapter->verifiedCheckpoint.saveData,
 		    adapter->verifiedCheckpoint.saveSize);
 	}
-	adapter->core->rtc.override = adapter->verifiedCheckpoint.rtcType;
-	adapter->core->rtc.value = adapter->verifiedCheckpoint.rtcValue;
+	adapter->core->rtc.override =
+	    adapter->verifiedCheckpoint.restoreRtcType;
+	adapter->core->rtc.value =
+	    adapter->verifiedCheckpoint.restoreRtcValue;
 	adapter->gba->memory.hw.rtc.lastLatch =
 	    adapter->verifiedCheckpoint.cartridgeRtcLastLatch;
 	adapter->gba->memory.hw.rtc.offset =
@@ -721,6 +927,72 @@ static void _logRuntimeSummary(
 	    _rendezvousPercentile(adapter, 95),
 	    adapter->metrics.rendezvousMaxMs);
 	_log(RETRO_LOG_INFO, message);
+	uint64_t waitFreePpm = adapter->metrics.releasedFrames &&
+	                              adapter->metrics.inputWaitedFrames <=
+	                                  adapter->metrics.releasedFrames
+	    ? (adapter->metrics.releasedFrames -
+	       adapter->metrics.inputWaitedFrames) * UINT64_C(1000000) /
+	          adapter->metrics.releasedFrames
+	    : 0;
+	char inputTiming[448];
+	snprintf(inputTiming, sizeof(inputTiming),
+	    "%s input-wait P%u released=%" PRIu64 " waited=%" PRIu64
+	    " wait-free-ppm=%" PRIu64 " p95=%" PRIu64 "us max=%" PRIu64
+	    "us total=%" PRIu64 "us deadline-miss=%" PRIu64
+	    " clock-failure=%" PRIu64 " poll-send=%" PRIu64
+	    "/%" PRIu64 "/%" PRIu64 "us cal-pkt=%" PRIu64 "/%" PRIu64
+	    " cal-bytes=%" PRIu64 "/%" PRIu64 " queue-high=%zu",
+	    event ? event : "runtime", adapter->session.localRole,
+	    adapter->metrics.releasedFrames,
+	    adapter->metrics.inputWaitedFrames, waitFreePpm,
+	    _inputWaitPercentile(adapter, 95),
+	    adapter->metrics.inputWaitMaxUs,
+	    adapter->metrics.inputWaitTotalUs,
+	    adapter->metrics.inputDeadlineMisses,
+	    adapter->metrics.telemetryClockFailures,
+	    adapter->metrics.inputPollSendCount,
+	    adapter->metrics.inputPollSendCount
+	        ? adapter->metrics.inputPollSendTotalUs /
+	              adapter->metrics.inputPollSendCount
+	        : 0,
+	    adapter->metrics.inputPollSendMaxUs,
+	    adapter->metrics.calibrationSentPackets,
+	    adapter->metrics.calibrationReceivedPackets,
+	    adapter->metrics.calibrationSentBytes,
+	    adapter->metrics.calibrationReceivedBytes,
+	    adapter->metrics.queueHighWater);
+	_log(RETRO_LOG_INFO, inputTiming);
+	char inputLead[320];
+	snprintf(inputLead, sizeof(inputLead),
+	    "%s input-lead P%u inserts=%" PRIu64 "/%" PRIu64
+	    " frames-avg=%" PRIu64 "/%" PRIu64
+	    " frames-max=%" PRIu64 "/%" PRIu64
+	    " us-avg=%" PRIu64 "/%" PRIu64
+	    " us-max=%" PRIu64 "/%" PRIu64,
+	    event ? event : "runtime", adapter->session.localRole,
+	    adapter->metrics.inputInsertions[0],
+	    adapter->metrics.inputInsertions[1],
+	    adapter->metrics.inputInsertions[0]
+	        ? adapter->metrics.inputLeadFramesTotal[0] /
+	              adapter->metrics.inputInsertions[0]
+	        : 0,
+	    adapter->metrics.inputInsertions[1]
+	        ? adapter->metrics.inputLeadFramesTotal[1] /
+	              adapter->metrics.inputInsertions[1]
+	        : 0,
+	    adapter->metrics.inputLeadFramesMax[0],
+	    adapter->metrics.inputLeadFramesMax[1],
+	    adapter->metrics.inputInsertions[0]
+	        ? adapter->metrics.inputLeadUsTotal[0] /
+	              adapter->metrics.inputInsertions[0]
+	        : 0,
+	    adapter->metrics.inputInsertions[1]
+	        ? adapter->metrics.inputLeadUsTotal[1] /
+	              adapter->metrics.inputInsertions[1]
+	        : 0,
+	    adapter->metrics.inputLeadUsMax[0],
+	    adapter->metrics.inputLeadUsMax[1]);
+	_log(RETRO_LOG_INFO, inputLead);
 	_logLinkTestStatus(adapter, event);
 }
 
@@ -740,6 +1012,8 @@ static void _discardPair(void* context, bool committed) {
 	}
 	adapter->verificationPending = false;
 	adapter->remoteVerificationReceived = false;
+	adapter->rtcNormalizationValid = false;
+	memset(&adapter->rtcNormalization, 0, sizeof(adapter->rtcNormalization));
 	_checkpointDeinit(&adapter->verifiedCheckpoint);
 }
 
@@ -898,6 +1172,7 @@ static bool _runtimePacket(
 		    GBAReplicatedRuntimeResultName(result));
 		return false;
 	}
+	_recordInputInsertions(adapter, &packet->payload.inputBatch);
 	return true;
 }
 
@@ -943,6 +1218,9 @@ static bool _beginVerification(
 
 static void _failed(void* context, enum GBALinkV2Reason reason) {
 	struct mLibretroNetpacketV2Adapter* adapter = context;
+	if (reason == GBA_LINK_V2_REASON_INPUT_TIMEOUT) {
+		++adapter->metrics.inputDeadlineMisses;
+	}
 	char message[224];
 	snprintf(message, sizeof(message),
 	    "protocol-v2 session failed: reason=%u state=%s frame=%" PRIu64,
@@ -980,6 +1258,45 @@ static bool _cheatsEnabled(struct mCore* core) {
 	return false;
 }
 
+static enum GBALinkV2IdlePolicy _idlePolicy(const struct GBA* gba) {
+	switch (gba->idleOptimization) {
+	case IDLE_LOOP_REMOVE:
+		return GBA_LINK_V2_IDLE_REMOVE;
+	case IDLE_LOOP_DETECT:
+		return GBA_LINK_V2_IDLE_DETECT;
+	case IDLE_LOOP_IGNORE:
+	default:
+		return GBA_LINK_V2_IDLE_NONE;
+	}
+}
+
+static enum GBALinkV2ProductPolicy _productPolicy(
+	struct mLibretroNetpacketV2Adapter* adapter) {
+	struct retro_variable variable = {
+		.key = "mgba_link_netplay_latency",
+	};
+	if (adapter->environment && adapter->environment(
+	        RETRO_ENVIRONMENT_GET_VARIABLE, &variable) && variable.value &&
+	    !strcmp(variable.value, "low_latency")) {
+		return GBA_LINK_V2_PRODUCT_LOW_LATENCY;
+	}
+	return GBA_LINK_V2_PRODUCT_STABLE;
+}
+
+static bool _manualSolarControl(
+		struct mLibretroNetpacketV2Adapter* adapter) {
+	if (!adapter || !adapter->gba ||
+	    !(adapter->gba->memory.hw.devices & HW_LIGHT_SENSOR)) {
+		return false;
+	}
+	struct retro_variable variable = {
+		.key = "mgba_solar_sensor_level",
+	};
+	return adapter->environment && adapter->environment(
+	    RETRO_ENVIRONMENT_GET_VARIABLE, &variable) && variable.value &&
+	    strcmp(variable.value, "sensor");
+}
+
 static bool _buildConfig(
 	struct mLibretroNetpacketV2Adapter* adapter) {
 	memset(&adapter->sessionConfig, 0, sizeof(adapter->sessionConfig));
@@ -988,6 +1305,50 @@ static bool _buildConfig(
 	        adapter->core, &adapter->sessionConfig.identity)) {
 		return false;
 	}
+	struct GBALinkV2DeterminismProfileInput profile = {
+		.biosMode = adapter->gba->biosVf
+		    ? GBA_LINK_V2_BIOS_EXTERNAL
+		    : GBA_LINK_V2_BIOS_HLE,
+		.emulationCompatibilityVersion =
+		    GBA_REPLICA_EMULATION_COMPATIBILITY_VERSION,
+		.timingModelFlags =
+		    (adapter->core->opts.skipBios ? 1U : 0U) |
+		    (adapter->core->opts.useBios ? 2U : 0U),
+		.overclockQ16 = 0x10000,
+		.speedHackMask = 0,
+		.idlePolicy = _idlePolicy(adapter->gba),
+		.allowOpposingDirections = adapter->gba->allowOpposingDirections,
+		.rtcNormalizationPolicyVersion = 1,
+		.fakeEpochArithmeticVersion = 1,
+		.rtcSemanticsModelVersion = 1,
+		.cheatsEnabled = false,
+		.authoritativeInputFormatVersion = 1,
+		.cartridgeRequiredInputMask =
+		    GBALinkV2RequiredInputMaskForHardware(
+		        adapter->gba->memory.hw.devices,
+		        _manualSolarControl(adapter)),
+	};
+	if (profile.biosMode == GBA_LINK_V2_BIOS_EXTERNAL) {
+		sha256Buffer(adapter->gba->memory.bios, GBA_SIZE_BIOS,
+		    profile.biosSha256);
+	}
+	if (!GBALinkV2DeterminismProfileBuild(
+	        &profile, &adapter->sessionConfig.determinismProfile)) {
+		return false;
+	}
+	adapter->sessionConfig.cartridgeRequiredInputMask =
+	    profile.cartridgeRequiredInputMask;
+	adapter->sessionConfig.deterministicCapabilities =
+	    (struct GBALinkV2DeterminismCapabilities) {
+		.supportedRtcSourceMask = GBALinkV2SupportedRTCSourceMask(),
+		.timeSemanticsCapabilityMask = GBALinkV2HasSigned64BitTimeT()
+		    ? GBA_LINK_V2_TIME_SIGNED_64BIT_TIME_T_V1
+		    : 0,
+		.authoritativePlayerRtcSource = adapter->core->rtc.override,
+		.contentRequiresRtc =
+		    (adapter->gba->memory.hw.devices & HW_RTC) != 0,
+		.synchronizedInputCapabilityMask = GBA_LINK_V2_INPUT_DIGITAL,
+	};
 	adapter->sessionConfig.capabilities =
 	    GBA_LINK_V2_REQUIRED_CAPABILITIES;
 	adapter->sessionConfig.supportedEncodings =
@@ -996,7 +1357,12 @@ static bool _buildConfig(
 	    GBA_REPLICA_EMULATION_COMPATIBILITY_VERSION;
 	adapter->sessionConfig.maxChunkSize =
 	    GBA_REPLICA_DEFAULT_CHUNK_SIZE;
-	adapter->sessionConfig.minimumInputDelay = 2;
+	adapter->sessionConfig.productPolicy = _productPolicy(adapter);
+	adapter->sessionConfig.minimumInputDelay =
+	    adapter->sessionConfig.productPolicy ==
+	            GBA_LINK_V2_PRODUCT_LOW_LATENCY
+	        ? GBA_LINK_INPUT_LOW_LATENCY_FLOOR
+	        : GBA_LINK_INPUT_STABLE_FLOOR;
 	adapter->sessionConfig.maximumInputDelay = 8;
 	adapter->sessionConfig.estimatedJitterMs = 5;
 	adapter->sessionConfig.experimentalRuntime = true;
@@ -1128,6 +1494,10 @@ static void RETRO_CALLCONV _receive(
 	}
 	++_adapter.metrics.receivedPackets;
 	_adapter.metrics.receivedBytes += size;
+	if (_calibrationWirePacket(data, size)) {
+		++_adapter.metrics.calibrationReceivedPackets;
+		_adapter.metrics.calibrationReceivedBytes += size;
+	}
 	if (!_adapter.sessionPrepared &&
 	    ((_adapter.localId == 0 &&
 	      _adapter.remoteId == NETPACKET_V2_NO_CLIENT &&
@@ -1243,9 +1613,11 @@ bool mLibretroNetpacketV2Register(
 	retro_environment_t environment, struct mCore* core,
 	void* saveData, size_t saveCapacity) {
 	mLibretroNetpacketV2Unload();
+	uint64_t monotonicProbe;
 	if (!environment || !core || !core->platform ||
 	    core->platform(core) != mPLATFORM_GBA || !core->board ||
-	    !saveData || saveCapacity < GBA_SIZE_FLASH1M) {
+	    !saveData || saveCapacity < GBA_SIZE_FLASH1M ||
+	    !_monotonicTimeUs(NULL, &monotonicProbe)) {
 		return false;
 	}
 	_adapter.environment = environment;
@@ -1272,6 +1644,21 @@ static void _finishFailed(void) {
 	}
 }
 
+static bool _profileIdentityText(
+		const struct GBALinkV2DeterminismProfile* profile,
+		char text[MGBA_SHA256_DIGEST_SIZE * 2 + 1]) {
+	uint8_t encoded[GBA_LINK_V2_PROFILE_MAX_ENCODED_SIZE];
+	size_t size = 0;
+	uint8_t digest[MGBA_SHA256_DIGEST_SIZE];
+	if (!GBALinkV2DeterminismProfileEncode(
+	        profile, encoded, sizeof(encoded), &size)) {
+		return false;
+	}
+	sha256Buffer(encoded, size, digest);
+	_digestText(digest, text);
+	return true;
+}
+
 void mLibretroNetpacketV2RunBegin(void) {
 	_enterRendezvous(&_adapter);
 	if (_adapter.sessionPrepared &&
@@ -1289,13 +1676,59 @@ void mLibretroNetpacketV2RunBegin(void) {
 		_log(RETRO_LOG_INFO, message);
 		_frontendMessage(RETRO_LOG_INFO, message);
 		snprintf(message, sizeof(message),
-		    "attach P%u rtt=%ums jitter=%ums delay=%u rendezvous=%" PRIu64 "ms",
-		    _adapter.localId, _adapter.session.handshakeRoundTripMs,
-		    _adapter.session.config.estimatedJitterMs,
+		    "attach P%u policy=%u delay=%u calibration=%" PRIu64 "ms",
+		    _adapter.localId, _adapter.session.productPolicy,
 		    _adapter.session.inputDelay,
 		    _adapter.metrics.readyAtMs -
 		        _adapter.metrics.startedAtMs);
 		_log(RETRO_LOG_INFO, message);
+		char digest[MGBA_SHA256_DIGEST_SIZE * 2 + 1];
+		_digestText(_adapter.session.selection.digest, digest);
+		char calibration[384];
+		snprintf(calibration, sizeof(calibration),
+		    "calibration P%u provisional=%" PRIu64
+		    " generation=%" PRIu64 " samples=%u min=%" PRIu32
+		    "us p50=%" PRIu32 "us p95=%" PRIu32 "us max=%" PRIu32
+		    "us selector=%u floor=%u range=%u-%u delay=%u reason=%u"
+		    " digest=%s",
+		    _adapter.localId, _adapter.session.sessionId,
+		    _adapter.session.calibration.generation,
+		    GBA_LINK_CALIBRATION_SAMPLE_COUNT,
+		    _adapter.session.selection.minimumRttUs,
+		    _adapter.session.selection.p50RttUs,
+		    _adapter.session.selection.p95RttUs,
+		    _adapter.session.selection.maximumRttUs,
+		    GBA_LINK_INPUT_SELECTOR_POLICY_VERSION,
+		    _adapter.session.selection.productionFloor,
+		    _adapter.session.selection.overlappingMinimum,
+		    _adapter.session.selection.overlappingMaximum,
+		    _adapter.session.selection.selectedDelay,
+		    _adapter.session.selection.reason, digest);
+		_log(RETRO_LOG_INFO, calibration);
+		char profileDigest[MGBA_SHA256_DIGEST_SIZE * 2 + 1];
+		if (_profileIdentityText(
+		        &_adapter.session.config.determinismProfile,
+		        profileDigest)) {
+			char deterministic[320];
+			snprintf(deterministic, sizeof(deterministic),
+			    "determinism P%u profile=%s schema=%u records=%u"
+			    " rtc-source=%u rtc-sources=%08" PRIx32
+			    " time=%08" PRIx32 " required-input=%016" PRIx64
+			    " synchronized-input=%016" PRIx64,
+			    _adapter.localId, profileDigest,
+			    _adapter.session.config.determinismProfile.schemaVersion,
+			    _adapter.session.config.determinismProfile.recordCount,
+			    _adapter.session.config.deterministicCapabilities
+			        .authoritativePlayerRtcSource,
+			    _adapter.session.config.deterministicCapabilities
+			        .supportedRtcSourceMask,
+			    _adapter.session.config.deterministicCapabilities
+			        .timeSemanticsCapabilityMask,
+			    _adapter.session.config.cartridgeRequiredInputMask,
+			    _adapter.session.config.deterministicCapabilities
+			        .synchronizedInputCapabilityMask);
+			_log(RETRO_LOG_INFO, deterministic);
+		}
 	}
 	_finishFailed();
 }
@@ -1309,6 +1742,12 @@ bool mLibretroNetpacketV2OwnsExecution(void) {
 bool mLibretroNetpacketV2RunFrame(uint16_t keys) {
 	if (!mLibretroNetpacketV2OwnsExecution()) {
 		return false;
+	}
+	uint64_t inputSampledAtUs = 0;
+	bool inputSampleTimeValid =
+	    _monotonicTimeUs(&_adapter, &inputSampledAtUs);
+	if (!inputSampleTimeValid) {
+		++_adapter.metrics.telemetryClockFailures;
 	}
 	bool waited = _adapter.verificationPending;
 	uint64_t waitStarted = waited ? _monotonicTimeMs(&_adapter) : 0;
@@ -1358,10 +1797,30 @@ bool mLibretroNetpacketV2RunFrame(uint16_t keys) {
 				_finishFailed();
 				return false;
 			}
+			_recordInputInsertions(
+			    &_adapter, &packets[i].payload.inputBatch);
+		}
+		uint64_t sentAtUs;
+		if (inputSampleTimeValid &&
+		    _monotonicTimeUs(&_adapter, &sentAtUs) &&
+		    sentAtUs >= inputSampledAtUs) {
+			uint64_t duration = sentAtUs - inputSampledAtUs;
+			++_adapter.metrics.inputPollSendCount;
+			_adapter.metrics.inputPollSendTotalUs += duration;
+			if (duration > _adapter.metrics.inputPollSendMaxUs) {
+				_adapter.metrics.inputPollSendMaxUs = duration;
+			}
+		} else {
+			++_adapter.metrics.telemetryClockFailures;
 		}
 	}
 	waited = !GBAReplicatedRuntimeFrameReady(&_adapter.runtime);
-	waitStarted = waited ? _monotonicTimeMs(&_adapter) : 0;
+	uint64_t inputWaitStartedUs = 0;
+	bool inputWaitClockValid = !waited ||
+	    _monotonicTimeUs(&_adapter, &inputWaitStartedUs);
+	if (waited && !inputWaitClockValid) {
+		++_adapter.metrics.telemetryClockFailures;
+	}
 	while (mLibretroNetpacketV2OwnsExecution() &&
 	       !GBAReplicatedRuntimeFrameReady(&_adapter.runtime)) {
 		uint64_t generation = _adapter.callbackGeneration;
@@ -1383,9 +1842,16 @@ bool mLibretroNetpacketV2RunFrame(uint16_t keys) {
 		return false;
 	}
 	if (waited) {
-		uint64_t duration =
-		    _monotonicTimeMs(&_adapter) - waitStarted;
-		_recordRendezvous(&_adapter, duration);
+		uint64_t completedAtUs;
+		if (inputWaitClockValid &&
+		    _monotonicTimeUs(&_adapter, &completedAtUs) &&
+		    completedAtUs >= inputWaitStartedUs) {
+			uint64_t durationUs = completedAtUs - inputWaitStartedUs;
+			_recordInputWait(&_adapter, durationUs);
+			_recordRendezvous(&_adapter, (durationUs + 999) / 1000);
+		} else {
+			++_adapter.metrics.telemetryClockFailures;
+		}
 	}
 	GBALinkV2SessionRuntimeDeadlineSatisfied(
 	    &_adapter.session, GBA_LINK_V2_DEADLINE_INPUT);
@@ -1440,6 +1906,7 @@ bool mLibretroNetpacketV2RunFrame(uint16_t keys) {
 		_finishFailed();
 		return false;
 	}
+	++_adapter.metrics.releasedFrames;
 	GBAReplicatedPairDrainShadowAudio(
 	    &_adapter.pair,
 	    _playerForRole(_adapter.session.localRole));
@@ -1538,6 +2005,22 @@ bool mLibretroNetpacketV2RejectOperation(const char* operation) {
 	return true;
 }
 
+bool mLibretroNetpacketV2RejectLatencyPolicyChange(const char* value) {
+	if (!mLibretroNetpacketV2SessionActive() || !value ||
+	    !_adapter.sessionPrepared) {
+		return false;
+	}
+	enum GBALinkV2ProductPolicy requested =
+	    !strcmp(value, "low_latency")
+	        ? GBA_LINK_V2_PRODUCT_LOW_LATENCY
+	        : GBA_LINK_V2_PRODUCT_STABLE;
+	if (requested == _adapter.sessionConfig.productPolicy) {
+		return false;
+	}
+	return mLibretroNetpacketV2RejectOperation(
+	    "Changing latency policy");
+}
+
 #ifdef M_LIBRETRO_NETPACKET_V2_TEST
 bool mLibretroNetpacketV2TestPollReceive(void) {
 	return _adapter.sessionPrepared &&
@@ -1632,5 +2115,36 @@ void mLibretroNetpacketV2TestFail(enum GBALinkV2Reason reason) {
 		    &_adapter.session, reason, "injected test teardown");
 		_finishFailed();
 	}
+}
+
+bool mLibretroNetpacketV2TestGetMetrics(
+		struct mLibretroNetpacketV2TestMetrics* metrics) {
+	if (!metrics) {
+		return false;
+	}
+	struct GBAReplicatedPairMetrics pairMetrics;
+	memset(&pairMetrics, 0, sizeof(pairMetrics));
+	if (_adapter.pairInitialized) {
+		GBAReplicatedPairGetMetrics(&_adapter.pair, &pairMetrics);
+	}
+	*metrics = (struct mLibretroNetpacketV2TestMetrics) {
+		.selectedDelay = _adapter.session.inputDelay,
+		.productPolicy = _adapter.session.productPolicy,
+		.releasedFrames = _adapter.metrics.releasedFrames,
+		.inputWaitedFrames = _adapter.metrics.inputWaitedFrames,
+		.inputWaitP95Us = _inputWaitPercentile(&_adapter, 95),
+		.inputWaitMaxUs = _adapter.metrics.inputWaitMaxUs,
+		.inputDeadlineMisses = _adapter.metrics.inputDeadlineMisses,
+		.telemetryClockFailures = _adapter.metrics.telemetryClockFailures,
+		.inputPollSendCount = _adapter.metrics.inputPollSendCount,
+		.inputInsertions = {
+			_adapter.metrics.inputInsertions[0],
+			_adapter.metrics.inputInsertions[1],
+		},
+		.cableTransferStarts = pairMetrics.transferStarts,
+		.cableTransferCompletions = pairMetrics.transferCompletions,
+		.cableTransferredWords = pairMetrics.transferredWords,
+	};
+	return true;
 }
 #endif

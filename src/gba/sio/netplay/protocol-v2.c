@@ -109,18 +109,23 @@ static bool _readBoolean(struct GBALinkV2Reader* reader, bool* value) {
 
 static bool _validType(enum GBALinkV2MessageType type) {
 	return type >= GBA_LINK_V2_MESSAGE_HELLO &&
-	       type <= GBA_LINK_V2_MESSAGE_REJECT;
+	       type <= GBA_LINK_V2_MESSAGE_LATENCY_REPORT;
 }
 
 static bool _validReason(enum GBALinkV2Reason reason) {
 	return reason >= GBA_LINK_V2_REASON_PROTOCOL_MISMATCH &&
-	       reason <= GBA_LINK_V2_REASON_DIVERGENCE;
+	       reason <= GBA_LINK_V2_REASON_CHEATS_ENABLED;
 }
 
-static bool _preSessionType(enum GBALinkV2MessageType type) {
-	return type == GBA_LINK_V2_MESSAGE_HELLO ||
-	       type == GBA_LINK_V2_MESSAGE_ACCEPT ||
-	       type == GBA_LINK_V2_MESSAGE_REJECT;
+static bool _validSessionId(
+	enum GBALinkV2MessageType type, uint64_t sessionId) {
+	if (type == GBA_LINK_V2_MESSAGE_HELLO) {
+		return !sessionId;
+	}
+	if (type == GBA_LINK_V2_MESSAGE_REJECT) {
+		return true;
+	}
+	return sessionId != 0;
 }
 
 bool GBALinkV2MessageAllowsRole(
@@ -140,12 +145,17 @@ bool GBALinkV2MessageAllowsRole(
 	case GBA_LINK_V2_MESSAGE_REJECT:
 		return true;
 	case GBA_LINK_V2_MESSAGE_ACCEPT:
+	case GBA_LINK_V2_MESSAGE_CALIBRATION_BEGIN:
 	case GBA_LINK_V2_MESSAGE_SESSION_READY:
 	case GBA_LINK_V2_MESSAGE_INPUT_WINDOW:
 		return role == GBA_LINK_ROLE_HOST;
 	case GBA_LINK_V2_MESSAGE_ACCEPT_ACK:
 	case GBA_LINK_V2_MESSAGE_SESSION_READY_ACK:
 		return role == GBA_LINK_ROLE_CLIENT;
+	case GBA_LINK_V2_MESSAGE_LATENCY_PROBE:
+	case GBA_LINK_V2_MESSAGE_LATENCY_ACK:
+	case GBA_LINK_V2_MESSAGE_LATENCY_REPORT:
+		return true;
 	}
 	return false;
 }
@@ -166,14 +176,20 @@ const char* GBALinkV2MessageTypeName(enum GBALinkV2MessageType type) {
 	case GBA_LINK_V2_MESSAGE_DETACH: return "DETACH";
 	case GBA_LINK_V2_MESSAGE_DETACH_ACK: return "DETACH_ACK";
 	case GBA_LINK_V2_MESSAGE_REJECT: return "REJECT";
+	case GBA_LINK_V2_MESSAGE_CALIBRATION_BEGIN: return "CALIBRATION_BEGIN";
+	case GBA_LINK_V2_MESSAGE_LATENCY_PROBE: return "LATENCY_PROBE";
+	case GBA_LINK_V2_MESSAGE_LATENCY_ACK: return "LATENCY_ACK";
+	case GBA_LINK_V2_MESSAGE_LATENCY_REPORT: return "LATENCY_REPORT";
 	}
 	return "(unknown)";
 }
 
 static size_t _payloadSize(const struct GBALinkV2Packet* packet) {
 	switch (packet->header.type) {
-	case GBA_LINK_V2_MESSAGE_HELLO: return 68;
-	case GBA_LINK_V2_MESSAGE_ACCEPT: return 40;
+	case GBA_LINK_V2_MESSAGE_HELLO:
+		return 104 + GBALinkV2DeterminismProfileEncodedSize(
+		                 &packet->payload.hello.profile);
+	case GBA_LINK_V2_MESSAGE_ACCEPT: return 100;
 	case GBA_LINK_V2_MESSAGE_ACCEPT_ACK: return 16;
 	case GBA_LINK_V2_MESSAGE_REPLICA_MANIFEST:
 		return 16 + GBA_REPLICA_MANIFEST_SIZE;
@@ -181,7 +197,7 @@ static size_t _payloadSize(const struct GBALinkV2Packet* packet) {
 		return 24 + packet->payload.replicaChunk.size;
 	case GBA_LINK_V2_MESSAGE_REPLICA_INSTALLED: return 80;
 	case GBA_LINK_V2_MESSAGE_SESSION_READY:
-	case GBA_LINK_V2_MESSAGE_SESSION_READY_ACK: return 88;
+	case GBA_LINK_V2_MESSAGE_SESSION_READY_ACK: return 156;
 	case GBA_LINK_V2_MESSAGE_INPUT_WINDOW: return 24;
 	case GBA_LINK_V2_MESSAGE_INPUT_BATCH:
 		return 16 + (size_t) packet->payload.inputBatch.count * 16;
@@ -189,6 +205,10 @@ static size_t _payloadSize(const struct GBALinkV2Packet* packet) {
 	case GBA_LINK_V2_MESSAGE_DETACH:
 	case GBA_LINK_V2_MESSAGE_DETACH_ACK:
 	case GBA_LINK_V2_MESSAGE_REJECT: return 16;
+	case GBA_LINK_V2_MESSAGE_CALIBRATION_BEGIN: return 40;
+	case GBA_LINK_V2_MESSAGE_LATENCY_PROBE:
+	case GBA_LINK_V2_MESSAGE_LATENCY_ACK: return 16;
+	case GBA_LINK_V2_MESSAGE_LATENCY_REPORT: return 68;
 	}
 	return 0;
 }
@@ -209,7 +229,41 @@ static bool _validHello(const struct GBALinkV2Hello* hello) {
 	       hello->supportedEncodings &&
 	       !(hello->supportedEncodings & ~encodings) &&
 	       hello->minimumInputDelay <= hello->maximumInputDelay &&
-	       hello->maximumInputDelay <= GBA_LINK_V2_MAX_INPUT_DELAY;
+	       hello->maximumInputDelay <= GBA_LINK_V2_MAX_INPUT_DELAY &&
+	       hello->connectionNonce &&
+	       (hello->productPolicy == GBA_LINK_V2_PRODUCT_STABLE ||
+	        hello->productPolicy == GBA_LINK_V2_PRODUCT_LOW_LATENCY) &&
+	       hello->minimumInputDelay >=
+	           (hello->productPolicy == GBA_LINK_V2_PRODUCT_STABLE
+	                ? GBA_LINK_INPUT_STABLE_FLOOR
+	                : GBA_LINK_INPUT_LOW_LATENCY_FLOOR) &&
+	       GBALinkV2DeterminismProfileValidate(&hello->profile) &&
+	       GBALinkV2DeterminismCapabilitiesValidate(
+	           &hello->deterministicCapabilities);
+}
+
+static bool _validSummary(
+	const struct GBALinkV2CalibrationSummary* summary,
+	uint16_t inputDelay, enum GBALinkV2ProductPolicy productPolicy) {
+	uint16_t floor = productPolicy == GBA_LINK_V2_PRODUCT_STABLE
+	    ? GBA_LINK_INPUT_STABLE_FLOOR
+	    : GBA_LINK_INPUT_LOW_LATENCY_FLOOR;
+	return summary->generation &&
+	       summary->selectorPolicyVersion ==
+	           GBA_LINK_INPUT_SELECTOR_POLICY_VERSION &&
+	       summary->minimumRttUs <= summary->p50RttUs &&
+	       summary->p50RttUs <= summary->p95RttUs &&
+	       summary->p95RttUs <= summary->maximumRttUs &&
+	       summary->maximumRttUs <= GBA_LINK_CALIBRATION_MAX_SAMPLE_US &&
+	       summary->overlappingMinimum <= summary->overlappingMaximum &&
+	       summary->overlappingMaximum <= GBA_LINK_V2_MAX_INPUT_DELAY &&
+	       summary->productionFloor == floor &&
+	       inputDelay >= summary->overlappingMinimum &&
+	       inputDelay >= summary->productionFloor &&
+	       inputDelay <= summary->overlappingMaximum &&
+	       (summary->selectionReason == GBA_LINK_V2_SELECTION_CALIBRATED ||
+	        summary->selectionReason ==
+	            GBA_LINK_V2_SELECTION_RAISED_TO_MINIMUM);
 }
 
 static bool _validOwner(uint8_t player, enum GBALinkRole senderRole) {
@@ -223,7 +277,7 @@ static bool _validatePacket(
 	    !GBALinkV2MessageAllowsRole(packet->header.type, senderRole)) {
 		return false;
 	}
-	if (_preSessionType(packet->header.type) != !packet->header.sessionId) {
+	if (!_validSessionId(packet->header.type, packet->header.sessionId)) {
 		return false;
 	}
 	switch (packet->header.type) {
@@ -239,7 +293,12 @@ static bool _validatePacket(
 		       accept->selectedChunkSize <= GBA_REPLICA_MAX_CHUNK_SIZE &&
 		       (accept->selectedEncoding == GBA_REPLICA_ENCODING_NONE ||
 		        accept->selectedEncoding == GBA_REPLICA_ENCODING_DEFLATE) &&
-		       accept->inputDelay <= GBA_LINK_V2_MAX_INPUT_DELAY;
+		       accept->inputDelay <= GBA_LINK_V2_MAX_INPUT_DELAY &&
+		       accept->proposedSessionId == packet->header.sessionId &&
+		       (accept->productPolicy == GBA_LINK_V2_PRODUCT_STABLE ||
+		        accept->productPolicy == GBA_LINK_V2_PRODUCT_LOW_LATENCY) &&
+		       _validSummary(&accept->calibration, accept->inputDelay,
+		           accept->productPolicy);
 	}
 	case GBA_LINK_V2_MESSAGE_ACCEPT_ACK:
 		return packet->payload.acceptAck.acceptedSessionId ==
@@ -279,7 +338,11 @@ static bool _validatePacket(
 		       ready->policy ==
 		           (GBA_LINK_V2_READY_EXACT_ROM |
 		            GBA_LINK_V2_READY_FIXED_DELAY |
-		            GBA_LINK_V2_READY_BILATERAL_INSTALL);
+		            GBA_LINK_V2_READY_BILATERAL_INSTALL) &&
+		       (ready->productPolicy == GBA_LINK_V2_PRODUCT_STABLE ||
+		        ready->productPolicy == GBA_LINK_V2_PRODUCT_LOW_LATENCY) &&
+		       _validSummary(&ready->calibration, ready->inputDelay,
+		           ready->productPolicy);
 	}
 	case GBA_LINK_V2_MESSAGE_INPUT_WINDOW:
 		return packet->payload.inputWindow.snapshotGeneration &&
@@ -310,6 +373,51 @@ static bool _validatePacket(
 	case GBA_LINK_V2_MESSAGE_DETACH_ACK:
 	case GBA_LINK_V2_MESSAGE_REJECT:
 		return _validReason(packet->payload.reason.reason);
+	case GBA_LINK_V2_MESSAGE_CALIBRATION_BEGIN: {
+		const struct GBALinkV2CalibrationBegin* begin =
+		    &packet->payload.calibrationBegin;
+		return begin->generation && begin->hostConnectionNonce &&
+		       begin->clientConnectionNonce &&
+		       begin->probeCount == GBA_LINK_CALIBRATION_PROBES_PER_ROLE &&
+		       begin->unit == GBA_LINK_INPUT_LATENCY_UNIT_MICROSECONDS &&
+		       begin->calibrationPolicyVersion ==
+		           GBA_LINK_CALIBRATION_POLICY_VERSION &&
+		       begin->selectorPolicyVersion ==
+		           GBA_LINK_INPUT_SELECTOR_POLICY_VERSION;
+	}
+	case GBA_LINK_V2_MESSAGE_LATENCY_PROBE:
+	case GBA_LINK_V2_MESSAGE_LATENCY_ACK: {
+		const struct GBALinkV2LatencyProbe* probe =
+		    packet->header.type == GBA_LINK_V2_MESSAGE_LATENCY_PROBE
+		        ? &packet->payload.latencyProbe
+		        : &packet->payload.latencyAck;
+		bool senderIsOrigin = probe->originRole == senderRole;
+		return probe->generation && probe->ordinal <
+		           GBA_LINK_CALIBRATION_PROBES_PER_ROLE &&
+		       probe->unit == GBA_LINK_INPUT_LATENCY_UNIT_MICROSECONDS &&
+		       (probe->originRole == GBA_LINK_ROLE_HOST ||
+		        probe->originRole == GBA_LINK_ROLE_CLIENT) &&
+		       (packet->header.type == GBA_LINK_V2_MESSAGE_LATENCY_PROBE
+		            ? senderIsOrigin
+		            : !senderIsOrigin);
+	}
+	case GBA_LINK_V2_MESSAGE_LATENCY_REPORT: {
+		const struct GBALinkV2LatencyReport* report =
+		    &packet->payload.latencyReport;
+		if (!report->generation || report->originRole != senderRole ||
+		    report->sampleCount != GBA_LINK_CALIBRATION_PROBES_PER_ROLE ||
+		    report->unit != GBA_LINK_INPUT_LATENCY_UNIT_MICROSECONDS ||
+		    report->calibrationPolicyVersion !=
+		        GBA_LINK_CALIBRATION_POLICY_VERSION) {
+			return false;
+		}
+		for (unsigned i = 0; i < GBA_LINK_CALIBRATION_PROBES_PER_ROLE; ++i) {
+			if (report->samples[i] > GBA_LINK_CALIBRATION_MAX_SAMPLE_US) {
+				return false;
+			}
+		}
+		return true;
+	}
 	}
 	return false;
 }
@@ -324,6 +432,36 @@ size_t GBALinkV2PacketEncodedSize(const struct GBALinkV2Packet* packet) {
 		return 0;
 	}
 	return GBA_LINK_V2_HEADER_SIZE + payload;
+}
+
+static void _encodeProfile(
+	struct GBALinkV2Writer* writer,
+	const struct GBALinkV2DeterminismProfile* profile) {
+	_write16(writer, profile->schemaVersion);
+	_write16(writer, profile->recordCount);
+	for (unsigned i = 0; i < profile->recordCount; ++i) {
+		_write16(writer, profile->records[i].category);
+		_write16(writer, profile->records[i].flags);
+		_writeBytes(writer, profile->records[i].digest,
+		    sizeof(profile->records[i].digest));
+	}
+}
+
+static void _encodeSummary(
+	struct GBALinkV2Writer* writer,
+	const struct GBALinkV2CalibrationSummary* summary) {
+	_write64(writer, summary->generation);
+	_writeBytes(writer, summary->vectorDigest, sizeof(summary->vectorDigest));
+	_write32(writer, summary->selectorPolicyVersion);
+	_write32(writer, summary->minimumRttUs);
+	_write32(writer, summary->p50RttUs);
+	_write32(writer, summary->p95RttUs);
+	_write32(writer, summary->maximumRttUs);
+	_write16(writer, summary->overlappingMinimum);
+	_write16(writer, summary->overlappingMaximum);
+	_write16(writer, summary->productionFloor);
+	_write8(writer, summary->selectionReason);
+	_write8(writer, 0);
 }
 
 static void _encodePayload(
@@ -343,6 +481,21 @@ static void _encodePayload(
 		_write16(writer, value->maximumInputDelay);
 		_write8(writer, value->experimentalRuntime);
 		_writeZeroes(writer, 5);
+		_write64(writer, value->connectionNonce);
+		_write8(writer, value->productPolicy);
+		_writeZeroes(writer, 3);
+		_encodeProfile(writer, &value->profile);
+		_write32(writer,
+		    value->deterministicCapabilities.supportedRtcSourceMask);
+		_write32(writer,
+		    value->deterministicCapabilities.timeSemanticsCapabilityMask);
+		_write32(writer,
+		    value->deterministicCapabilities.authoritativePlayerRtcSource);
+		_write8(writer,
+		    value->deterministicCapabilities.contentRequiresRtc);
+		_writeZeroes(writer, 3);
+		_write64(writer,
+		    value->deterministicCapabilities.synchronizedInputCapabilityMask);
 		break;
 	}
 	case GBA_LINK_V2_MESSAGE_ACCEPT: {
@@ -354,9 +507,9 @@ static void _encodePayload(
 		_write32(writer, value->runtimeCompatibilityVersion);
 		_write32(writer, value->selectedChunkSize);
 		_write8(writer, value->selectedEncoding);
-		_write8(writer, 0);
+		_write8(writer, value->productPolicy);
 		_write16(writer, value->inputDelay);
-		_writeZeroes(writer, 8);
+		_encodeSummary(writer, &value->calibration);
 		break;
 	}
 	case GBA_LINK_V2_MESSAGE_ACCEPT_ACK:
@@ -393,7 +546,9 @@ static void _encodePayload(
 		_write64(writer, packet->payload.sessionReady.firstFrame);
 		_write32(writer, packet->payload.sessionReady.policy);
 		_write16(writer, packet->payload.sessionReady.inputDelay);
-		_writeZeroes(writer, 2);
+		_write8(writer, packet->payload.sessionReady.productPolicy);
+		_writeZeroes(writer, 1);
+		_encodeSummary(writer, &packet->payload.sessionReady.calibration);
 		_writeBytes(writer, packet->payload.sessionReady.playerDigests,
 		    sizeof(packet->payload.sessionReady.playerDigests));
 		break;
@@ -430,6 +585,45 @@ static void _encodePayload(
 		_write16(writer, packet->payload.reason.reason);
 		_writeZeroes(writer, 6);
 		break;
+	case GBA_LINK_V2_MESSAGE_CALIBRATION_BEGIN:
+		_write64(writer, packet->payload.calibrationBegin.generation);
+		_write64(writer,
+		    packet->payload.calibrationBegin.hostConnectionNonce);
+		_write64(writer,
+		    packet->payload.calibrationBegin.clientConnectionNonce);
+		_write16(writer, packet->payload.calibrationBegin.probeCount);
+		_write16(writer, packet->payload.calibrationBegin.unit);
+		_write32(writer,
+		    packet->payload.calibrationBegin.calibrationPolicyVersion);
+		_write32(writer,
+		    packet->payload.calibrationBegin.selectorPolicyVersion);
+		_writeZeroes(writer, 4);
+		break;
+	case GBA_LINK_V2_MESSAGE_LATENCY_PROBE:
+	case GBA_LINK_V2_MESSAGE_LATENCY_ACK: {
+		const struct GBALinkV2LatencyProbe* value =
+		    packet->header.type == GBA_LINK_V2_MESSAGE_LATENCY_PROBE
+		        ? &packet->payload.latencyProbe
+		        : &packet->payload.latencyAck;
+		_write64(writer, value->generation);
+		_write8(writer, value->originRole);
+		_write8(writer, value->ordinal);
+		_write16(writer, value->unit);
+		_writeZeroes(writer, 4);
+		break;
+	}
+	case GBA_LINK_V2_MESSAGE_LATENCY_REPORT:
+		_write64(writer, packet->payload.latencyReport.generation);
+		_write8(writer, packet->payload.latencyReport.originRole);
+		_write8(writer, packet->payload.latencyReport.sampleCount);
+		_write16(writer, packet->payload.latencyReport.unit);
+		_write32(writer,
+		    packet->payload.latencyReport.calibrationPolicyVersion);
+		for (unsigned i = 0; i < GBA_LINK_CALIBRATION_PROBES_PER_ROLE; ++i) {
+			_write32(writer, packet->payload.latencyReport.samples[i]);
+		}
+		_writeZeroes(writer, 4);
+		break;
 	}
 }
 
@@ -465,6 +659,42 @@ bool GBALinkV2PacketEncode(
 	return true;
 }
 
+static bool _decodeProfile(
+	struct GBALinkV2Reader* reader,
+	struct GBALinkV2DeterminismProfile* profile) {
+	profile->schemaVersion = _read16(reader);
+	profile->recordCount = _read16(reader);
+	if (!reader->valid ||
+	    profile->recordCount > GBA_LINK_V2_PROFILE_MAX_RECORDS) {
+		return false;
+	}
+	for (unsigned i = 0; i < profile->recordCount; ++i) {
+		profile->records[i].category = _read16(reader);
+		profile->records[i].flags = _read16(reader);
+		_readBytes(reader, profile->records[i].digest,
+		    sizeof(profile->records[i].digest));
+	}
+	return reader->valid && GBALinkV2DeterminismProfileValidate(profile);
+}
+
+static bool _decodeSummary(
+	struct GBALinkV2Reader* reader,
+	struct GBALinkV2CalibrationSummary* summary, bool* reserved) {
+	summary->generation = _read64(reader);
+	_readBytes(reader, summary->vectorDigest, sizeof(summary->vectorDigest));
+	summary->selectorPolicyVersion = _read32(reader);
+	summary->minimumRttUs = _read32(reader);
+	summary->p50RttUs = _read32(reader);
+	summary->p95RttUs = _read32(reader);
+	summary->maximumRttUs = _read32(reader);
+	summary->overlappingMinimum = _read16(reader);
+	summary->overlappingMaximum = _read16(reader);
+	summary->productionFloor = _read16(reader);
+	summary->selectionReason = _read8(reader);
+	*reserved &= !_read8(reader);
+	return reader->valid;
+}
+
 static enum GBALinkDecodeStatus _decodePayload(
 	struct GBALinkV2Reader* reader, struct GBALinkV2Packet* packet) {
 	bool reserved = true;
@@ -484,6 +714,21 @@ static enum GBALinkDecodeStatus _decodePayload(
 		value->maximumInputDelay = _read16(reader);
 		canonical &= _readBoolean(reader, &value->experimentalRuntime);
 		reserved &= _readZeroes(reader, 5);
+		value->connectionNonce = _read64(reader);
+		value->productPolicy = _read8(reader);
+		reserved &= _readZeroes(reader, 3);
+		canonical &= _decodeProfile(reader, &value->profile);
+		value->deterministicCapabilities.supportedRtcSourceMask =
+		    _read32(reader);
+		value->deterministicCapabilities.timeSemanticsCapabilityMask =
+		    _read32(reader);
+		value->deterministicCapabilities.authoritativePlayerRtcSource =
+		    _read32(reader);
+		canonical &= _readBoolean(reader,
+		    &value->deterministicCapabilities.contentRequiresRtc);
+		reserved &= _readZeroes(reader, 3);
+		value->deterministicCapabilities.synchronizedInputCapabilityMask =
+		    _read64(reader);
 		break;
 	}
 	case GBA_LINK_V2_MESSAGE_ACCEPT: {
@@ -495,9 +740,9 @@ static enum GBALinkDecodeStatus _decodePayload(
 		value->runtimeCompatibilityVersion = _read32(reader);
 		value->selectedChunkSize = _read32(reader);
 		value->selectedEncoding = _read8(reader);
-		reserved &= !_read8(reader);
+		value->productPolicy = _read8(reader);
 		value->inputDelay = _read16(reader);
-		reserved &= _readZeroes(reader, 8);
+		canonical &= _decodeSummary(reader, &value->calibration, &reserved);
 		break;
 	}
 	case GBA_LINK_V2_MESSAGE_ACCEPT_ACK:
@@ -538,7 +783,10 @@ static enum GBALinkDecodeStatus _decodePayload(
 		packet->payload.sessionReady.firstFrame = _read64(reader);
 		packet->payload.sessionReady.policy = _read32(reader);
 		packet->payload.sessionReady.inputDelay = _read16(reader);
-		reserved &= _readZeroes(reader, 2);
+		packet->payload.sessionReady.productPolicy = _read8(reader);
+		reserved &= _readZeroes(reader, 1);
+		canonical &= _decodeSummary(
+		    reader, &packet->payload.sessionReady.calibration, &reserved);
 		_readBytes(reader, packet->payload.sessionReady.playerDigests,
 		    sizeof(packet->payload.sessionReady.playerDigests));
 		break;
@@ -577,6 +825,43 @@ static enum GBALinkDecodeStatus _decodePayload(
 		packet->payload.reason.snapshotGeneration = _read64(reader);
 		packet->payload.reason.reason = _read16(reader);
 		reserved &= _readZeroes(reader, 6);
+		break;
+	case GBA_LINK_V2_MESSAGE_CALIBRATION_BEGIN:
+		packet->payload.calibrationBegin.generation = _read64(reader);
+		packet->payload.calibrationBegin.hostConnectionNonce = _read64(reader);
+		packet->payload.calibrationBegin.clientConnectionNonce = _read64(reader);
+		packet->payload.calibrationBegin.probeCount = _read16(reader);
+		packet->payload.calibrationBegin.unit = _read16(reader);
+		packet->payload.calibrationBegin.calibrationPolicyVersion =
+		    _read32(reader);
+		packet->payload.calibrationBegin.selectorPolicyVersion =
+		    _read32(reader);
+		reserved &= _readZeroes(reader, 4);
+		break;
+	case GBA_LINK_V2_MESSAGE_LATENCY_PROBE:
+	case GBA_LINK_V2_MESSAGE_LATENCY_ACK: {
+		struct GBALinkV2LatencyProbe* value =
+		    packet->header.type == GBA_LINK_V2_MESSAGE_LATENCY_PROBE
+		        ? &packet->payload.latencyProbe
+		        : &packet->payload.latencyAck;
+		value->generation = _read64(reader);
+		value->originRole = _read8(reader);
+		value->ordinal = _read8(reader);
+		value->unit = _read16(reader);
+		reserved &= _readZeroes(reader, 4);
+		break;
+	}
+	case GBA_LINK_V2_MESSAGE_LATENCY_REPORT:
+		packet->payload.latencyReport.generation = _read64(reader);
+		packet->payload.latencyReport.originRole = _read8(reader);
+		packet->payload.latencyReport.sampleCount = _read8(reader);
+		packet->payload.latencyReport.unit = _read16(reader);
+		packet->payload.latencyReport.calibrationPolicyVersion =
+		    _read32(reader);
+		for (unsigned i = 0; i < GBA_LINK_CALIBRATION_PROBES_PER_ROLE; ++i) {
+			packet->payload.latencyReport.samples[i] = _read32(reader);
+		}
+		reserved &= _readZeroes(reader, 4);
 		break;
 	}
 	if (!reader->valid) {
@@ -632,13 +917,14 @@ enum GBALinkDecodeStatus GBALinkV2PacketDecode(
 	if (payloadSize != size - GBA_LINK_V2_HEADER_SIZE) {
 		return GBA_LINK_DECODE_LENGTH;
 	}
-	if (_preSessionType(decoded.header.type) != !decoded.header.sessionId) {
+	if (!_validSessionId(decoded.header.type, decoded.header.sessionId)) {
 		return GBA_LINK_DECODE_SESSION;
 	}
 	if (!decoded.header.packetSequence) {
 		return GBA_LINK_DECODE_SEQUENCE;
 	}
-	if (decoded.header.type != GBA_LINK_V2_MESSAGE_REPLICA_CHUNK &&
+	if (decoded.header.type != GBA_LINK_V2_MESSAGE_HELLO &&
+	    decoded.header.type != GBA_LINK_V2_MESSAGE_REPLICA_CHUNK &&
 	    decoded.header.type != GBA_LINK_V2_MESSAGE_INPUT_BATCH &&
 	    _payloadSize(&decoded) != payloadSize) {
 		return GBA_LINK_DECODE_LENGTH;

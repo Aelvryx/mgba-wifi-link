@@ -5,6 +5,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include <mgba/internal/gba/sio/netplay/input-sync.h>
 
+#include <mgba-util/sha256.h>
+
 const char* GBALinkInputResultName(enum GBALinkInputResult result) {
 	switch (result) {
 	case GBA_LINK_INPUT_OK: return "ok";
@@ -41,6 +43,133 @@ uint16_t GBALinkInputSelectDelay(
 		frames = maximum;
 	}
 	return frames;
+}
+
+static void _digest16(struct SHA256Context* context, uint16_t value) {
+	uint8_t bytes[] = { value, value >> 8 };
+	sha256Update(context, bytes, sizeof(bytes));
+}
+
+static void _digest32(struct SHA256Context* context, uint32_t value) {
+	uint8_t bytes[] = {
+		value, value >> 8, value >> 16, value >> 24,
+	};
+	sha256Update(context, bytes, sizeof(bytes));
+}
+
+static void _digest64(struct SHA256Context* context, uint64_t value) {
+	_digest32(context, value);
+	_digest32(context, value >> 32);
+}
+
+bool GBALinkInputCalibrationDigest(
+	const struct GBALinkInputCalibration* calibration,
+	uint8_t digest[MGBA_SHA256_DIGEST_SIZE]) {
+	if (!calibration || !digest || !calibration->hostConnectionNonce ||
+	    !calibration->clientConnectionNonce ||
+	    !calibration->provisionalSessionId || !calibration->generation ||
+	    calibration->calibrationPolicyVersion !=
+	        GBA_LINK_CALIBRATION_POLICY_VERSION ||
+	    calibration->selectorPolicyVersion !=
+	        GBA_LINK_INPUT_SELECTOR_POLICY_VERSION) {
+		return false;
+	}
+	for (unsigned i = 0; i < GBA_LINK_CALIBRATION_SAMPLE_COUNT; ++i) {
+		if (calibration->samples[i] >
+		    GBA_LINK_CALIBRATION_MAX_SAMPLE_US) {
+			return false;
+		}
+	}
+	static const char protocol[] = "mgba-gba-link-replicated-v2";
+	static const char domain[] = "latency-calibration-vector-v1";
+	struct SHA256Context context;
+	sha256Init(&context);
+	sha256Update(&context, protocol, sizeof(protocol));
+	sha256Update(&context, domain, sizeof(domain));
+	_digest64(&context, calibration->hostConnectionNonce);
+	_digest64(&context, calibration->clientConnectionNonce);
+	_digest64(&context, calibration->provisionalSessionId);
+	_digest64(&context, calibration->generation);
+	_digest32(&context, calibration->calibrationPolicyVersion);
+	_digest32(&context, calibration->selectorPolicyVersion);
+	_digest16(&context, GBA_LINK_CALIBRATION_SAMPLE_COUNT);
+	_digest16(&context, GBA_LINK_INPUT_LATENCY_UNIT_MICROSECONDS);
+	for (unsigned i = 0; i < GBA_LINK_CALIBRATION_SAMPLE_COUNT; ++i) {
+		_digest32(&context, calibration->samples[i]);
+	}
+	sha256Finalize(digest, &context);
+	return true;
+}
+
+static void _sortSamples(uint32_t samples[GBA_LINK_CALIBRATION_SAMPLE_COUNT]) {
+	for (unsigned i = 1; i < GBA_LINK_CALIBRATION_SAMPLE_COUNT; ++i) {
+		uint32_t value = samples[i];
+		unsigned j = i;
+		while (j && samples[j - 1] > value) {
+			samples[j] = samples[j - 1];
+			--j;
+		}
+		samples[j] = value;
+	}
+}
+
+enum GBALinkInputSelectionResult GBALinkInputSelectCalibratedDelay(
+	const struct GBALinkInputCalibration* calibration,
+	uint16_t overlappingMinimum, uint16_t overlappingMaximum,
+	uint16_t productionFloor, struct GBALinkInputSelection* selection) {
+	if (!calibration || !selection || !productionFloor ||
+	    overlappingMinimum > overlappingMaximum ||
+	    overlappingMaximum > GBA_LINK_V2_MAX_INPUT_DELAY ||
+	    productionFloor > overlappingMaximum) {
+		return GBA_LINK_INPUT_SELECTION_INVALID_ARGUMENT;
+	}
+	struct GBALinkInputSelection result = {
+		.overlappingMinimum = overlappingMinimum,
+		.overlappingMaximum = overlappingMaximum,
+		.productionFloor = productionFloor,
+	};
+	if (!GBALinkInputCalibrationDigest(calibration, result.digest)) {
+		return GBA_LINK_INPUT_SELECTION_INVALID_ARGUMENT;
+	}
+	uint32_t sorted[GBA_LINK_CALIBRATION_SAMPLE_COUNT];
+	memcpy(sorted, calibration->samples, sizeof(sorted));
+	_sortSamples(sorted);
+	result.minimumRttUs = sorted[0];
+	result.p50RttUs = sorted[11];
+	result.p95RttUs = sorted[22];
+	result.maximumRttUs = sorted[23];
+
+	uint64_t base = ((uint64_t) result.minimumRttUs + 1) / 2;
+	uint64_t variation = result.p95RttUs - result.minimumRttUs;
+	uint64_t budget = base + variation + 1000;
+	if (budget > UINT32_MAX ||
+	    budget > UINT64_MAX / UINT64_C(16777216)) {
+		return GBA_LINK_INPUT_SELECTION_ARITHMETIC;
+	}
+	uint64_t numerator = budget * UINT64_C(16777216);
+	const uint64_t denominator = UINT64_C(280896) * UINT64_C(1000000);
+	uint64_t candidate = numerator / denominator;
+	if (numerator % denominator) {
+		++candidate;
+	}
+	if (!candidate) {
+		candidate = 1;
+	}
+	uint16_t minimum = overlappingMinimum > productionFloor
+	    ? overlappingMinimum
+	    : productionFloor;
+	result.reason = GBA_LINK_INPUT_SELECTION_CALIBRATED;
+	if (candidate < minimum) {
+		candidate = minimum;
+		result.reason = GBA_LINK_INPUT_SELECTION_RAISED_TO_MINIMUM;
+	}
+	if (candidate > overlappingMaximum) {
+		return GBA_LINK_INPUT_SELECTION_OUT_OF_RANGE;
+	}
+	result.budgetUs = budget;
+	result.selectedDelay = candidate;
+	*selection = result;
+	return GBA_LINK_INPUT_SELECTION_OK;
 }
 
 bool GBALinkInputSyncInit(

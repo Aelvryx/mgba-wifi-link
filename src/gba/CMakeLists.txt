@@ -44,6 +44,7 @@ set(NETPLAY_FILES
 	sio/netplay/input-sync.c
 	sio/netplay/protocol.c
 	sio/netplay/protocol-v2.c
+	sio/netplay/rtc-sync.c
 	sio/netplay/session.c
 	sio/netplay/session-v2.c
 	sio/netplay/timeline.c
@@ -73,6 +74,7 @@ set(TEST_FILES
 	test/netplay-integration.c
 	test/netplay-protocol.c
 	test/netplay-protocol-v2.c
+	test/netplay-rtc-sync.c
 	test/netplay-session.c
 	test/netplay-session-v2.c
 	test/netplay-transport.c

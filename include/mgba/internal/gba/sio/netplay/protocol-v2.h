@@ -9,6 +9,7 @@
 #include <mgba-util/common.h>
 
 #include <mgba/internal/gba/replica.h>
+#include <mgba/internal/gba/sio/netplay/identity.h>
 #include <mgba/internal/gba/sio/netplay/protocol.h>
 
 CXX_GUARD_START
@@ -16,13 +17,22 @@ CXX_GUARD_START
 #define GBA_LINK_V2_PROTOCOL_NAME "mgba-gba-link-replicated-v2"
 #define GBA_LINK_V2_PROTOCOL_MAGIC 0x32524C47
 #define GBA_LINK_V2_PROTOCOL_VERSION 2
-#define GBA_LINK_V2_RUNTIME_COMPATIBILITY_VERSION 1
+#define GBA_LINK_V2_RUNTIME_COMPATIBILITY_VERSION 2
 #define GBA_LINK_V2_HEADER_SIZE 32
 #define GBA_LINK_V2_MAX_PACKET_SIZE \
 	(GBA_LINK_V2_HEADER_SIZE + 24 + GBA_REPLICA_MAX_CHUNK_SIZE)
 #define GBA_LINK_V2_MAX_INPUT_RECORDS 16
 #define GBA_LINK_V2_INPUT_KEY_MASK 0x03FF
 #define GBA_LINK_V2_MAX_INPUT_DELAY 15
+#define GBA_LINK_CALIBRATION_PROBES_PER_ROLE 12
+#define GBA_LINK_CALIBRATION_SAMPLE_COUNT \
+	(GBA_LINK_CALIBRATION_PROBES_PER_ROLE * 2)
+#define GBA_LINK_CALIBRATION_MAX_SAMPLE_US 1000000
+#define GBA_LINK_CALIBRATION_POLICY_VERSION 1
+#define GBA_LINK_INPUT_SELECTOR_POLICY_VERSION 1
+#define GBA_LINK_INPUT_LATENCY_UNIT_MICROSECONDS 1
+#define GBA_LINK_INPUT_STABLE_FLOOR 2
+#define GBA_LINK_INPUT_LOW_LATENCY_FLOOR 1
 
 enum GBALinkV2Capability {
 	GBA_LINK_V2_CAPABILITY_REPLICATED_PAIR = 1 << 0,
@@ -58,6 +68,20 @@ enum GBALinkV2MessageType {
 	GBA_LINK_V2_MESSAGE_DETACH = 12,
 	GBA_LINK_V2_MESSAGE_DETACH_ACK = 13,
 	GBA_LINK_V2_MESSAGE_REJECT = 14,
+	GBA_LINK_V2_MESSAGE_CALIBRATION_BEGIN = 15,
+	GBA_LINK_V2_MESSAGE_LATENCY_PROBE = 16,
+	GBA_LINK_V2_MESSAGE_LATENCY_ACK = 17,
+	GBA_LINK_V2_MESSAGE_LATENCY_REPORT = 18,
+};
+
+enum GBALinkV2ProductPolicy {
+	GBA_LINK_V2_PRODUCT_STABLE = 1,
+	GBA_LINK_V2_PRODUCT_LOW_LATENCY = 2,
+};
+
+enum GBALinkV2SelectionReason {
+	GBA_LINK_V2_SELECTION_CALIBRATED = 1,
+	GBA_LINK_V2_SELECTION_RAISED_TO_MINIMUM = 2,
 };
 
 enum GBALinkV2EncodingMask {
@@ -94,6 +118,21 @@ enum GBALinkV2Reason {
 	GBA_LINK_V2_REASON_INPUT_CONFLICT = 20,
 	GBA_LINK_V2_REASON_VERIFICATION_TIMEOUT = 21,
 	GBA_LINK_V2_REASON_DIVERGENCE = 22,
+	GBA_LINK_V2_REASON_PROFILE_SCHEMA = 23,
+	GBA_LINK_V2_REASON_PROFILE_CATEGORY = 24,
+	GBA_LINK_V2_REASON_RTC_TIME_SEMANTICS = 25,
+	GBA_LINK_V2_REASON_RTC_NORMALIZATION = 26,
+	GBA_LINK_V2_REASON_RTC_SOURCE = 27,
+	GBA_LINK_V2_REASON_EXTERNAL_INPUT = 28,
+	GBA_LINK_V2_REASON_CALIBRATION_TIMEOUT = 29,
+	GBA_LINK_V2_REASON_CALIBRATION_FIELD = 30,
+	GBA_LINK_V2_REASON_CALIBRATION_IDENTITY = 31,
+	GBA_LINK_V2_REASON_CALIBRATION_CLOCK_FAILURE = 32,
+	GBA_LINK_V2_REASON_ACCEPT_TIMEOUT = 33,
+	GBA_LINK_V2_REASON_ACCEPT_CLOCK_FAILURE = 34,
+	GBA_LINK_V2_REASON_POLICY_MISMATCH = 35,
+	GBA_LINK_V2_REASON_CALIBRATED_TARGET_OUT_OF_RANGE = 36,
+	GBA_LINK_V2_REASON_CHEATS_ENABLED = 37,
 };
 
 struct GBALinkV2Header {
@@ -114,6 +153,24 @@ struct GBALinkV2Hello {
 	uint16_t minimumInputDelay;
 	uint16_t maximumInputDelay;
 	bool experimentalRuntime;
+	uint64_t connectionNonce;
+	enum GBALinkV2ProductPolicy productPolicy;
+	struct GBALinkV2DeterminismProfile profile;
+	struct GBALinkV2DeterminismCapabilities deterministicCapabilities;
+};
+
+struct GBALinkV2CalibrationSummary {
+	uint64_t generation;
+	uint8_t vectorDigest[MGBA_SHA256_DIGEST_SIZE];
+	uint32_t selectorPolicyVersion;
+	uint32_t minimumRttUs;
+	uint32_t p50RttUs;
+	uint32_t p95RttUs;
+	uint32_t maximumRttUs;
+	uint16_t overlappingMinimum;
+	uint16_t overlappingMaximum;
+	uint16_t productionFloor;
+	enum GBALinkV2SelectionReason selectionReason;
 };
 
 struct GBALinkV2Accept {
@@ -125,6 +182,8 @@ struct GBALinkV2Accept {
 	uint32_t selectedChunkSize;
 	enum GBAReplicaEncoding selectedEncoding;
 	uint16_t inputDelay;
+	enum GBALinkV2ProductPolicy productPolicy;
+	struct GBALinkV2CalibrationSummary calibration;
 };
 
 struct GBALinkV2AcceptAck {
@@ -157,7 +216,35 @@ struct GBALinkV2SessionReady {
 	uint64_t firstFrame;
 	uint32_t policy;
 	uint16_t inputDelay;
+	enum GBALinkV2ProductPolicy productPolicy;
+	struct GBALinkV2CalibrationSummary calibration;
 	uint8_t playerDigests[2][MGBA_SHA256_DIGEST_SIZE];
+};
+
+struct GBALinkV2CalibrationBegin {
+	uint64_t generation;
+	uint64_t hostConnectionNonce;
+	uint64_t clientConnectionNonce;
+	uint16_t probeCount;
+	uint16_t unit;
+	uint32_t calibrationPolicyVersion;
+	uint32_t selectorPolicyVersion;
+};
+
+struct GBALinkV2LatencyProbe {
+	uint64_t generation;
+	enum GBALinkRole originRole;
+	uint8_t ordinal;
+	uint16_t unit;
+};
+
+struct GBALinkV2LatencyReport {
+	uint64_t generation;
+	enum GBALinkRole originRole;
+	uint8_t sampleCount;
+	uint16_t unit;
+	uint32_t calibrationPolicyVersion;
+	uint32_t samples[GBA_LINK_CALIBRATION_PROBES_PER_ROLE];
 };
 
 struct GBALinkV2InputWindow {
@@ -204,6 +291,10 @@ struct GBALinkV2Packet {
 		struct GBALinkV2InputWindow inputWindow;
 		struct GBALinkV2InputBatch inputBatch;
 		struct GBALinkV2StateCheck stateCheck;
+		struct GBALinkV2CalibrationBegin calibrationBegin;
+		struct GBALinkV2LatencyProbe latencyProbe;
+		struct GBALinkV2LatencyProbe latencyAck;
+		struct GBALinkV2LatencyReport latencyReport;
 		struct GBALinkV2ReasonPayload reason;
 	} payload;
 };

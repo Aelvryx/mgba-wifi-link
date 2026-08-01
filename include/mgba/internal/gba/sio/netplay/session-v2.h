@@ -9,6 +9,7 @@
 #include <mgba-util/common.h>
 
 #include <mgba/internal/gba/sio/netplay/identity.h>
+#include <mgba/internal/gba/sio/netplay/input-sync.h>
 #include <mgba/internal/gba/sio/netplay/protocol-v2.h>
 #include <mgba/internal/gba/sio/netplay/transport.h>
 
@@ -18,6 +19,11 @@ enum GBALinkV2SessionState {
 	GBA_LINK_V2_SESSION_DISCONNECTED,
 	GBA_LINK_V2_SESSION_WAIT_QUIESCENT,
 	GBA_LINK_V2_SESSION_HELLO,
+	GBA_LINK_V2_SESSION_CALIBRATION_BEGIN_WAIT,
+	GBA_LINK_V2_SESSION_HOST_PROBES,
+	GBA_LINK_V2_SESSION_CLIENT_PROBES,
+	GBA_LINK_V2_SESSION_WAIT_ACCEPT,
+	GBA_LINK_V2_SESSION_CALIBRATED,
 	GBA_LINK_V2_SESSION_ACCEPTED,
 	GBA_LINK_V2_SESSION_REPLICA_EXCHANGE,
 	GBA_LINK_V2_SESSION_INSTALLING,
@@ -30,6 +36,8 @@ enum GBALinkV2DeadlineOperation {
 	GBA_LINK_V2_DEADLINE_NONE,
 	GBA_LINK_V2_DEADLINE_QUIESCENT,
 	GBA_LINK_V2_DEADLINE_HANDSHAKE,
+	GBA_LINK_V2_DEADLINE_CALIBRATION,
+	GBA_LINK_V2_DEADLINE_ACCEPT,
 	GBA_LINK_V2_DEADLINE_MANIFEST,
 	GBA_LINK_V2_DEADLINE_CHUNKS,
 	GBA_LINK_V2_DEADLINE_INSTALL,
@@ -71,6 +79,10 @@ struct GBALinkV2SessionConfig {
 	uint16_t maximumInputDelay;
 	uint32_t estimatedJitterMs;
 	bool experimentalRuntime;
+	enum GBALinkV2ProductPolicy productPolicy;
+	struct GBALinkV2DeterminismProfile determinismProfile;
+	struct GBALinkV2DeterminismCapabilities deterministicCapabilities;
+	uint64_t cartridgeRequiredInputMask;
 	struct GBALinkV2DeadlinePolicy deadlines;
 	const struct GBALinkV2SessionCallbacks* callbacks;
 	void* callbackContext;
@@ -90,6 +102,7 @@ struct GBALinkV2Session {
 	enum GBALinkV2DeadlineOperation deadlineOperation;
 	struct GBALinkV2Hello localHello;
 	struct GBALinkV2Hello remoteHello;
+	struct GBALinkV2Packet lastRemoteCalibrationPacket;
 	struct GBAReplicaBundle localBundle;
 	struct GBAReplicaAssembler remoteAssembler;
 	struct GBAReplicaManifest manifests[2];
@@ -102,7 +115,23 @@ struct GBALinkV2Session {
 	uint16_t inputDelay;
 	uint32_t handshakeRoundTripMs;
 	uint64_t acceptSentAtMs;
+	uint64_t calibrationDeadlineAtUs;
+	uint64_t acceptDeadlineAtUs;
 	uint64_t firstFrame;
+	struct GBALinkInputCalibration calibration;
+	struct GBALinkInputSelection selection;
+	uint64_t probeStartedAtUs;
+	uint8_t nextProbeOrdinal;
+	uint8_t nextRemoteProbeOrdinal;
+	enum GBALinkV2ProductPolicy productPolicy;
+	uint16_t productionFloor;
+	bool probeOutstanding;
+	bool calibrationDeadlineActive;
+	bool acceptDeadlineActive;
+	bool hostReportReceived;
+	bool clientReportReceived;
+	bool remoteHelloReceived;
+	bool lastRemoteCalibrationValid;
 	bool configured;
 	bool paused;
 	bool localCaptured;

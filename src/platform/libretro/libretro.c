@@ -571,6 +571,17 @@ void retro_run(void) {
 	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated) {
 		envVarsUpdated = true;
 
+		struct retro_variable latencyVar = {
+			.key = "mgba_link_netplay_latency",
+			.value = 0
+		};
+		if (environCallback(
+		        RETRO_ENVIRONMENT_GET_VARIABLE, &latencyVar) &&
+		    latencyVar.value) {
+			mLibretroNetpacketV2RejectLatencyPolicyChange(
+			    latencyVar.value);
+		}
+
 		struct retro_variable var = {
 			.key = "mgba_allow_opposing_directions",
 			.value = 0

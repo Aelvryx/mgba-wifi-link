@@ -170,6 +170,20 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       "0"
    },
    {
+      "mgba_link_netplay_latency",
+      "GBA Link Netplay Latency",
+      NULL,
+      "Selects the immutable frame-input buffer for replicated GBA link netplay. Stable uses a two-frame minimum. Low Latency permits one frame only on qualified builds and may pause briefly when Wi-Fi input arrives late.",
+      NULL,
+      "system",
+      {
+         { "stable",      "Auto (Stable)" },
+         { "low_latency", "Auto (Low Latency, Experimental)" },
+         { NULL, NULL },
+      },
+      "stable"
+   },
+   {
       "mgba_sgb_borders",
       "Use Super Game Boy Borders (Restart)",
       NULL,

@@ -98,6 +98,6 @@
 - [x] 8.1 Update compatibility, validation, protocol/runtime, trace-schema, and provenance documentation with the no-change result, regression mapping, hashes, and physical outcome.
 - [x] 8.2 Not applicable — no observer, trace schema, or comparator was introduced; privacy/content exclusions remain documented.
 - [x] 8.3 Reconcile every conditional/not-applicable task with evidence and do not count a discovery-screen dwell as successful qualification.
-- [ ] 8.4 Run strict OpenSpec validation and the exact-head CI matrix.
+- [x] 8.4 Run strict OpenSpec validation and the exact-head CI matrix; GitHub Actions run `30696592911` passed all six jobs.
 - [x] 8.5 Present the baseline proposal, Android qualification tooling, test-only topology regression, and result documentation as independently reviewable commits; diagnostic infrastructure, reviewed-delta, and Stage B commits are not applicable.
-- [ ] 8.6 Request final focused independent review before merging or publishing a replacement alpha.
+- [x] 8.6 Open draft PR #4 with the baseline-success evidence and request focused independent review before merging or publishing a replacement alpha.

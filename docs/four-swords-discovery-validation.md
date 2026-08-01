@@ -22,10 +22,13 @@ delta-requirement review at task 4.9.
 
 The exact artifact above was hash-verified in each app-specific staging
 directory. The stock Android release package does not allow ADB to read the
-loaded private core path directly, so the private manifest records that limit
-alongside the pre-run embedded alpha.2 identity, live frontend version, device
-identity, and configuration digests rather than inventing an installed-file
-hash.
+loaded private core path directly. The completed run recorded that limitation
+textually rather than inventing a hash. The hardened v2 manifest makes the
+contract machine-readable as `installed_core_sha256: null` with reason
+`APP_PRIVATE_PATH_UNREADABLE`. A human-owned Core Information record supplies
+the loaded embedded identity; automation validates its evidence digest, the
+staged artifact's embedded commit/version, the runtime-loaded app-private path,
+and protocol-v2 registration. These are separate custody facts.
 
 ## Private qualification boundary
 
@@ -126,5 +129,8 @@ Odin: Ayn Odin (Xbox Mode) configured in port 1.
 
 The checked workflow is
 `tools/four-swords-discovery/android-qualification.sh`. Future physical runs
-must use its controller gate and must not compensate for a transient virtual
-device by changing a joypad index.
+must use its hardened latest-effective-assignment gate, which explicitly
+rejects `Virtual` on port 1, and must not compensate for a transient virtual
+device by changing a joypad index. The successful baseline evidence was
+manually checked for the same endpoint-specific records; helper hardening does
+not alter or require repeating that gameplay result.

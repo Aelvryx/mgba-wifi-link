@@ -1,5 +1,5 @@
 {
-  "schema": "mgba-four-swords-discovery-run-v1",
+  "schema": "mgba-four-swords-discovery-run-v2",
   "run_id": "YYYYMMDD-HHMMSS-alpha2-four-swords",
   "purpose": "topology-settled alpha.2 Four Swords discovery retest",
   "source": {
@@ -10,34 +10,58 @@
   "core": {
     "path": "build-android-v2-reviewed-arm64/mgba_libretro.so",
     "sha256": "14978106a3978ab4ef6ec025add82e0e9a38decda72404e3dc8c02b3373f179d",
+    "embedded_version": "0.11-feature/wifi-link-netplay-v2-9146-c9b181aa2",
     "size_bytes": 8043736,
     "abi": "AArch64",
     "minimum_android_api": 21
   },
   "frontend": {
     "name": "RetroArch",
-    "version": "1.22.2_GIT",
+    "version": "1.22.2",
+    "git": "69a4f0e",
+    "package_version": "1.22.2_GIT",
     "package": "com.retroarch.aarch64",
-    "configuration_digest": "FILL_WITH_SHA256"
+    "configuration_note": "Per-device configuration hashes are recorded below."
   },
   "devices": [
     {
+      "name": "thor",
       "role": "host",
       "serial": "FILL_WITH_ADB_SERIAL",
       "model": "FILL_WITH_MODEL",
       "android_version": "FILL_WITH_VERSION",
-      "installed_core_sha256": "FILL_WITH_SHA256"
+      "expected_controller": "Ayn Odin",
+      "configuration_sha256": "FILL_WITH_SHA256",
+      "save_sha256": "FILL_WITH_SHA256",
+      "staged_core_sha256": "14978106a3978ab4ef6ec025add82e0e9a38decda72404e3dc8c02b3373f179d",
+      "installed_core_sha256": null,
+      "installed_core_sha256_reason": "APP_PRIVATE_PATH_UNREADABLE",
+      "loaded_core_identity": "0.11-feature/wifi-link-netplay-v2-9146-c9b181aa2",
+      "loaded_core_identity_method": "RETROARCH_CORE_INFORMATION_SCREEN",
+      "loaded_core_identity_evidence": "screenshots/thor-installed-core-identity.png",
+      "loaded_core_identity_evidence_sha256": "FILL_WITH_SHA256"
     },
     {
+      "name": "odin",
       "role": "client",
       "serial": "FILL_WITH_ADB_SERIAL",
       "model": "FILL_WITH_MODEL",
       "android_version": "FILL_WITH_VERSION",
-      "installed_core_sha256": "FILL_WITH_SHA256"
+      "expected_controller": "Ayn Odin (Xbox Mode)",
+      "configuration_sha256": "FILL_WITH_SHA256",
+      "save_sha256": "FILL_WITH_SHA256",
+      "staged_core_sha256": "14978106a3978ab4ef6ec025add82e0e9a38decda72404e3dc8c02b3373f179d",
+      "installed_core_sha256": null,
+      "installed_core_sha256_reason": "APP_PRIVATE_PATH_UNREADABLE",
+      "loaded_core_identity": "0.11-feature/wifi-link-netplay-v2-9146-c9b181aa2",
+      "loaded_core_identity_method": "RETROARCH_CORE_INFORMATION_SCREEN",
+      "loaded_core_identity_evidence": "screenshots/odin-installed-core-identity.png",
+      "loaded_core_identity_evidence_sha256": "FILL_WITH_SHA256"
     }
   ],
   "private_inputs": {
-    "rom_identity_digest": "FILL_WITH_APPROVED_DIGEST",
+    "rom_identity_digest": "aa0cc276932c99f27f16f8d9a1d8ca08f9729e1b986848286200e3dc7b8b025e",
+    "content_crc32": "0x8e91cd13",
     "host_initial_state_digest": "UNAVAILABLE_OR_SHA256",
     "client_initial_state_digest": "UNAVAILABLE_OR_SHA256",
     "host_save_digest": "UNAVAILABLE_OR_SHA256",

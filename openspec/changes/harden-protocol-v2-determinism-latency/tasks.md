@@ -116,7 +116,7 @@
 - [x] 11.3 Run the focused TSan suite over calibration, callbacks, session, replicated pair, and teardown paths.
 - [x] 11.4 Run the complete normal mGBA test suite and compare the pinned upstream baseline exception separately.
 - [x] 11.5 Reproduce the CC0 link and RTC fixtures plus analyzer outputs from source with the pinned toolchain.
-- [ ] 11.6 Build and inspect the Android ARM64 libretro shared object in CI.
+- [x] 11.6 Build and inspect the Android ARM64 libretro shared object in CI.
 - [ ] 11.7 Obtain focused independent review of the deterministic profile, RTC policy, external-input rejection, selector mathematics, session transitions, and test evidence before physical release qualification.
 
 ## 12. Exact-device latency qualification

@@ -229,7 +229,7 @@ enum GBAReplicatedPairResult GBAReplicatedPairSetInputs(
 
 static void _recordTrace(
 	struct GBAReplicatedPair* pair, unsigned playerId) {
-	struct GBASerializedState* state = malloc(sizeof(*state));
+	struct GBASerializedState* state = calloc(1, sizeof(*state));
 	if (!state) {
 		memset(pair->stateTrace[playerId], 0,
 		    sizeof(pair->stateTrace[playerId]));

@@ -259,6 +259,52 @@ M_TEST_DEFINE(installsCanonicalP0P1LocalLockstepPair) {
 	_deinitFixture(&fixture);
 }
 
+M_TEST_DEFINE(detachedMultiSnapshotsExposeAttachedLinesBeforeExecution) {
+	struct PairFixture fixture;
+	_initFixture(&fixture);
+	for (unsigned player = 0; player < 2; ++player) {
+		struct GBA* source = fixture.sources[player]->board;
+		GBASIOWriteRCNT(&source->sio, 0);
+		GBASIOWriteSIOCNT(&source->sio, 0x2000);
+		assert_int_equal(source->sio.mode, GBA_SIO_MULTI);
+		assert_true(GBASIOMultiplayerIsSlave(source->sio.siocnt));
+		assert_int_equal(
+		    GBASIOMultiplayerGetId(source->sio.siocnt), 0);
+		_recapturePlayer(&fixture, player);
+	}
+
+	struct GBAReplicatedPair pair;
+	_install(&pair, &fixture);
+	for (unsigned player = 0; player < 2; ++player) {
+		struct GBA* gba = pair.players[player].core->board;
+		assert_int_equal(gba->sio.mode, GBA_SIO_MULTI);
+		assert_false(GBASIOMultiplayerIsBusy(gba->sio.siocnt));
+		assert_true(GBASIOMultiplayerIsReady(gba->sio.siocnt));
+		assert_int_equal(
+		    GBASIOMultiplayerGetId(gba->sio.siocnt), player);
+		if (player) {
+			assert_true(GBASIOMultiplayerIsSlave(gba->sio.siocnt));
+			assert_true(GBASIORegisterRCNTIsSi(gba->sio.rcnt));
+		} else {
+			assert_false(GBASIOMultiplayerIsSlave(gba->sio.siocnt));
+			assert_false(GBASIORegisterRCNTIsSi(gba->sio.rcnt));
+		}
+		assert_true(GBASIORegisterRCNTIsSd(gba->sio.rcnt));
+		assert_true(GBASIORegisterRCNTIsSc(gba->sio.rcnt));
+		assert_false(mTimingIsScheduled(
+		    &gba->timing, &gba->sio.completeEvent));
+		unsigned lockstepId = pair.players[player].driver.lockstepId;
+		struct GBASIOLockstepPlayer* lockstep = TableLookup(
+		    &pair.coordinator.players, lockstepId);
+		assert_non_null(lockstep);
+		assert_null(lockstep->queue);
+		assert_int_equal(lockstep->otherModes[0], GBA_SIO_MULTI);
+		assert_int_equal(lockstep->otherModes[1], GBA_SIO_MULTI);
+	}
+	GBAReplicatedPairStop(&pair);
+	_deinitFixture(&fixture);
+}
+
 M_TEST_DEFINE(frameInputsAdvanceExactlyOnceAndRejectConflicts) {
 	struct PairFixture fixture;
 	_initFixture(&fixture);
@@ -758,6 +804,8 @@ M_TEST_DEFINE(invalidBundleOrderFailsWithoutPartialLifetime) {
 
 M_TEST_SUITE_DEFINE_SETUP_TEARDOWN(GBAReplicatedPair,
 	cmocka_unit_test(installsCanonicalP0P1LocalLockstepPair),
+	cmocka_unit_test(
+	    detachedMultiSnapshotsExposeAttachedLinesBeforeExecution),
 	cmocka_unit_test(frameInputsAdvanceExactlyOnceAndRejectConflicts),
 	cmocka_unit_test(frameFailureRetainsSchedulerDiagnostics),
 	cmocka_unit_test(staggeredSnapshotFramesDoNotOvershootLogicalFrames),

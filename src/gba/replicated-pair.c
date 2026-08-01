@@ -190,7 +190,8 @@ enum GBAReplicatedPairResult GBAReplicatedPairInstall(
 	}
 	if (GBASIOLockstepCoordinatorAttached(&pair->coordinator) != 2 ||
 	    pair->players[0].driver.d.deviceId(&pair->players[0].driver.d) != 0 ||
-	    pair->players[1].driver.d.deviceId(&pair->players[1].driver.d) != 1) {
+	    pair->players[1].driver.d.deviceId(&pair->players[1].driver.d) != 1 ||
+	    !GBASIOLockstepCoordinatorSettleTopology(&pair->coordinator)) {
 		GBAReplicatedPairStop(pair);
 		return GBA_REPLICATED_PAIR_CORE_FAILED;
 	}

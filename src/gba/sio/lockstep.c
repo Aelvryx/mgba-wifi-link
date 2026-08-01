@@ -829,6 +829,116 @@ void _reconfigPlayers(struct GBASIOLockstepCoordinator* coordinator) {
 		}
 	}
 	coordinator->nAttached = nAttached;
+	for (i = 0; i < MAX_GBAS; ++i) {
+		unsigned pid = coordinator->attachedPlayers[i];
+		if (!pid) {
+			continue;
+		}
+		struct GBASIOLockstepPlayer* player =
+		    TableLookup(&coordinator->players, pid);
+		if (!player || !player->driver || !player->driver->d.p) {
+			continue;
+		}
+		bool ready = nAttached < 2;
+		if (nAttached > 1) {
+			ready = true;
+			for (int other = 0; other < MAX_GBAS; ++other) {
+				unsigned otherPid = coordinator->attachedPlayers[other];
+				if (!otherPid) {
+					continue;
+				}
+				struct GBASIOLockstepPlayer* otherPlayer =
+				    TableLookup(&coordinator->players, otherPid);
+				ready &= otherPlayer &&
+				         otherPlayer->mode == player->mode;
+			}
+		}
+		GBASIOMultiplayerMaterializeLines(
+		    player->driver->d.p, player->playerId,
+		    nAttached > 1, ready, false);
+	}
+}
+
+bool GBASIOLockstepCoordinatorSettleTopology(
+		struct GBASIOLockstepCoordinator* coordinator) {
+	if (!coordinator) {
+		return false;
+	}
+	bool settled = true;
+	MutexLock(&coordinator->mutex);
+	if (coordinator->nAttached < 1 || coordinator->transferActive ||
+	    coordinator->waiting) {
+		settled = false;
+		goto out;
+	}
+	for (int i = 0; i < coordinator->nAttached; ++i) {
+		struct GBASIOLockstepPlayer* player = TableLookup(
+		    &coordinator->players, coordinator->attachedPlayers[i]);
+		if (!player || !player->driver || !player->driver->d.p ||
+		    GBASIOMultiplayerIsBusy(player->driver->d.p->siocnt) ||
+		    mTimingIsScheduled(
+		        &player->driver->d.p->p->timing,
+		        &player->driver->d.p->completeEvent)) {
+			settled = false;
+			goto out;
+		}
+		for (struct GBASIOLockstepEvent* event = player->queue;
+		     event; event = event->next) {
+			if (event->type != SIO_EV_ATTACH &&
+			    event->type != SIO_EV_MODE_SET) {
+				settled = false;
+				goto out;
+			}
+		}
+	}
+
+	/* Pair construction happens before either guest executes. Replace the
+	 * queued bootstrap observations with one atomic view of the finished
+	 * topology so the first guest read agrees with the assigned IDs. */
+	for (int i = 0; i < coordinator->nAttached; ++i) {
+		struct GBASIOLockstepPlayer* player = TableLookup(
+		    &coordinator->players, coordinator->attachedPlayers[i]);
+		while (player->queue) {
+			struct GBASIOLockstepEvent* event = player->queue;
+			player->queue = event->next;
+			event->next = player->freeList;
+			player->freeList = event;
+		}
+		for (int other = 0; other < MAX_GBAS; ++other) {
+			player->otherModes[other] = (enum GBASIOMode) -1;
+			unsigned otherPid = coordinator->attachedPlayers[other];
+			if (otherPid) {
+				struct GBASIOLockstepPlayer* otherPlayer =
+				    TableLookup(&coordinator->players, otherPid);
+				if (otherPlayer) {
+					player->otherModes[other] = otherPlayer->mode;
+				}
+			}
+		}
+		player->dataReceived = false;
+		if (player->asleep) {
+			GBASIOLockstepPlayerWake(player);
+		}
+	}
+	struct GBASIOLockstepPlayer* primary = TableLookup(
+	    &coordinator->players, coordinator->attachedPlayers[0]);
+	coordinator->transferMode = primary->mode;
+	coordinator->transferActive = false;
+	coordinator->waiting = 0;
+	for (int i = 0; i < coordinator->nAttached; ++i) {
+		struct GBASIOLockstepPlayer* player = TableLookup(
+		    &coordinator->players, coordinator->attachedPlayers[i]);
+		bool ready = true;
+		for (int other = 0; other < coordinator->nAttached; ++other) {
+			ready &= player->otherModes[other] == player->mode;
+		}
+		GBASIOMultiplayerMaterializeLines(
+		    player->driver->d.p, player->playerId,
+		    coordinator->nAttached > 1, ready, true);
+	}
+out:
+	MutexUnlock(&coordinator->mutex);
+	return settled;
 }
 
 static void _setData(struct GBASIOLockstepCoordinator* coordinator, uint32_t id, struct GBASIO* sio) {

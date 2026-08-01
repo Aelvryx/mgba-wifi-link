@@ -129,6 +129,27 @@ bool GBASIOIsExecutionBlocked(struct GBASIO* sio) {
 	       sio->driver->isExecutionBlocked(sio->driver);
 }
 
+void GBASIOMultiplayerMaterializeLines(
+		struct GBASIO* sio, int id, bool connected, bool ready,
+		bool clearTransfer) {
+	if (!sio || sio->mode != GBA_SIO_MULTI || id < 0 || id >= MAX_GBAS) {
+		return;
+	}
+	if (clearTransfer) {
+		mTimingDeschedule(&sio->p->timing, &sio->completeEvent);
+		sio->transferMode = -1;
+		sio->siocnt = GBASIOMultiplayerClearBusy(sio->siocnt);
+	}
+	sio->siocnt = GBASIOMultiplayerSetId(sio->siocnt, id);
+	sio->siocnt = GBASIOMultiplayerSetSlave(
+	    sio->siocnt, id || !connected);
+	sio->siocnt = GBASIOMultiplayerSetReady(sio->siocnt, ready);
+	sio->rcnt = GBASIORegisterRCNTSetSi(
+	    sio->rcnt, connected && id);
+	sio->rcnt = GBASIORegisterRCNTSetSd(sio->rcnt, ready);
+	sio->rcnt = GBASIORegisterRCNTFillSc(sio->rcnt);
+}
+
 void GBASIOWriteRCNT(struct GBASIO* sio, uint16_t value) {
 	sio->rcnt &= 0x1FF;
 	sio->rcnt |= value & 0xC000;

@@ -29,6 +29,9 @@ Status
   three-lap VS race at 60.23 FPS. The run completed 45,127 synchronized cable
   transactions with matching state traces and no empty-audio frame, timeout,
   divergence, or disconnect.
+- Zelda: Four Swords passed a two-device discovery and shared-gameplay retest
+  on the exact alpha.2 runtime at 60.28 FPS. The run reached 27,000 synchronized
+  frames and 110,852 completed transfers with matching traces and normal audio.
 
 Compatibility is still experimental. The cable model is generic, but this
 alpha does not claim that every Multi-Pak title has been qualified:
@@ -39,7 +42,7 @@ alpha does not claim that every Multi-Pak title has been qualified:
 | LinkCable compatibility workload | Verified |
 | Mario Kart: Super Circuit | Verified — complete three-lap VS race |
 | Advance Wars | User playtest passed |
-| Zelda: Four Swords | Known failure — remains in cable discovery |
+| Zelda: Four Swords | Verified — discovery and brief shared gameplay |
 | Other Multi-Pak games | Untested |
 
 The first release intentionally excludes Single-Pak multiboot, the GBA

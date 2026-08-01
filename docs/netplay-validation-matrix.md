@@ -6,10 +6,10 @@ This document maps the MVP's automated evidence to protocol phases and failure
 classes. Test names below are cmocka case names inside the named source file.
 
 This evidence supports an experimental two-player Multi-Pak alpha, not a claim
-of universal game compatibility. Mario Kart: Super Circuit and the supplied
-diagnostic workloads are verified; an Advance Wars user playtest passed;
-Four Swords is a known cable-discovery failure; other commercial titles remain
-unqualified. The v2 wire/runtime contract is deliberately not frozen yet.
+of universal game compatibility. Mario Kart: Super Circuit, Zelda: Four
+Swords, and the supplied diagnostic workloads are verified; Advance Wars has
+a successful user playtest; other commercial titles remain unqualified. The
+v2 wire/runtime contract is deliberately not frozen yet.
 
 ## Protocol-v2 real-time evidence
 
@@ -341,6 +341,49 @@ Raw logs remain outside the repository. Their verification hashes are:
 | Exact-head fixture Odin log | `c0360d766193dd712816bb9bfbe795b4f569dd0d2495bb17a3d8f55068472a0a` |
 | Exact-head Mario Kart Thor healthy log | `2ba469b4d551abbacc3c152770b80757871345fce0b1c99203fc27bf6653c98f` |
 | Exact-head Mario Kart Odin healthy log | `5aa762cd86e853ef65bd5f5f2fa8def4296a7965a600ac30e4008edcc758dd80` |
+
+### Four Swords topology-settled alpha.2 qualification
+
+The exact topology-settled alpha.2 runtime was retested through stock
+RetroArch 1.22.2 on the AYN Thor host and AYN Odin2 Portal client. Both peers
+connected before entering the Four Swords cable menu, left discovery, entered
+the same shared room, and accepted the two physical players' input. The human
+tester reported normal controls, animation, speed, and audio.
+
+The final common sample covered 27,000 synchronized frames and 110,852
+completed two-player MULTI transactions:
+
+```text
+frames=27000 checks=449/450 packets=27482/27481
+serial=110852/221704 audio_empty=0/0 fps=60.277/60.278
+rv_p50=31/0ms rv_p95=52/0ms rv_max=63/0ms
+packet_rate=61.353/61.352pps byte_rate=7782.0/7781.9Bps
+lead=1/1 trace_samples=45
+```
+
+All 45 sampled P0/P1 trace pairs matched. No protocol, SIO, timeout, state
+divergence, or empty-audio failure appeared. Both isolated post-run saves
+matched their pre-run digest. After evidence capture, RetroArch was stopped
+and the disposable app-specific run directories were removed from both
+devices. Raw logs, screenshots, saves, and commercial content remain outside
+the repository.
+
+| Evidence | SHA-256 |
+| --- | --- |
+| Four Swords Thor log | `35188a76adc949ca894492628c6d24cb35f61f876b2ed9ae20a8a2720a28eadc` |
+| Four Swords Odin log | `caed28d74130d2be33c78fc647b97da25087d2b7fabc1db0fae50d70c1d088dd` |
+| Four Swords Thor screenshot | `53e9f758ae10856b132a1c4628ae365301efcf954f60be3183164ce126dba3b6` |
+| Four Swords Odin screenshot | `b006fa9beef9d98b9f4500907f7a73b62c4830625a82b888715f46229513c632` |
+| Both pre/post isolated saves | `8897fe438b05596b4852cb5a8cfc38305e1f61b027571bb1f7f4267d23179627` |
+
+Because the baseline now passes, the conditional transition observer,
+deterministic cross-layer ladder, and production correction were not added.
+The existing non-commercial
+`detachedMultiSnapshotsExposeAttachedLinesBeforeExecution` regression was
+strengthened to assert immediate guest-visible SIOCNT/RCNT reads before either
+logical CPU executes. All 14 replicated-pair cases pass normally, under
+ASan/UBSan with leak detection, and under TSan; the full 17-executable focused
+suite also passes normally.
 
 The desktop soak is reproducible with a stock RetroArch executable, the built
 libretro core, and the continuous CC0 fixture. Copy the core-option templates

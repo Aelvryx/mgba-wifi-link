@@ -1,6 +1,6 @@
 ## Why
 
-The replicated-pair runtime has proven full-speed generic MULTI transfers in diagnostic workloads and commercial games, but Zelda: Four Swords still stalls during cable discovery without issuing the expected transfer stream. We must first identify the exact causal difference and turn that evidence into a reviewed generic invariant; the current package does not pre-authorize an unknown production behavior change.
+The replicated-pair runtime has proven full-speed generic MULTI transfers in diagnostic workloads and commercial games, but Zelda: Four Swords was reported to stall during cable discovery before the final topology-settled alpha.2 build had been retested. This change first retests that exact baseline; it only authorizes causal diagnosis if the failure remains and never pre-authorizes an unknown production behavior change.
 
 ## What Changes
 

@@ -33,7 +33,7 @@ architecture:
 | LinkCable compatibility workload | Verified |
 | Mario Kart: Super Circuit Multi-Pak | Verified — full race |
 | Advance Wars | User playtest passed |
-| Zelda: Four Swords | Known failure — stalls during cable discovery |
+| Zelda: Four Swords | Verified — discovery and brief shared gameplay |
 | Other Multi-Pak titles | Untested |
 
 ## Why protocol v2 is real-time
@@ -283,6 +283,8 @@ are explicitly protocol-v1 historical evidence.
 The post-review release candidate at `c9b181aa2` also passed a fresh physical
 Android continuous-link smoke and a 15,600-frame Mario Kart Multi-Pak gameplay
 smoke. Both ran at approximately 60.24 FPS with matching sampled state traces,
-normal audio delivery, and no serial, timeout, or divergence fault. Four
-Swords remains the named compatibility investigation for this experimental
-alpha.
+normal audio delivery, and no serial, timeout, or divergence fault. The same
+alpha.2 runtime subsequently passed Four Swords discovery and brief shared
+gameplay over 27,000 synchronized frames at approximately 60.28 FPS, with
+110,852 completed transfers, matching sampled traces, normal audio, and no
+protocol, SIO, timeout, or divergence fault.

@@ -18,12 +18,14 @@ delta-requirement review at task 4.9.
 | Frontend | Stock RetroArch `1.22.2_GIT`, package `com.retroarch.aarch64` |
 | Thor | AYN Thor, ADB `11c5b80`, Android 13; live identity reconfirmed 2026-08-01 |
 | Odin | AYN Odin2 Portal, ADB `6986c674`, Android 13; live identity reconfirmed 2026-08-01 |
-| Current Four Swords status | Known failure: remains in cable discovery; not yet rerun on topology-settled alpha.2 |
+| Current Four Swords status | Verified: topology-settled alpha.2 completed discovery and brief shared gameplay |
 
-The exact core artifact above is the alpha.2 build under test. Its hash must be
-verified on both devices immediately before the run. A live frontend version,
-device identity, configuration digest, and installed-core hash belong in the
-private run manifest.
+The exact artifact above was hash-verified in each app-specific staging
+directory. The stock Android release package does not allow ADB to read the
+loaded private core path directly, so the private manifest records that limit
+alongside the pre-run embedded alpha.2 identity, live frontend version, device
+identity, and configuration digests rather than inventing an installed-file
+hash.
 
 ## Private qualification boundary
 
@@ -54,6 +56,54 @@ all game navigation and gameplay.
   through the observer and deterministic diagnostic ladder.
 
 No result from this run directly authorizes production behavior changes.
+
+## Alpha.2 qualification result
+
+Run `20260801-110213-alpha2-four-swords` connected the Thor host before the
+Four Swords cable menu and joined the Odin as player two. Both devices left
+discovery, displayed both logical players in the same shared game, accepted
+their respective physical controls, and retained normal animation and audio
+during the human-owned gameplay window. Final screenshots independently show
+the same two-player room from each role.
+
+The strict commercial-log analyzer reported:
+
+```text
+frames=27000 checks=449/450 packets=27482/27481
+serial=110852/221704 audio_empty=0/0 fps=60.277/60.278
+rv_p50=31/0ms rv_p95=52/0ms rv_max=63/0ms
+packet_rate=61.353/61.352pps byte_rate=7782.0/7781.9Bps
+lead=1/1 trace_samples=45
+```
+
+All 45 sampled P0/P1 trace pairs matched. Neither endpoint logged a protocol,
+SIO, timeout, or divergence failure, and neither produced an empty-audio
+frame. Both isolated post-run saves matched their pre-run digest, so the run
+did not mutate persistent user data. RetroArch was stopped on both endpoints,
+the run-specific device directories were removed after capture, and raw
+commercial evidence remains only in the ignored private run directory.
+
+| Private evidence | SHA-256 |
+| --- | --- |
+| Thor core log | `35188a76adc949ca894492628c6d24cb35f61f876b2ed9ae20a8a2720a28eadc` |
+| Odin core log | `caed28d74130d2be33c78fc647b97da25087d2b7fabc1db0fae50d70c1d088dd` |
+| Thor terminal screenshot | `53e9f758ae10856b132a1c4628ae365301efcf954f60be3183164ce126dba3b6` |
+| Odin terminal screenshot | `b006fa9beef9d98b9f4500907f7a73b62c4830625a82b888715f46229513c632` |
+| Both pre/post isolated saves | `8897fe438b05596b4852cb5a8cfc38305e1f61b027571bb1f7f4267d23179627` |
+
+The already-present redistributable regression
+`detachedMultiSnapshotsExposeAttachedLinesBeforeExecution` was strengthened to
+read SIOCNT and RCNT through the guest-visible I/O path before either logical
+CPU executes. It proves that detached MULTI snapshots become ready P0/P1
+topologies immediately after pair installation. The complete 14-case
+`test-gba-replicated-pair` executable passes normally, under ASan/UBSan with
+leak detection, and under TSan with that assertion. The complete 17-executable
+focused suite also passes normally.
+
+The baseline-success branch therefore introduces no observer, comparator, or
+production behavior change. Permanent transition tracing may be considered as
+a separate diagnostics feature if future compatibility evidence justifies its
+cost.
 
 ## Android controller preflight correction
 

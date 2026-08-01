@@ -1,6 +1,6 @@
 ## Context
 
-Protocol v2 runs an identical two-player mGBA lockstep pair on each endpoint and synchronizes frame inputs rather than individual cable words. Diagnostic fixtures, Mario Kart, and Advance Wars demonstrate full-speed generic MULTI traffic. Four Swords previously reached cable discovery under protocol v2 but emitted no observed MULTI transfers. The replicated-pair implementation has since gained explicit guest-visible topology settlement, but the title has not been rerun on that exact correction.
+Protocol v2 runs an identical two-player mGBA lockstep pair on each endpoint and synchronizes frame inputs rather than individual cable words. Diagnostic fixtures, Mario Kart, and Advance Wars demonstrate full-speed generic MULTI traffic. Four Swords previously reached cable discovery under protocol v2 but emitted no observed MULTI transfers. The replicated-pair implementation subsequently gained explicit guest-visible topology settlement. The baseline retest in this change proved that the exact topology-settled alpha.2 runtime now completes Four Swords discovery and enters shared gameplay, so the conditional diagnostic path was not activated.
 
 The uncertainty is concentrated before the normal transfer stream. A discovery loop may depend on what guest code reads, on an attempted write whose intent is masked in the final register, or on the relative order between a guest observation and topology publication. A trace of state changes alone can therefore appear identical while omitting the cause.
 
@@ -231,10 +231,9 @@ Four Swords success requires both devices to leave discovery, enter shared gamep
 
 Observer infrastructure and any later correction are independently revertible. Trace files, commercial states, and private input scripts are disposable and excluded from source control.
 
-## Open Questions
+## Baseline Outcome
 
-- Does Four Swords now link on alpha.2 after topology settlement?
-- At which anchor and layer does the first causal divergence occur?
-- Is the decisive behavior a read-before-publication ordering, attempted write intent, NORMAL-mode probe, already-MULTI role observation, secondary START wait, or another generic transition?
-- What exact affected capability and invariant must be added at the Stage B review gate?
-- Can the eventual regression use direct register calls, or is original guest code required?
+- Four Swords links on the exact topology-settled alpha.2 runtime and enters usable shared gameplay.
+- The existing topology-settlement regression now also reads SIOCNT and RCNT through the guest-visible I/O path before either logical CPU executes.
+- No observer, deterministic ladder, Stage B delta, production correction, or Mario Kart requalification is required by this change.
+- The proposed observer remains a separately reviewable future diagnostics feature rather than permanent infrastructure introduced without a failing baseline.

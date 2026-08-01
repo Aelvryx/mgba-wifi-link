@@ -160,6 +160,17 @@ The release gate on the exact Android build and device pair is:
 - an explicit compatibility result for every attempted qualification title, including Four Swords, without treating real-time discovery dwell as successful linking;
 - recorded input delay, p95 rendezvous duration, CPU, peak memory, temperature, and absence of sustained thermal throttling.
 
+Physical qualification SHALL use an explicit two-bucket ownership model.
+Reproducible builds, installation, scripted fixtures, unattended soaks, fault
+injection, log capture, analysis, teardown, and cleanup are automation-owned.
+Game menus, non-trivial controller input, gameplay, and audiovisual judgement
+are human-owned. Iterative screenshot-driven tap/key exploration SHALL NOT be
+used as a substitute for a human gameplay run. Automation may perform only a
+short previously verified setup sequence; if the expected frontend state
+differs, it stops and hands off prepared devices plus a concise action list.
+Logging, exact-build identity, isolated paths, expected outcomes, and failure
+signals are prepared before the human run so one pass captures useful evidence.
+
 ## Risks / Trade-offs
 
 - **Two cores exceed mobile CPU or thermal budget** → Gate production work on the Android spike, disable shadow rendering/audio work, profile both scheduler candidates, and stop rather than publishing a build that misses real time.

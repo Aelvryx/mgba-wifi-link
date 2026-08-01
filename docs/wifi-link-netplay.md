@@ -202,6 +202,33 @@ can select **GBA Link Netplay Runtime → Cable Sync v1 (Diagnostic)** and
 restart content to reproduce a v1 trace; that mode is intentionally labelled
 unsuitable for gameplay.
 
+## Physical-device test ownership
+
+Every physical-device run must be assigned to one of two operating modes
+before it starts:
+
+- **Automation-owned:** reproducible build, hashing, installation, scripted
+  launch and connection, purpose-built fixtures, unattended soaks, fault
+  injection, log capture and analysis, teardown, and disposable-file cleanup.
+- **Human-owned:** game menus, sustained controller input, gameplay, visual or
+  audio judgement, save selection, and any other interaction whose correctness
+  depends on understanding a changing screen.
+
+Do not use an iterative screenshot/tap/key loop to imitate human gameplay or
+explore an unfamiliar frontend menu. Automation may execute a short, already
+verified setup sequence. If the expected screen or control state differs, it
+must stop and hand the prepared devices to the human tester with a short action
+list. It must not change menu drivers, hotkeys, controller mappings, or normal
+user configuration as an improvised workaround.
+
+Before a human-owned run, automation prepares the exact build, isolated test
+paths, synchronized logging, run identifier, time box, expected success state,
+and failure signals. During the run it monitors and captures diagnostics
+without driving the game. After the tester reports success or failure,
+automation owns evidence extraction, analysis, teardown, and cleanup. This
+keeps scarce human interaction focused and prevents slow hybrid testing that
+is neither repeatable automation nor effective manual play.
+
 ## Current validation
 
 All 17 focused Linux SIO, protocol-v2, replica, pair, input, save-routing, and

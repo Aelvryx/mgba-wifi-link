@@ -25,7 +25,7 @@ usage() {
   cat <<'EOF'
 Usage: RUN_ID=<id> android-qualification.sh COMMAND
 
-Commands: preflight, stage, launch, check-controls, capture, stop
+Commands: preflight, stage, launch, check-controls, capture, stop, cleanup
 
 Never use `adb shell input` during this workflow. Android's synthetic Virtual
 controller can claim RetroArch port 1 and displace the handheld controls.
@@ -178,6 +178,21 @@ stop_device() {
   echo "$name stopped"
 }
 
+cleanup_device() {
+  local serial=$1
+  local name=$2
+  local remote
+  remote="$(remote_root)"
+  assert_device "$serial" "$name"
+  assert_frontend_stopped "$serial" "$name"
+  $ADB_BIN -s "$serial" shell "rm -rf '$remote'"
+  if $ADB_BIN -s "$serial" shell "test -e '$remote'"; then
+    echo "$name qualification directory still exists: $remote" >&2
+    exit 1
+  fi
+  echo "$name qualification directory removed"
+}
+
 main() {
   local command=${1:-}
   require_run_id
@@ -205,6 +220,9 @@ main() {
       ;;
     stop)
       for_each_device stop_device
+      ;;
+    cleanup)
+      for_each_device cleanup_device
       ;;
     *)
       usage >&2

@@ -35,7 +35,8 @@ into a focused, reviewed delta requirement.
 ## Canonical Android control setup
 
 Use `android-qualification.sh` for device staging, launch, control validation,
-capture, and stop. The workflow deliberately contains no `adb shell input`
+capture, stop, and removal of its run-specific device directory. The workflow
+deliberately contains no `adb shell input`
 command. Injecting a key or touch through ADB registers Android's synthetic
 `Virtual` controller; RetroArch can assign it to port 1 and move the handheld's
 real controls to port 2. Changing `input_player1_joypad_index` to compensate is
@@ -58,3 +59,9 @@ The stock Android build used here does not expose a working network-command
 listener. Host/join is therefore human-owned frontend interaction. Automation
 may launch content directly, but must not synthesize a host hotkey or explore
 the frontend menus.
+
+After the human confirms the result, run `capture` before `stop`. Verify the
+private local evidence, then run `cleanup`; it refuses to operate while
+RetroArch is running and removes only the validated run-ID directory beneath
+RetroArch's app-specific external storage. Screen sleep remains a physical
+power-button action so cleanup never creates a synthetic Android input device.

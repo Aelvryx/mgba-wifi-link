@@ -136,6 +136,7 @@ struct mLibretroNetpacketV2Adapter {
 	bool frontendStarted;
 	bool sessionPrepared;
 	bool protocolPending;
+	bool deferHostHello;
 	bool paused;
 	bool pairInitialized;
 	bool runtimeInitialized;
@@ -360,6 +361,7 @@ static void _invalidateFrontend(
 	adapter->localId = NETPACKET_V2_NO_CLIENT;
 	adapter->remoteId = NETPACKET_V2_NO_CLIENT;
 	adapter->protocolPending = false;
+	adapter->deferHostHello = false;
 	_clearPreAdmission(adapter);
 	++adapter->callbackGeneration;
 	if (!adapter->callbackGeneration) {
@@ -385,7 +387,8 @@ static const struct GBALinkTransportVTable _transportVTable = {
 
 static bool _quiescentBoundary(void* context) {
 	struct mLibretroNetpacketV2Adapter* adapter = context;
-	if (!adapter || !adapter->gba || adapter->gba->sio.driver) {
+	if (!adapter || !adapter->gba || adapter->gba->sio.driver ||
+	    adapter->deferHostHello) {
 		return false;
 	}
 	return !GBASIOMultiplayerIsBusy(adapter->gba->sio.siocnt) &&
@@ -1200,7 +1203,13 @@ static bool RETRO_CALLCONV _connected(uint16_t clientId) {
 	}
 	_adapter.remoteId = clientId;
 	_adapter.protocolPending = true;
-	if (!_enterRendezvous(&_adapter)) {
+	/* RetroArch invokes connected() before the joining peer is fully
+	 * admitted for host-to-client packets. Start the bounded session now,
+	 * but defer a quiescent HELLO until the next ordinary run boundary. */
+	_adapter.deferHostHello = true;
+	bool entered = _enterRendezvous(&_adapter);
+	_adapter.deferHostHello = false;
+	if (!entered) {
 		_adapter.remoteId = NETPACKET_V2_NO_CLIENT;
 		return false;
 	}

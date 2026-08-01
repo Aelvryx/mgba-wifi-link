@@ -205,13 +205,39 @@ M_TEST_DEFINE(hostAdmissionBoundsProvisionalTraffic) {
 	assert_int_equal(
 	    mLibretroNetpacketV2TestPendingPacketCount(), 1);
 	assert_true(fixture->frontend.callbacks.connected(1));
-	assert_int_equal(fixture->frontend.sends, 1);
-	assert_int_equal(fixture->frontend.lastTarget, 1);
+	assert_true(mLibretroNetpacketV2SessionActive());
+	assert_int_equal(fixture->frontend.sends, 0);
 	assert_false(fixture->frontend.callbacks.connected(2));
 	mLibretroNetpacketV2RunBegin();
+	assert_int_equal(fixture->frontend.sends, 1);
+	assert_int_equal(fixture->frontend.lastTarget, 1);
 	assert_false(mLibretroNetpacketV2SessionActive());
 	assert_int_equal(
 	    mLibretroNetpacketV2TestPendingPacketCount(), 0);
+}
+
+M_TEST_DEFINE(hostHelloWaitsUntilConnectedCallbackReturns) {
+	struct V2AdapterFixture* fixture = *state;
+	assert_true(mLibretroNetpacketV2Register(
+	    _environment, fixture->core, fixture->save,
+	    sizeof(fixture->save)));
+	fixture->frontend.callbacks.start(
+	    0, _send, _pollReceive);
+	assert_true(fixture->frontend.callbacks.connected(1));
+	assert_true(mLibretroNetpacketV2SessionActive());
+	assert_int_equal(fixture->frontend.sends, 0);
+
+	mLibretroNetpacketV2RunBegin();
+	assert_int_equal(fixture->frontend.sends, 1);
+	assert_int_equal(fixture->frontend.lastTarget, 1);
+	struct GBALinkV2Packet packet;
+	assert_int_equal(
+	    GBALinkV2PacketDecode(
+	        fixture->frontend.lastPacket,
+	        fixture->frontend.lastPacketSize,
+	        GBA_LINK_ROLE_HOST, &packet),
+	    GBA_LINK_DECODE_OK);
+	assert_int_equal(packet.header.type, GBA_LINK_V2_MESSAGE_HELLO);
 }
 
 M_TEST_DEFINE(missingPollingAndSynchronousStopFailClosed) {
@@ -431,6 +457,8 @@ M_TEST_SUITE_DEFINE_SETUP_TEARDOWN(LibretroNetpacketV2,
 	    clientStartsWithReliableFlushedV2Hello, _setup, _teardown),
 	cmocka_unit_test_setup_teardown(
 	    hostAdmissionBoundsProvisionalTraffic, _setup, _teardown),
+	cmocka_unit_test_setup_teardown(
+	    hostHelloWaitsUntilConnectedCallbackReturns, _setup, _teardown),
 	cmocka_unit_test_setup_teardown(
 	    missingPollingAndSynchronousStopFailClosed, _setup, _teardown),
 	cmocka_unit_test_setup_teardown(

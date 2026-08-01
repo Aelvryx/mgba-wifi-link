@@ -32,6 +32,7 @@
       "android_version": "FILL_WITH_VERSION",
       "expected_controller": "Ayn Odin",
       "configuration_sha256": "FILL_WITH_SHA256",
+      "core_options_sha256": "FILL_WITH_SHA256",
       "save_sha256": "FILL_WITH_SHA256",
       "staged_core_sha256": "14978106a3978ab4ef6ec025add82e0e9a38decda72404e3dc8c02b3373f179d",
       "installed_core_sha256": null,
@@ -49,6 +50,7 @@
       "android_version": "FILL_WITH_VERSION",
       "expected_controller": "Ayn Odin (Xbox Mode)",
       "configuration_sha256": "FILL_WITH_SHA256",
+      "core_options_sha256": "FILL_WITH_SHA256",
       "save_sha256": "FILL_WITH_SHA256",
       "staged_core_sha256": "14978106a3978ab4ef6ec025add82e0e9a38decda72404e3dc8c02b3373f179d",
       "installed_core_sha256": null,
@@ -67,6 +69,13 @@
     "host_save_digest": "UNAVAILABLE_OR_SHA256",
     "client_save_digest": "UNAVAILABLE_OR_SHA256",
     "input_script_digest": "NOT_USED_FOR_BASELINE_PHYSICAL_RUN"
+  },
+  "latency": {
+    "policy": "stable",
+    "policy_wire_value": 1,
+    "selector_policy_version": 1,
+    "product_floor": 2,
+    "expected_selected_delay": 2
   },
   "isolated_options": {
     "runtime": "replicated pair v2",

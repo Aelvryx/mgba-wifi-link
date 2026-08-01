@@ -16,6 +16,23 @@ from typing import Any
 RUN_SCHEMA = "mgba-four-swords-discovery-run-v2"
 INSTALLED_HASH_REASON = "APP_PRIVATE_PATH_UNREADABLE"
 AUTOCONF_RE = re.compile(r"^\[Autoconf\]\s+(.+?) configured in port ([0-9]+)\.$")
+LATENCY_POLICIES = {
+    "stable": (1, 2),
+    "low_latency": (2, 1),
+}
+ATTACH_RE = re.compile(
+    r"attach P(?P<role>[01]) policy=(?P<policy>[0-9]+) "
+    r"delay=(?P<delay>[0-9]+) calibration=(?P<calibration>[0-9]+)ms"
+)
+CALIBRATION_RE = re.compile(
+    r"calibration P(?P<role>[01]).* samples=(?P<samples>[0-9]+) "
+    r"min=(?P<minimum>[0-9]+)us p50=(?P<p50>[0-9]+)us "
+    r"p95=(?P<p95>[0-9]+)us max=(?P<maximum>[0-9]+)us "
+    r"selector=(?P<selector>[0-9]+) floor=(?P<floor>[0-9]+) "
+    r"range=(?P<range_min>[0-9]+)-(?P<range_max>[0-9]+) "
+    r"delay=(?P<delay>[0-9]+) reason=(?P<reason>[0-9]+) "
+    r"digest=(?P<digest>[0-9a-f]{64})"
+)
 
 
 class ValidationError(RuntimeError):
@@ -107,6 +124,12 @@ def validate_manifest(args: argparse.Namespace) -> None:
         args.rom_sha256,
         "approved ROM identity digest",
     )
+    policy_value, product_floor = LATENCY_POLICIES[args.latency_policy]
+    _require_equal(_field(manifest, "latency.policy"), args.latency_policy, "latency policy")
+    _require_equal(_field(manifest, "latency.policy_wire_value"), policy_value, "latency policy wire value")
+    _require_equal(_field(manifest, "latency.selector_policy_version"), 1, "selector policy version")
+    _require_equal(_field(manifest, "latency.product_floor"), product_floor, "latency product floor")
+    _require_equal(_field(manifest, "latency.expected_selected_delay"), args.selected_delay, "selected input delay")
 
     if not core_path.is_file():
         _fail(f"core artifact is missing: {core_path}")
@@ -156,13 +179,19 @@ def validate_manifest(args: argparse.Namespace) -> None:
         )
 
         config_path = run_root / "device-snapshots" / f"{name}-qualification.cfg"
+        options_path = run_root / "device-snapshots" / f"{name}-mgba-qualification.opt"
         save_path = run_root / "saves" / name / "qualification-pre-run.srm"
-        if not config_path.is_file() or not save_path.is_file():
-            _fail(f"{name} qualification config or isolated save is missing")
+        if not config_path.is_file() or not options_path.is_file() or not save_path.is_file():
+            _fail(f"{name} qualification config, core options, or isolated save is missing")
         _require_equal(
             _sha256(config_path),
             _require_hex(device.get("configuration_sha256"), f"{name} configuration hash"),
             f"{name} configuration hash",
+        )
+        _require_equal(
+            _sha256(options_path),
+            _require_hex(device.get("core_options_sha256"), f"{name} core-options hash"),
+            f"{name} core-options hash",
         )
         _require_equal(
             _sha256(save_path),
@@ -221,6 +250,17 @@ def validate_config(args: argparse.Namespace) -> None:
     }
     for key, expected_value in expected.items():
         _require_equal(values.get(key), expected_value, f"effective config value {key}")
+    options = _effective_config(Path(args.options))
+    _require_equal(
+        options.get("mgba_gba_link_netplay_runtime"),
+        "replicated-v2",
+        "effective core option mgba_gba_link_netplay_runtime",
+    )
+    _require_equal(
+        options.get("mgba_link_netplay_latency"),
+        args.latency_policy,
+        "effective core option mgba_link_netplay_latency",
+    )
 
 
 def _autoconf_assignments(text: str) -> dict[int, str]:
@@ -268,6 +308,26 @@ def validate_runtime_log(args: argparse.Namespace) -> None:
     if actual.lower().startswith("virtual"):
         _fail("Android Virtual controller must not own RetroArch port 1")
 
+    expected_policy, expected_floor = LATENCY_POLICIES[args.latency_policy]
+    attaches = list(ATTACH_RE.finditer(text))
+    calibrations = list(CALIBRATION_RE.finditer(text))
+    if not attaches or not calibrations:
+        _fail("runtime log does not contain complete latency calibration evidence")
+    attach = attaches[-1].groupdict()
+    calibration = calibrations[-1].groupdict()
+    _require_equal(int(attach["policy"]), expected_policy, "runtime latency policy")
+    _require_equal(int(attach["delay"]), args.selected_delay, "runtime selected input delay")
+    _require_equal(int(calibration["samples"]), 24, "runtime calibration sample count")
+    _require_equal(int(calibration["selector"]), 1, "runtime selector policy")
+    _require_equal(int(calibration["floor"]), expected_floor, "runtime latency product floor")
+    _require_equal(int(calibration["delay"]), args.selected_delay, "calibration selected input delay")
+    if int(calibration["range_min"]) > int(calibration["delay"]) or \
+            int(calibration["delay"]) > int(calibration["range_max"]):
+        _fail("runtime selected input delay lies outside the calibrated range")
+    if not (int(calibration["minimum"]) <= int(calibration["p50"]) <=
+            int(calibration["p95"]) <= int(calibration["maximum"])):
+        _fail("runtime calibration percentiles are malformed")
+
 
 def manifest_value(args: argparse.Namespace) -> None:
     value = _field(_load_manifest(Path(args.manifest)), args.field)
@@ -301,11 +361,15 @@ def build_parser() -> argparse.ArgumentParser:
     manifest.add_argument("--odin-serial", required=True)
     manifest.add_argument("--thor-controller", required=True)
     manifest.add_argument("--odin-controller", required=True)
+    manifest.add_argument("--latency-policy", choices=sorted(LATENCY_POLICIES), required=True)
+    manifest.add_argument("--selected-delay", type=int, choices=range(1, 9), required=True)
     manifest.set_defaults(handler=validate_manifest)
 
     config = subparsers.add_parser("config")
     config.add_argument("--config", required=True)
+    config.add_argument("--options", required=True)
     config.add_argument("--remote-root", required=True)
+    config.add_argument("--latency-policy", choices=sorted(LATENCY_POLICIES), required=True)
     config.set_defaults(handler=validate_config)
 
     runtime = subparsers.add_parser("runtime-log")
@@ -315,6 +379,8 @@ def build_parser() -> argparse.ArgumentParser:
     runtime.add_argument("--content-crc32", required=True)
     runtime.add_argument("--remote-root", required=True)
     runtime.add_argument("--expected-controller", required=True)
+    runtime.add_argument("--latency-policy", choices=sorted(LATENCY_POLICIES), required=True)
+    runtime.add_argument("--selected-delay", type=int, choices=range(1, 9), required=True)
     runtime.set_defaults(handler=validate_runtime_log)
 
     value = subparsers.add_parser("manifest-value")

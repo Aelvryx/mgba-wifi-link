@@ -146,6 +146,8 @@ class QualificationHelperTest(unittest.TestCase):
     remote_base = "/mock/qualification"
     thor_serial = "thor-test"
     odin_serial = "odin-test"
+    latency_policy = "stable"
+    selected_delay = 2
 
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -184,6 +186,8 @@ class QualificationHelperTest(unittest.TestCase):
                 "EXPECTED_ROM_SHA256": "b" * 64,
                 "THOR_SERIAL": self.thor_serial,
                 "ODIN_SERIAL": self.odin_serial,
+                "EXPECTED_LATENCY_POLICY": self.latency_policy,
+                "EXPECTED_SELECTED_DELAY": str(self.selected_delay),
             }
         )
 
@@ -220,12 +224,23 @@ class QualificationHelperTest(unittest.TestCase):
             ("odin", self.odin_serial, "Ayn Odin (Xbox Mode)", "client"),
         ):
             config = self.run_root / "device-snapshots" / f"{name}-qualification.cfg"
+            options = self.run_root / "device-snapshots" / f"{name}-mgba-qualification.opt"
             save = self.run_root / "saves" / name / "qualification-pre-run.srm"
             evidence = self.run_root / "screenshots" / f"{name}-installed-core-identity.png"
             config.parent.mkdir(parents=True, exist_ok=True)
             save.parent.mkdir(parents=True, exist_ok=True)
             evidence.parent.mkdir(parents=True, exist_ok=True)
             config.write_text(self.config_text(), encoding="utf-8")
+            options.write_text(
+                '\n'.join(
+                    (
+                        'mgba_gba_link_netplay_runtime = "replicated-v2"',
+                        f'mgba_link_netplay_latency = "{self.latency_policy}"',
+                        '',
+                    )
+                ),
+                encoding="utf-8",
+            )
             save.write_bytes(f"{name}-save".encode())
             evidence.write_bytes(f"{name}-identity-evidence".encode())
             devices.append(
@@ -237,6 +252,7 @@ class QualificationHelperTest(unittest.TestCase):
                     "android_version": "13",
                     "expected_controller": controller,
                     "configuration_sha256": self.sha(config),
+                    "core_options_sha256": self.sha(options),
                     "save_sha256": self.sha(save),
                     "staged_core_sha256": self.core_sha,
                     "installed_core_sha256": None,
@@ -261,6 +277,13 @@ class QualificationHelperTest(unittest.TestCase):
             },
             "devices": devices,
             "private_inputs": {"rom_identity_digest": "b" * 64, "content_crc32": self.crc32},
+            "latency": {
+                "policy": self.latency_policy,
+                "policy_wire_value": 1,
+                "selector_policy_version": 1,
+                "product_floor": 2,
+                "expected_selected_delay": self.selected_delay,
+            },
         }
         (self.run_root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
@@ -279,7 +302,17 @@ class QualificationHelperTest(unittest.TestCase):
         result = self.run_helper("stage")
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def write_log(self, serial: str, assignments: list[tuple[str, int]]) -> None:
+    def write_log(
+        self,
+        serial: str,
+        assignments: list[tuple[str, int]],
+        *,
+        policy: int = 1,
+        floor: int = 2,
+        delay: int | None = None,
+    ) -> None:
+        if delay is None:
+            delay = self.selected_delay
         log = self.device_path(serial, f"{self.remote_root}/logs/retroarch.log")
         log.parent.mkdir(parents=True, exist_ok=True)
         controller_lines = "\n".join(
@@ -294,6 +327,10 @@ class QualificationHelperTest(unittest.TestCase):
                     f'[Override] Redirecting save file to "{self.remote_root}/saves/mGBA/game.srm".',
                     f'[Override] Redirecting save state to "{self.remote_root}/states/mGBA/game.state".',
                     "Status: GBA replicated link: registered replicated-pair Netpacket protocol v2",
+                    f"attach P0 policy={policy} delay={delay} calibration=25ms",
+                    "calibration P0 provisional=9 generation=10 samples=24 min=1000us "
+                    f"p50=2000us p95=3000us max=4000us selector=1 floor={floor} "
+                    f"range=1-8 delay={delay} reason=2 digest={'a' * 64}",
                     controller_lines,
                     "",
                 ]
@@ -360,11 +397,59 @@ class QualificationHelperTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("loaded core identity", result.stderr)
 
+    def test_effective_latency_policy_is_enforced(self) -> None:
+        options = self.run_root / "device-snapshots/thor-mgba-qualification.opt"
+        with options.open("a", encoding="utf-8") as output:
+            output.write('mgba_link_netplay_latency = "low_latency"\n')
+        manifest_path = self.run_root / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["devices"][0]["core_options_sha256"] = self.sha(options)
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        result = self.run_helper("preflight")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("mgba_link_netplay_latency", result.stderr)
+
     def test_controller_and_runtime_gate_accepts_clean_endpoints(self) -> None:
         self.stage()
         self.write_log(self.thor_serial, [("Ayn Odin", 1)])
         self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
         result = self.run_helper("check-controls")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_low_latency_prepared_run_is_accepted_when_manifest_matches(self) -> None:
+        manifest_path = self.run_root / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["latency"] = {
+            "policy": "low_latency",
+            "policy_wire_value": 2,
+            "selector_policy_version": 1,
+            "product_floor": 1,
+            "expected_selected_delay": 1,
+        }
+        for index, name in enumerate(("thor", "odin")):
+            options = self.run_root / "device-snapshots" / f"{name}-mgba-qualification.opt"
+            options.write_text(
+                'mgba_gba_link_netplay_runtime = "replicated-v2"\n'
+                'mgba_link_netplay_latency = "low_latency"\n',
+                encoding="utf-8",
+            )
+            manifest["devices"][index]["core_options_sha256"] = self.sha(options)
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        override = {
+            "EXPECTED_LATENCY_POLICY": "low_latency",
+            "EXPECTED_SELECTED_DELAY": "1",
+        }
+        result = self.run_helper("stage", extra_env=override)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.write_log(self.thor_serial, [("Ayn Odin", 1)], policy=2, floor=1, delay=1)
+        self.write_log(
+            self.odin_serial,
+            [("Ayn Odin (Xbox Mode)", 1)],
+            policy=2,
+            floor=1,
+            delay=1,
+        )
+        result = self.run_helper("check-controls", extra_env=override)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_controller_gate_rejects_virtual_and_displaced_controller(self) -> None:
@@ -412,6 +497,57 @@ class QualificationHelperTest(unittest.TestCase):
                 result = self.run_helper("check-controls")
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(expected_error, result.stderr)
+
+    def test_runtime_policy_and_selected_delay_fail_closed(self) -> None:
+        self.stage()
+        thor_log = self.device_path(self.thor_serial, f"{self.remote_root}/logs/retroarch.log")
+        cases = (
+            ("policy=1", "policy=2", "runtime latency policy"),
+            ("delay=2", "delay=3", "runtime selected input delay"),
+        )
+        for old, new, expected_error in cases:
+            with self.subTest(expected_error=expected_error):
+                self.write_log(self.thor_serial, [("Ayn Odin", 1)])
+                self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
+                thor_log.write_text(
+                    thor_log.read_text(encoding="utf-8").replace(old, new), encoding="utf-8"
+                )
+                result = self.run_helper("check-controls")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(expected_error, result.stderr)
+
+    def test_runtime_missing_or_malformed_calibration_fails_closed(self) -> None:
+        self.stage()
+        thor_log = self.device_path(self.thor_serial, f"{self.remote_root}/logs/retroarch.log")
+        cases = (
+            ("calibration P0", "calibration-missing P0", "complete latency calibration evidence"),
+            ("p50=2000us p95=3000us", "p50=5000us p95=3000us", "percentiles are malformed"),
+        )
+        for old, new, expected_error in cases:
+            with self.subTest(expected_error=expected_error):
+                self.write_log(self.thor_serial, [("Ayn Odin", 1)])
+                self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
+                thor_log.write_text(
+                    thor_log.read_text(encoding="utf-8").replace(old, new), encoding="utf-8"
+                )
+                result = self.run_helper("check-controls")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(expected_error, result.stderr)
+
+    def test_latest_log_must_contain_current_calibration(self) -> None:
+        self.stage()
+        self.write_log(self.thor_serial, [("Ayn Odin", 1)])
+        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
+        stale = self.device_path(self.thor_serial, f"{self.remote_root}/logs/retroarch.log")
+        current = stale.with_name("retroarch-current.log")
+        current.write_text(
+            stale.read_text(encoding="utf-8").replace("calibration P0", "calibration-missing P0"),
+            encoding="utf-8",
+        )
+        os.utime(current, (stale.stat().st_mtime + 2, stale.stat().st_mtime + 2))
+        result = self.run_helper("check-controls")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("complete latency calibration evidence", result.stderr)
 
 
 if __name__ == "__main__":

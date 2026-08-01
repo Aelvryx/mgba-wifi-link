@@ -10,7 +10,7 @@ The replicated-pair runtime has proven full-speed generic MULTI transfers in dia
 - Produce an evidence report naming the first causal happens-before, state, or characterized timing difference.
 - Stop after diagnosis and amend the proposal, design, specification, and tasks with the affected layer's exact generic invariant before any production behavior change; obtain focused review of that delta.
 - After that review only, add a redistributable automated regression, implement the approved correction, and qualify linking plus brief two-player gameplay on two Android devices.
-- Keep complex navigation human-owned and all build, installation, deterministic replay, trace extraction, comparison, automated validation, teardown, and cleanup agent-owned.
+- Keep complex navigation and RetroArch's app-private core-install confirmation human-owned; keep builds, staged-artifact verification, deterministic replay, trace extraction, comparison, automated runtime validation, teardown, and cleanup agent-owned.
 
 ## Capabilities
 

@@ -200,7 +200,7 @@ Investigation stops at the first failing layer. The evidence report is the final
 
 After Stage B approval, the minimum causal sequence is reproduced through direct SIO/lockstep calls, redistributable pair replay, or original CC0 guest code. It must fail on the pre-correction behavior and assert both the immediate reviewed invariant and eventual discovery/transfer consequence.
 
-Automation owns exact builds, hashes, installation, isolated options, run IDs, logging, deterministic replay, monitoring, evidence extraction, teardown, and cleanup. It may execute only a short verified frontend setup sequence. The human owns save selection, menus, sustained input, gameplay, and audiovisual judgment.
+Automation owns exact builds, staged-artifact hashes, isolated options, run IDs, logging, deterministic replay, monitoring, evidence extraction, teardown, and cleanup. Stock Android does not permit ADB to read RetroArch's app-private installed core, so the human installs the exact artifact through RetroArch and preserves the Core Information identity screen. The manifest records the installed hash as unavailable instead of fabricating it. Automation validates the staged artifact's embedded commit/version, the private identity-evidence digest, the runtime-loaded app-private path, and the expected v2 registration. The human also owns save selection, menus, sustained input, gameplay, and audiovisual judgment.
 
 If production SIO, lockstep, pair, replica, adapter, or session behavior changes, an exact-head Mario Kart smoke must reach successful lobby formation, selection, representative race gameplay with real cable traffic, and safe disconnect. A complete three-lap race is not required.
 

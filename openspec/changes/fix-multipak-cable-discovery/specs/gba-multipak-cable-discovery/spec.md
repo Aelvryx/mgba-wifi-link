@@ -15,7 +15,7 @@ The project SHALL retest Four Swords on the exact topology-settled alpha.2 build
 - **AND** Stage A proceeds with bounded diagnostic instrumentation and deterministic layered isolation
 
 ### Requirement: Deterministic layered fault isolation
-For automated layers, the project SHALL diagnose discovery in widening order through ordinary local mGBA lockstep, a network-free replicated pair, the paired protocol-v2 adapter, and finally physical frontend behavior. Layers one through three SHALL use identical P0 and P1 initial-state payloads, emulator configuration, bounded per-frame P0/P1 input script, and named comparison boundary. Investigation SHALL stop at the first failing layer.
+If the baseline-failure scenario activates Stage A, the project SHALL diagnose discovery in widening order through ordinary local mGBA lockstep, a network-free replicated pair, the paired protocol-v2 adapter, and finally physical frontend behavior. Layers one through three SHALL use identical P0 and P1 initial-state payloads, emulator configuration, bounded per-frame P0/P1 input script, and named comparison boundary. Investigation SHALL stop at the first failing layer.
 
 #### Scenario: Automated ladder begins
 - **WHEN** a human has created or verified the bounded pre-link navigation once
@@ -52,7 +52,7 @@ For automated layers, the project SHALL diagnose discovery in widening order thr
 - **AND** the proposal and capability scope are revised and reviewed before implementation
 
 ### Requirement: Guest-observation and attempted-write tracing
-When Stage A tracing is required, the emulator SHALL provide an opt-in transport-neutral observer that records discovery-relevant guest observations, write intent, and state transitions. Identical consecutive SIOCNT or RCNT reads SHALL be coalesced into bounded `REGISTER_READ_RUN` records. Before emitting any non-read SIO, lockstep, pair, adapter, anchor, or terminal transition used in causal comparison, the observer SHALL flush every open read run whose observations precede that transition. Write records SHALL retain attempted value, access width, pre-state, post-state, and transition origin even when masks or role recomputation hide the attempted operation in the final register.
+If the baseline-failure scenario activates Stage A tracing, the emulator SHALL provide an opt-in transport-neutral observer that records discovery-relevant guest observations, write intent, and state transitions. Identical consecutive SIOCNT or RCNT reads SHALL be coalesced into bounded `REGISTER_READ_RUN` records. Before emitting any non-read SIO, lockstep, pair, adapter, anchor, or terminal transition used in causal comparison, the observer SHALL flush every open read run whose observations precede that transition. Write records SHALL retain attempted value, access width, pre-state, post-state, and transition origin even when masks or role recomputation hide the attempted operation in the final register.
 
 #### Scenario: Guest polls SIOCNT or RCNT
 - **WHEN** guest code repeatedly reads the same SIOCNT or RCNT value without an intervening causal boundary
@@ -88,7 +88,7 @@ When Stage A tracing is required, the emulator SHALL provide an opt-in transport
 - **THEN** SIO, lockstep, replicated-pair, protocol-v2, allocation, formatting, file-output, and network behavior remain unchanged
 
 ### Requirement: Correlated event ordering and observer safety
-Every transition record SHALL be a fully copied immutable value containing a globally monotonic run ordinal, per-player ordinal, coordinator ordinal where applicable, operation ID where applicable, optional flush-boundary operation ID where applicable, transfer ID where applicable, actor player, target player or mask, transition origin, and trace phase. An operation ID SHALL correlate only an attempted register operation with its resulting mode, line, and START effects. If an earlier read run identifies the operation that ended it, the run SHALL use `flush_boundary_operation_id` and SHALL NOT become part of that operation. After setup, event emission SHALL be non-blocking, allocation-free, formatting-free, non-reentrant, safe while the coordinator mutex is held, and safe under ordinary local-lockstep threading.
+If the baseline-failure scenario activates Stage A tracing, every transition record SHALL be a fully copied immutable value containing a globally monotonic run ordinal, per-player ordinal, coordinator ordinal where applicable, operation ID where applicable, optional flush-boundary operation ID where applicable, transfer ID where applicable, actor player, target player or mask, transition origin, and trace phase. An operation ID SHALL correlate only an attempted register operation with its resulting mode, line, and START effects. If an earlier read run identifies the operation that ended it, the run SHALL use `flush_boundary_operation_id` and SHALL NOT become part of that operation. After setup, event emission SHALL be non-blocking, allocation-free, formatting-free, non-reentrant, safe while the coordinator mutex is held, and safe under ordinary local-lockstep threading.
 
 #### Scenario: One operation has several effects
 - **WHEN** an attempted write changes mode or lines and produces a START edge
@@ -115,7 +115,7 @@ Every transition record SHALL be a fully copied immutable value containing a glo
 - **THEN** the observer is detached before destruction of cores, coordinators, callbacks, frontend state, or ROM storage
 
 ### Requirement: Immutable bootstrap and pre-mutation terminal evidence
-Each enabled endpoint trace SHALL preserve an immutable prefix containing at least the first 128 transition records, a fixed-capacity rolling middle ring, and an immutable terminal snapshot captured immediately before the first teardown, detach, checkpoint restore, or driver-removal mutation. The export SHALL state first emitted ordinal, first retained rolling ordinal, last retained ordinal, total emitted, total overwritten, and total observer losses.
+If the baseline-failure scenario activates Stage A tracing, each enabled endpoint trace SHALL preserve an immutable prefix containing at least the first 128 transition records, a fixed-capacity rolling middle ring, and an immutable terminal snapshot captured immediately before the first teardown, detach, checkpoint restore, or driver-removal mutation. The export SHALL state first emitted ordinal, first retained rolling ordinal, last retained ordinal, total emitted, total overwritten, and total observer losses.
 
 #### Scenario: Discovery runs longer than trace capacity
 - **WHEN** emitted transitions exceed rolling capacity
@@ -133,7 +133,7 @@ Each enabled endpoint trace SHALL preserve an immutable prefix containing at lea
 - **THEN** the analyzer rejects the result as inconclusive
 
 ### Requirement: Comparable run metadata and causal anchors
-Every automated trace header SHALL include source commit, core binary hash, observer schema version and capacities, trace-start phase, run ID, layer, endpoint role, ROM identity digest, P0 and P1 initial-state digests, BIOS/HLE policy and BIOS digest where applicable, determinism/core-option profile digest, RTC policy, idle-optimization policy, input-direction policy, and private input-script digest and frame range. Identity digests SHALL be diagnostic metadata only and SHALL NOT select production behavior or expose raw commercial inputs.
+If the baseline-failure scenario activates Stage A tracing, every automated trace header SHALL include source commit, core binary hash, observer schema version and capacities, trace-start phase, run ID, layer, endpoint role, ROM identity digest, P0 and P1 initial-state digests, BIOS/HLE policy and BIOS digest where applicable, determinism/core-option profile digest, RTC policy, idle-optimization policy, input-direction policy, and private input-script digest and frame range. Identity digests SHALL be diagnostic metadata only and SHALL NOT select production behavior or expose raw commercial inputs.
 
 Anchors SHALL use these exact emitting conditions:
 
@@ -176,7 +176,7 @@ Ordinary local lockstep SHALL map attachment anchors around local driver attachm
 - **AND** `TERMINAL` is emitted immediately before the pre-mutation snapshot
 
 ### Requirement: Relative causal trace comparison
-The repository SHALL provide a deterministic comparator that validates metadata and ordinal integrity, compares attachment invariants at `ATTACHMENT_COMMITTED`, compares guest-visible reads and writes from `GUEST_RELEASED`, and compares transfer behavior after `FIRST_START`. It SHALL ignore absolute cycle origin and host wall time but SHALL compare relative causal ordering and characterized timing relationships. Every non-exact timing tolerance SHALL come from a versioned comparison-policy entry containing relationship, units, normalization rule, minimum, maximum, authority or characterization source, and policy version. Deterministic emulated-cycle relationships SHALL use exact equality by default unless an applicable policy explicitly permits a window.
+If the baseline-failure scenario activates Stage A, the repository SHALL provide a deterministic comparator that validates metadata and ordinal integrity, compares attachment invariants at `ATTACHMENT_COMMITTED`, compares guest-visible reads and writes from `GUEST_RELEASED`, and compares transfer behavior after `FIRST_START`. It SHALL ignore absolute cycle origin and host wall time but SHALL compare relative causal ordering and characterized timing relationships. Every non-exact timing tolerance SHALL come from a versioned comparison-policy entry containing relationship, units, normalization rule, minimum, maximum, authority or characterization source, and policy version. Deterministic emulated-cycle relationships SHALL use exact equality by default unless an applicable policy explicitly permits a window.
 
 #### Scenario: Equivalent transitions have different origins
 - **WHEN** two traces contain equivalent anchored state transitions with different absolute cycle origins or host wall times
@@ -203,7 +203,7 @@ The repository SHALL provide a deterministic comparator that validates metadata 
 - **AND** it does not report the layers as equivalent
 
 ### Requirement: Mandatory evidence-to-requirement review gate
-No production behavior change SHALL be implemented until transition evidence has been incorporated into a reviewed requirement defining the affected layer's exact generic invariant. This gate SHALL apply to common SIO, ordinary lockstep, replica capture/restoration, pair installation/scheduling, frontend adapter, session, and wire behavior. The reviewed delta SHALL state pre-state, trigger or observation, required post-state, relative ordering or characterized timing, minimum regression, compatibility effect, and rollback behavior.
+If the baseline-failure scenario activates Stage A, no production behavior change SHALL be implemented until transition evidence has been incorporated into a reviewed requirement defining the affected layer's exact generic invariant. This gate SHALL apply to common SIO, ordinary lockstep, replica capture/restoration, pair installation/scheduling, frontend adapter, session, and wire behavior. The reviewed delta SHALL state pre-state, trigger or observation, required post-state, relative ordering or characterized timing, minimum regression, compatibility effect, and rollback behavior.
 
 #### Scenario: Stage A identifies a causal difference
 - **WHEN** the evidence report identifies the first causal state, ordering, or characterized timing divergence
@@ -224,7 +224,7 @@ No production behavior change SHALL be implemented until transition evidence has
 - **AND** only the existing generic topology behavior is captured in regression evidence
 
 ### Requirement: Redistributable causal regression
-After Stage B review, the approved causal invariant SHALL be represented by an automated regression containing no commercial ROM, save, savestate, screenshot, audio, extracted code, transferred content words, raw private input script, or title identity. It SHALL fail on the prior generic behavior, assert the reviewed immediate invariant, and assert the eventual discovery or transfer consequence.
+If the baseline-failure scenario activates Stage B after focused review, the approved causal invariant SHALL be represented by an automated regression containing no commercial ROM, save, savestate, screenshot, audio, extracted code, transferred content words, raw private input script, or title identity. It SHALL fail on the prior generic behavior, assert the reviewed immediate invariant, and assert the eventual discovery or transfer consequence.
 
 #### Scenario: Direct register sequence is sufficient
 - **WHEN** the approved causal behavior can be expressed through common SIO or lockstep calls
@@ -241,10 +241,10 @@ After Stage B review, the approved causal invariant SHALL be represented by an a
 - **THEN** the new regression and all existing topology, pair, transfer, teardown, and save-checkpoint regressions pass
 
 ### Requirement: Explicit physical-test ownership and qualification
-Every physical run SHALL assign automation-owned setup/observation and human-owned game interaction before execution. Automation SHALL prepare the exact build, hashes, isolated configuration, synchronized run ID, logging, monitoring, evidence extraction, teardown, and cleanup. The human SHALL perform save selection, navigation, sustained input, gameplay, and audiovisual judgment. Automation SHALL NOT explore unfamiliar menus or gameplay through iterative screenshots and injected input.
+Every physical run SHALL assign automation-owned setup/observation and human-owned game interaction before execution. Automation SHALL prepare the exact build, staged-artifact hashes, isolated configuration, synchronized run ID, logging, monitoring, evidence extraction, teardown, and cleanup. When Android prevents ADB from reading RetroArch's app-private installed core, the human SHALL install the exact artifact and preserve Core Information identity evidence; the manifest SHALL record the installed hash as `null` with reason `APP_PRIVATE_PATH_UNREADABLE`, and automation SHALL validate the staged artifact identity, evidence digest, loaded app-private path, and expected runtime protocol registration without inventing an installed hash. The human SHALL perform save selection, navigation, sustained input, gameplay, and audiovisual judgment. Automation SHALL NOT explore unfamiliar menus or gameplay through iterative screenshots and injected input.
 
 #### Scenario: Prepared run reaches handoff
-- **WHEN** automation verifies the exact cores, logging, connection state, expected screen, and failure signals
+- **WHEN** automation verifies the exact staged artifacts, isolated paths, frontend/content/runtime identity, logging, connection state, expected screen, and failure signals, and validates the human-owned app-private core identity evidence where direct hashing is unavailable
 - **THEN** it hands the devices to the human with a short action and success checklist
 - **AND** it observes without driving gameplay
 

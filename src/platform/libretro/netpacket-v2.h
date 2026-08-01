@@ -43,6 +43,8 @@ bool mLibretroNetpacketV2TestInstallPair(
 	const struct GBAReplicaPayload payloads[2],
 	enum GBALinkRole role, uint64_t generation);
 struct mCore* mLibretroNetpacketV2TestPairCore(uint8_t player);
+bool mLibretroNetpacketV2TestCaptureCheckpoint(uint64_t frame);
+void mLibretroNetpacketV2TestFailNextCheckpointAllocation(void);
 void mLibretroNetpacketV2TestFail(enum GBALinkV2Reason reason);
 #endif
 

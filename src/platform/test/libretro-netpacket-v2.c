@@ -11,6 +11,7 @@
 #include <mgba/core/log.h>
 #include <mgba/gba/core.h>
 #include <mgba/internal/gba/gba.h>
+#include <mgba/internal/gba/io.h>
 #include <mgba/internal/gba/memory.h>
 #include <mgba/internal/gba/savedata.h>
 #include <mgba/internal/gba/sio/netplay/protocol-v2.h>
@@ -255,6 +256,17 @@ static void _teardownPairAction(
 	    _environment, fixture->core, fixture->save,
 	    sizeof(fixture->save)));
 	struct mCore* second = _secondCore(fixture);
+	struct GBA* original = fixture->core->board;
+	struct GBA* remote = second->board;
+	GBASIOWriteRCNT(&original->sio, 0);
+	GBASIOWriteSIOCNT(&original->sio, 0x2000);
+	original->sio.siocnt =
+	    GBASIOMultiplayerFillError(original->sio.siocnt);
+	GBASIOWriteRCNT(&remote->sio, 0);
+	GBASIOWriteSIOCNT(&remote->sio, 0x2000);
+	for (unsigned i = 0; i < 4; ++i) {
+		original->memory.io[GBA_REG(SIOMULTI0) + i] = 0x4400 + i;
+	}
 	struct mCore* sources[2] = { fixture->core, second };
 	struct GBAReplicaBundle bundles[2];
 	struct GBAReplicaManifest manifests[2];
@@ -308,8 +320,20 @@ static void _teardownPairAction(
 		mLibretroNetpacketV2Unload();
 		break;
 	}
-	assert_int_equal(fixture->save[23],
-	    role == GBA_LINK_ROLE_HOST ? 0xA0 : 0xB1);
+	assert_int_equal(fixture->save[23], 0xFF);
+	assert_false(GBASIOMultiplayerIsBusy(original->sio.siocnt));
+	assert_true(GBASIOMultiplayerIsReady(original->sio.siocnt));
+	assert_true(GBASIOMultiplayerIsSlave(original->sio.siocnt));
+	assert_true(GBASIOMultiplayerIsError(original->sio.siocnt));
+	assert_int_equal(GBASIOMultiplayerGetId(original->sio.siocnt), 0);
+	assert_false(GBASIORegisterRCNTIsSi(original->sio.rcnt));
+	assert_true(GBASIORegisterRCNTIsSd(original->sio.rcnt));
+	assert_true(GBASIORegisterRCNTIsSc(original->sio.rcnt));
+	for (unsigned i = 0; i < 4; ++i) {
+		assert_int_equal(
+		    original->memory.io[GBA_REG(SIOMULTI0) + i],
+		    0x4400 + i);
+	}
 	assert_null(mLibretroNetpacketV2TestPairCore(0));
 	assert_null(mLibretroNetpacketV2TestPairCore(1));
 
@@ -320,7 +344,7 @@ static void _teardownPairAction(
 	second->deinit(second);
 }
 
-M_TEST_DEFINE(localRoleSaveSurvivesEveryTeardownWithoutShadowWriteback) {
+M_TEST_DEFINE(failureBeforeVerificationRestoresAttachmentSave) {
 	struct V2AdapterFixture* fixture = *state;
 	for (enum GBALinkRole role = GBA_LINK_ROLE_HOST;
 	     role <= GBA_LINK_ROLE_CLIENT; ++role) {
@@ -330,6 +354,74 @@ M_TEST_DEFINE(localRoleSaveSurvivesEveryTeardownWithoutShadowWriteback) {
 			mLibretroNetpacketV2Unload();
 		}
 	}
+}
+
+M_TEST_DEFINE(verifiedRollbackRestoresStateAndSaveAtomically) {
+	struct V2AdapterFixture* fixture = *state;
+	memset(fixture->save, 0x31, sizeof(fixture->save));
+	assert_true(mLibretroNetpacketV2Register(
+	    _environment, fixture->core, fixture->save,
+	    sizeof(fixture->save)));
+	struct mCore* second = _secondCore(fixture);
+	struct mCore* sources[2] = { fixture->core, second };
+	struct GBAReplicaBundle bundles[2];
+	struct GBAReplicaManifest manifests[2];
+	struct GBAReplicaPayload payloads[2];
+	memset(bundles, 0, sizeof(bundles));
+	memset(payloads, 0, sizeof(payloads));
+	for (unsigned player = 0; player < 2; ++player) {
+		assert_int_equal(GBAReplicaCapture(
+		    sources[player], player, 77,
+		    GBA_REPLICA_ENCODING_NONE,
+		    GBA_REPLICA_DEFAULT_CHUNK_SIZE,
+		    &bundles[player]), GBA_REPLICA_OK);
+		manifests[player] = bundles[player].manifest;
+		payloads[player].data = bundles[player].encodedData;
+		payloads[player].size = bundles[player].encodedSize;
+	}
+	assert_true(mLibretroNetpacketV2TestInstallPair(
+	    manifests, payloads, GBA_LINK_ROLE_HOST, 77));
+	struct GBA* local = mLibretroNetpacketV2TestPairCore(0)->board;
+	GBASavedataForceType(
+	    &local->memory.savedata, GBA_SAVEDATA_SRAM);
+	local->cpu->gprs[0] = 0x12345678;
+	local->memory.wram[17] = 0xA4;
+	local->memory.savedata.command = 0x55;
+	fixture->save[23] = 0xA5;
+	fixture->save[sizeof(fixture->save) - 1] = 0xC3;
+	assert_true(mLibretroNetpacketV2TestCaptureCheckpoint(60));
+
+	local->cpu->gprs[0] = 0x22222222;
+	local->memory.wram[17] = 0xB5;
+	fixture->save[23] = 0xB6;
+	mLibretroNetpacketV2TestFailNextCheckpointAllocation();
+	assert_false(mLibretroNetpacketV2TestCaptureCheckpoint(120));
+
+	local->cpu->gprs[0] = 0xDEADBEEF;
+	local->memory.wram[17] = 0x19;
+	fixture->save[23] = 0x6B;
+	fixture->save[sizeof(fixture->save) - 1] = 0x7D;
+	GBASavedataForceType(
+	    &local->memory.savedata, GBA_SAVEDATA_FLASH1M);
+	mLibretroNetpacketV2TestFail(GBA_LINK_V2_REASON_DIVERGENCE);
+
+	struct GBA* restored = fixture->core->board;
+	assert_int_equal(restored->cpu->gprs[0], 0x12345678);
+	assert_int_equal(restored->memory.wram[17], 0xA4);
+	assert_int_equal(
+	    restored->memory.savedata.type, GBA_SAVEDATA_SRAM);
+	assert_int_equal(restored->memory.savedata.command, 0x55);
+	assert_int_equal(fixture->save[23], 0xA5);
+	assert_int_equal(
+	    fixture->save[sizeof(fixture->save) - 1], 0xC3);
+	assert_null(mLibretroNetpacketV2TestPairCore(0));
+	assert_null(mLibretroNetpacketV2TestPairCore(1));
+
+	for (unsigned player = 0; player < 2; ++player) {
+		GBAReplicaBundleDeinit(&bundles[player]);
+	}
+	mCoreConfigDeinit(&second->config);
+	second->deinit(second);
 }
 
 M_TEST_SUITE_DEFINE_SETUP_TEARDOWN(LibretroNetpacketV2,
@@ -342,5 +434,8 @@ M_TEST_SUITE_DEFINE_SETUP_TEARDOWN(LibretroNetpacketV2,
 	cmocka_unit_test_setup_teardown(
 	    missingPollingAndSynchronousStopFailClosed, _setup, _teardown),
 	cmocka_unit_test_setup_teardown(
-	    localRoleSaveSurvivesEveryTeardownWithoutShadowWriteback,
+	    failureBeforeVerificationRestoresAttachmentSave,
+	    _setup, _teardown),
+	cmocka_unit_test_setup_teardown(
+	    verifiedRollbackRestoresStateAndSaveAtomically,
 	    _setup, _teardown))

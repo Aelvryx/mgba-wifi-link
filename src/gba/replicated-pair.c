@@ -595,13 +595,26 @@ void GBAReplicatedPairStop(struct GBAReplicatedPair* pair) {
 	}
 	for (unsigned i = 0; i < 2; ++i) {
 		struct GBAReplicatedPairPlayer* player = &pair->players[i];
+		struct VFile* orphanedSave = NULL;
 		if (player->core) {
+			struct GBA* gba = player->core->board;
+			if (player->temporarySave &&
+			    !gba->memory.savedata.realVf) {
+				/* With no persistent save underneath the mask, core
+				 * teardown unmaps but deliberately does not close the
+				 * temporary VFile. */
+				orphanedSave = player->temporarySave;
+			}
 			if (player->configInitialized) {
 				mCoreConfigDeinit(&player->core->config);
 				player->configInitialized = false;
 			}
 			player->core->deinit(player->core);
 			player->core = NULL;
+			player->temporarySave = NULL;
+			if (orphanedSave) {
+				orphanedSave->close(orphanedSave);
+			}
 		}
 		if (player->temporarySave) {
 			player->temporarySave->close(player->temporarySave);

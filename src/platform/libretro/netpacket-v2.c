@@ -41,6 +41,10 @@
 	M_NETPACKET_V2_SYMBOL(TestInstallPair)
 #define mLibretroNetpacketV2TestPairCore \
 	M_NETPACKET_V2_SYMBOL(TestPairCore)
+#define mLibretroNetpacketV2TestCaptureCheckpoint \
+	M_NETPACKET_V2_SYMBOL(TestCaptureCheckpoint)
+#define mLibretroNetpacketV2TestFailNextCheckpointAllocation \
+	M_NETPACKET_V2_SYMBOL(TestFailNextCheckpointAllocation)
 #define mLibretroNetpacketV2TestFail M_NETPACKET_V2_SYMBOL(TestFail)
 #endif
 
@@ -61,6 +65,7 @@
 #include <mgba/internal/gba/gba.h>
 #include <mgba/internal/gba/replicated-pair.h>
 #include <mgba/internal/gba/replicated-runtime.h>
+#include <mgba/internal/gba/savedata.h>
 #include <mgba/internal/gba/serialize.h>
 #include <mgba/internal/gba/sio/netplay/identity.h>
 #include <mgba/internal/gba/sio/netplay/session-v2.h>
@@ -95,6 +100,21 @@ struct mLibretroNetpacketV2Metrics {
 	size_t queueHighWater;
 };
 
+struct mLibretroNetpacketV2Checkpoint {
+	struct GBASerializedState* state;
+	uint8_t* saveData;
+	size_t saveSize;
+	size_t saveBackingSize;
+	enum GBASavedataType saveType;
+	enum mRTCGenericType rtcType;
+	int64_t rtcValue;
+	time_t cartridgeRtcLastLatch;
+	time_t cartridgeRtcOffset;
+	uint64_t frame;
+	uint64_t saveGeneration;
+	bool valid;
+};
+
 struct mLibretroNetpacketV2Adapter {
 	retro_environment_t environment;
 	struct mCore* core;
@@ -127,18 +147,13 @@ struct mLibretroNetpacketV2Adapter {
 	uint8_t remoteVerificationDigests[2][MGBA_SHA256_DIGEST_SIZE];
 	bool verificationPending;
 	bool remoteVerificationReceived;
-	struct GBASerializedState* verifiedLocalState;
-	uint64_t lastVerifiedFrame;
+	struct mLibretroNetpacketV2Checkpoint verifiedCheckpoint;
 	uint64_t localSaveGeneration;
-	uint64_t verifiedSaveGeneration;
-	enum mRTCGenericType verifiedRtcType;
-	int64_t verifiedRtcValue;
-	time_t verifiedCartridgeRtcLastLatch;
-	time_t verifiedCartridgeRtcOffset;
 	struct mLibretroNetpacketV2Metrics metrics;
 #ifdef M_LIBRETRO_NETPACKET_V2_TEST
 	bool testClockEnabled;
 	uint64_t testNowMs;
+	bool testFailCheckpointAllocation;
 #endif
 };
 
@@ -392,6 +407,60 @@ static enum GBAReplicaResult _captureReplica(
 	    adapter->core, player, generation, encoding, chunkSize, bundle);
 }
 
+static void _checkpointDeinit(
+		struct mLibretroNetpacketV2Checkpoint* checkpoint) {
+	if (!checkpoint) {
+		return;
+	}
+	free(checkpoint->saveData);
+	free(checkpoint->state);
+	memset(checkpoint, 0, sizeof(*checkpoint));
+}
+
+static bool _captureLocalCheckpoint(
+		struct mLibretroNetpacketV2Adapter* adapter,
+		struct mCore* core, uint64_t frame, uint64_t saveGeneration) {
+	if (!adapter || !core || !core->board || !adapter->saveData ||
+	    !adapter->saveCapacity) {
+		return false;
+	}
+	struct GBA* gba = core->board;
+	struct mLibretroNetpacketV2Checkpoint replacement;
+	memset(&replacement, 0, sizeof(replacement));
+	replacement.saveType = gba->memory.savedata.type;
+	replacement.saveSize = GBASavedataSize(&gba->memory.savedata);
+	replacement.saveBackingSize = adapter->saveCapacity;
+	if (replacement.saveSize > replacement.saveBackingSize) {
+		return false;
+	}
+#ifdef M_LIBRETRO_NETPACKET_V2_TEST
+	if (adapter->testFailCheckpointAllocation) {
+		adapter->testFailCheckpointAllocation = false;
+		return false;
+	}
+#endif
+	replacement.state = calloc(1, sizeof(*replacement.state));
+	replacement.saveData = malloc(replacement.saveBackingSize);
+	if (!replacement.state || !replacement.saveData) {
+		_checkpointDeinit(&replacement);
+		return false;
+	}
+	GBASerialize(gba, replacement.state);
+	memcpy(replacement.saveData, adapter->saveData,
+	    replacement.saveBackingSize);
+	replacement.rtcType = core->rtc.override;
+	replacement.rtcValue = core->rtc.value;
+	replacement.cartridgeRtcLastLatch = gba->memory.hw.rtc.lastLatch;
+	replacement.cartridgeRtcOffset = gba->memory.hw.rtc.offset;
+	replacement.frame = frame;
+	replacement.saveGeneration = saveGeneration;
+	replacement.valid = true;
+
+	_checkpointDeinit(&adapter->verifiedCheckpoint);
+	adapter->verifiedCheckpoint = replacement;
+	return true;
+}
+
 static bool _installPair(
 	void* context, const struct GBAReplicaManifest manifests[2],
 	const struct GBAReplicaPayload payloads[2]) {
@@ -399,10 +468,12 @@ static bool _installPair(
 	if (adapter->pairInitialized) {
 		return false;
 	}
-	free(adapter->verifiedLocalState);
-	adapter->verifiedLocalState = NULL;
-	adapter->lastVerifiedFrame = 0;
-	adapter->verifiedSaveGeneration = 0;
+	_checkpointDeinit(&adapter->verifiedCheckpoint);
+	if (!_captureLocalCheckpoint(
+	        adapter, adapter->core,
+	        adapter->gba->video.frameCounter, 0)) {
+		return false;
+	}
 	GBAReplicatedPairInit(&adapter->pair);
 	adapter->pairInitialized = true;
 	if (GBAReplicatedPairInstall(
@@ -422,6 +493,7 @@ static bool _installPair(
 	GBAReplicatedPairStop(&adapter->pair);
 	memset(&adapter->pair, 0, sizeof(adapter->pair));
 	adapter->pairInitialized = false;
+	_checkpointDeinit(&adapter->verifiedCheckpoint);
 	return false;
 }
 
@@ -442,43 +514,70 @@ static bool _commitPair(void* context) {
 	return true;
 }
 
-static void _restoreDisconnectedLines(struct GBA* gba) {
-	if (!gba || gba->sio.driver || gba->sio.mode != GBA_SIO_MULTI) {
-		return;
-	}
-	mTimingDeschedule(&gba->timing, &gba->sio.completeEvent);
-	gba->sio.transferMode = -1;
-	gba->sio.siocnt = GBASIOMultiplayerClearBusy(gba->sio.siocnt);
-	gba->sio.siocnt = GBASIOMultiplayerFillReady(gba->sio.siocnt);
-	gba->sio.siocnt = GBASIOMultiplayerFillSlave(gba->sio.siocnt);
-	gba->sio.siocnt = GBASIOMultiplayerSetId(gba->sio.siocnt, 0);
-	gba->sio.rcnt = GBASIORegisterRCNTFillSc(gba->sio.rcnt);
-}
-
 static void _restoreVerifiedLocalState(
 		struct mLibretroNetpacketV2Adapter* adapter) {
-	if (!adapter || !adapter->verifiedLocalState || !adapter->gba ||
-	    adapter->gba->sio.driver) {
+	if (!adapter || !adapter->verifiedCheckpoint.valid ||
+	    !adapter->verifiedCheckpoint.state ||
+	    !adapter->verifiedCheckpoint.saveData || !adapter->gba ||
+	    adapter->gba->sio.driver || !adapter->saveData) {
+		_log(RETRO_LOG_WARN,
+		    "verified checkpoint unavailable during teardown");
 		return;
 	}
-	if (!GBADeserialize(adapter->gba, adapter->verifiedLocalState)) {
+	if (adapter->verifiedCheckpoint.saveBackingSize !=
+	        adapter->saveCapacity ||
+	    adapter->verifiedCheckpoint.saveSize > adapter->saveCapacity ||
+	    adapter->verifiedCheckpoint.state->savedata.type !=
+	        (uint8_t) adapter->verifiedCheckpoint.saveType) {
+		char message[192];
+		snprintf(message, sizeof(message),
+		    "verified checkpoint metadata is inconsistent "
+		    "backing=%zu/%zu save=%zu type=%u/%u",
+		    adapter->verifiedCheckpoint.saveBackingSize,
+		    adapter->saveCapacity,
+		    adapter->verifiedCheckpoint.saveSize,
+		    (unsigned) adapter->verifiedCheckpoint.state->savedata.type,
+		    (unsigned) adapter->verifiedCheckpoint.saveType);
+		_log(RETRO_LOG_WARN, message);
+		return;
+	}
+	if (!GBADeserialize(
+	        adapter->gba, adapter->verifiedCheckpoint.state)) {
 		_log(RETRO_LOG_WARN,
 		    "verified local state restore failed; preserving frozen core");
 		return;
 	}
-	adapter->core->rtc.override = adapter->verifiedRtcType;
-	adapter->core->rtc.value = adapter->verifiedRtcValue;
+	if (adapter->gba->memory.savedata.type !=
+	        adapter->verifiedCheckpoint.saveType ||
+	    GBASavedataSize(&adapter->gba->memory.savedata) !=
+	        adapter->verifiedCheckpoint.saveSize) {
+		_log(RETRO_LOG_WARN,
+		    "verified save controller restore mismatch; preserving save");
+		return;
+	}
+	memcpy(adapter->saveData, adapter->verifiedCheckpoint.saveData,
+	    adapter->saveCapacity);
+	if (adapter->verifiedCheckpoint.saveSize &&
+	    adapter->gba->memory.savedata.data &&
+	    adapter->gba->memory.savedata.data != adapter->saveData) {
+		memcpy(adapter->gba->memory.savedata.data,
+		    adapter->verifiedCheckpoint.saveData,
+		    adapter->verifiedCheckpoint.saveSize);
+	}
+	adapter->core->rtc.override = adapter->verifiedCheckpoint.rtcType;
+	adapter->core->rtc.value = adapter->verifiedCheckpoint.rtcValue;
 	adapter->gba->memory.hw.rtc.lastLatch =
-	    adapter->verifiedCartridgeRtcLastLatch;
+	    adapter->verifiedCheckpoint.cartridgeRtcLastLatch;
 	adapter->gba->memory.hw.rtc.offset =
-	    adapter->verifiedCartridgeRtcOffset;
-	_restoreDisconnectedLines(adapter->gba);
+	    adapter->verifiedCheckpoint.cartridgeRtcOffset;
+	GBASIOMultiplayerMaterializeLines(
+	    &adapter->gba->sio, 0, false, true, true);
 	char message[160];
 	snprintf(message, sizeof(message),
 	    "restored verified local state frame=%" PRIu64
 	    " save_generation=%" PRIu64,
-	    adapter->lastVerifiedFrame,
-	    adapter->verifiedSaveGeneration);
+	    adapter->verifiedCheckpoint.frame,
+	    adapter->verifiedCheckpoint.saveGeneration);
 	_log(RETRO_LOG_INFO, message);
 }
 
@@ -638,8 +737,7 @@ static void _discardPair(void* context, bool committed) {
 	}
 	adapter->verificationPending = false;
 	adapter->remoteVerificationReceived = false;
-	free(adapter->verifiedLocalState);
-	adapter->verifiedLocalState = NULL;
+	_checkpointDeinit(&adapter->verifiedCheckpoint);
 }
 
 static void _digestText(
@@ -722,34 +820,19 @@ static bool _completeVerification(
 	if (!GBASIOMultiplayerIsBusy(localGBA->sio.siocnt) &&
 	    !mTimingIsScheduled(
 	        &localGBA->timing, &localGBA->sio.completeEvent)) {
-		if (!adapter->verifiedLocalState) {
-			adapter->verifiedLocalState = calloc(
-			    1, sizeof(*adapter->verifiedLocalState));
-		}
-		if (adapter->verifiedLocalState) {
-			memset(adapter->verifiedLocalState, 0,
-			    sizeof(*adapter->verifiedLocalState));
-			GBASerialize(
-			    localGBA, adapter->verifiedLocalState);
-			adapter->verifiedRtcType =
-			    GBAReplicatedPairCore(
-			        &adapter->pair, localPlayer)->rtc.override;
-			adapter->verifiedRtcValue =
-			    GBAReplicatedPairCore(
-			        &adapter->pair, localPlayer)->rtc.value;
-			adapter->verifiedCartridgeRtcLastLatch =
-			    localGBA->memory.hw.rtc.lastLatch;
-			adapter->verifiedCartridgeRtcOffset =
-			    localGBA->memory.hw.rtc.offset;
-			adapter->lastVerifiedFrame =
-			    adapter->verificationFrame;
-			struct GBAReplicatedPairMetrics metrics;
-			if (GBAReplicatedPairGetMetrics(
-			        &adapter->pair, &metrics)) {
-				adapter->localSaveGeneration =
-				    metrics.saveGenerations[localPlayer];
-				adapter->verifiedSaveGeneration =
-				    adapter->localSaveGeneration;
+		struct GBAReplicatedPairMetrics metrics;
+		if (GBAReplicatedPairGetMetrics(
+		        &adapter->pair, &metrics)) {
+			adapter->localSaveGeneration =
+			    metrics.saveGenerations[localPlayer];
+			if (!_captureLocalCheckpoint(
+			        adapter,
+			        GBAReplicatedPairCore(
+			            &adapter->pair, localPlayer),
+			        adapter->verificationFrame,
+			        adapter->localSaveGeneration)) {
+				_log(RETRO_LOG_WARN,
+				    "verified checkpoint allocation failed; retaining prior checkpoint");
 			}
 		}
 	}
@@ -913,7 +996,7 @@ static bool _buildConfig(
 	adapter->sessionConfig.minimumInputDelay = 2;
 	adapter->sessionConfig.maximumInputDelay = 8;
 	adapter->sessionConfig.estimatedJitterMs = 5;
-	adapter->sessionConfig.experimentalRuntime = false;
+	adapter->sessionConfig.experimentalRuntime = true;
 	GBALinkV2DeadlinePolicyInit(&adapter->sessionConfig.deadlines);
 	adapter->sessionConfig.callbacks = &_sessionCallbacks;
 	adapter->sessionConfig.callbackContext = adapter;
@@ -1420,6 +1503,7 @@ void mLibretroNetpacketV2Unload(void) {
 	}
 	_invalidateFrontend(&_adapter);
 	_deinitSession(&_adapter);
+	_checkpointDeinit(&_adapter.verifiedCheckpoint);
 	memset(&_adapter, 0, sizeof(_adapter));
 	_adapter.localId = NETPACKET_V2_NO_CLIENT;
 	_adapter.remoteId = NETPACKET_V2_NO_CLIENT;
@@ -1511,6 +1595,25 @@ bool mLibretroNetpacketV2TestInstallPair(
 struct mCore* mLibretroNetpacketV2TestPairCore(uint8_t player) {
 	return _adapter.pairInitialized
 	    ? GBAReplicatedPairCore(&_adapter.pair, player) : NULL;
+}
+
+bool mLibretroNetpacketV2TestCaptureCheckpoint(uint64_t frame) {
+	if (!_adapter.runtimeInitialized || !_adapter.pairInitialized) {
+		return false;
+	}
+	uint8_t localPlayer = _playerForRole(_adapter.session.localRole);
+	struct GBAReplicatedPairMetrics metrics;
+	if (!GBAReplicatedPairGetMetrics(&_adapter.pair, &metrics)) {
+		return false;
+	}
+	_adapter.localSaveGeneration = metrics.saveGenerations[localPlayer];
+	return _captureLocalCheckpoint(
+	    &_adapter, GBAReplicatedPairCore(&_adapter.pair, localPlayer),
+	    frame, _adapter.localSaveGeneration);
+}
+
+void mLibretroNetpacketV2TestFailNextCheckpointAllocation(void) {
+	_adapter.testFailCheckpointAllocation = true;
 }
 
 void mLibretroNetpacketV2TestFail(enum GBALinkV2Reason reason) {

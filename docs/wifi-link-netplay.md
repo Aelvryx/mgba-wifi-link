@@ -20,9 +20,11 @@ NORMAL8/NORMAL32 networking, RFU/Wireless Adapter, internet relay/NAT
 traversal, reconnection, host migration, rollback, or savestates during a live
 session.
 
-The runtime and wire format are explicitly experimental. Sensor inputs and a
-shared deterministic RTC epoch are not part of v2 yet, so cartridges that
-depend on tilt, solar input, or wall-clock observations are not qualified.
+The runtime and wire format are explicitly experimental. RTC-bearing games use
+per-cartridge deterministic session epochs on supported 64-bit-time platforms.
+Cartridges requiring tilt, gyro, or luminance/solar input are rejected before
+connection because those values are not yet carried in authoritative frame
+input. Rumble remains local output and is allowed.
 
 Current game evidence is deliberately narrower than the generic cable
 architecture:
@@ -55,10 +57,11 @@ The release protocol is `mgba-gba-link-replicated-v2`. At attachment:
 
 The host presents P0 and the client presents P1. Each endpoint still runs both
 logical machines, so serial traffic no longer changes network packet volume.
-The local-role machine alone receives that device's controller, rumble,
-rotation, solar sensor, video, audio, and persistent save backing. Shadow
-outputs are drained without frontend callbacks and shadow saves remain in
-memory.
+The local-role machine alone receives that device's controller, rumble, video,
+audio, and persistent save backing. Shadow outputs are drained without
+frontend callbacks and shadow saves remain in memory. Rotation and solar
+cartridges fail admission rather than feeding endpoint-local sensor values to
+only one replica.
 
 ## Build
 
@@ -95,6 +98,20 @@ content with that installed core.
    `GBA replicated link ready: player 2` on the client.
 5. Enter the game's ordinary Multi-Pak multiplayer flow.
 
+The core option **GBA Link Netplay Latency** controls the immutable product
+floor negotiated at connection:
+
+- **Auto (Stable)** is the default and requires at least two GBA frames of
+  input buffering (about 33.5 ms before display/audio pipeline latency).
+- **Auto (Low Latency, Experimental)** permits a one-frame floor (about 16.7
+  ms) only when both peers choose it. It remains an unpublished qualification
+  candidate until the exact Android artifact passes the documented 30-minute
+  wait-tail and commercial-game gates.
+
+The measured network target can still select a larger delay. If either peer
+uses Stable, the negotiated floor is two frames. Changing the option while a
+session is live cannot alter that session; disconnect first.
+
 RetroArch assigns Netpacket client ID zero to the host and one to the client.
 The core maps those roles to GBA P0/primary and P1/secondary respectively.
 Only one frontend controller is sampled on each physical device; RetroArch's
@@ -118,13 +135,22 @@ filename. Save contents are deliberately independent. It also validates the
 versioned replica/runtime format and rejects enabled cheats or incompatible
 timing policy.
 
-The input delay is selected once from a supported two-to-eight-frame range
-using the measured handshake RTT and a conservative jitter budget. It remains
-fixed for the session. Each input packet carries a four-frame redundancy
-window, and the core waits inside the current `retro_run()` only when the
-authoritative input for that exact frame has not arrived. A successful call
-therefore returns one newly rendered local-role frame and its newly generated
-audio instead of repeating a stale frame.
+The input delay is selected once from a supported one-to-eight-frame range.
+Before replica capture, twelve clean RTT probes initiated by each role produce
+a canonical 24-sample vector. The selector uses minimum transit, p95 variation,
+a one-millisecond scheduling guard, the exact GBA frame period, and the
+negotiated product floor. Replica capture and installation are deliberately
+outside that measurement. It remains fixed for the session. Each input packet
+carries a four-frame redundancy window, and the core waits inside the current
+`retro_run()` only when the authoritative input for that exact frame has not
+arrived. A successful call therefore returns one newly rendered local-role
+frame and its newly generated audio instead of repeating a stale frame.
+
+The handshake also compares explicit BIOS/HLE, CPU/timing, idle optimization,
+opposing-direction, RTC-normalization, cheat, and external-input categories.
+An actionable mismatch appears before either original core is mutated. Default
+wall-clock RTC is normalized separately for P0 and P1 during the session and
+restores its original wall-clock semantics on teardown.
 
 From transport start until teardown, the core rejects savestate creation and
 loading, cheat changes, and timing-sensitive variable changes. Reset tears
@@ -189,7 +215,16 @@ fields include:
 - future input depth and copied-queue high-water mark;
 - produced audio samples, audio frames, and empty-audio frames;
 - local lockstep waits and per-core scheduler work;
-- handshake RTT, jitter budget, selected delay, and attachment duration.
+- calibration identity and digest, 24-sample min/p50/p95/max, selector policy,
+  product floor, selected delay, and attachment duration;
+- per-endpoint wait-free ratio, input-wait p95 and maximum tail, input deadline
+  misses, insertion lead, poll-to-send timing, and separate verification waits.
+
+These are bounded aggregates. Logs do not contain button history, ROM bytes,
+save bytes, network addresses, or private filesystem paths. Commercial ROMs,
+saves, controller scripts, screenshots, and raw device evidence remain in the
+ignored private qualification directory; only approved identity digests and
+aggregate measurements belong in repository documentation.
 
 The continuous CC0 fixture under `tools/gba-link-test-rom` tolerates the
 expected pre-attachment no-peer state, then runs all four MULTI baud selectors

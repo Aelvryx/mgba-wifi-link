@@ -19,6 +19,10 @@ Status
   Netpacket command-78 callback contract.
 - Exact effective-ROM matching, with independent saves and inputs.
 - Replicated P0/P1 execution with one input packet per player per frame.
+- Canonical deterministic-policy negotiation, per-player RTC normalization,
+  and fail-fast rejection of unsynchronized cartridge sensors.
+- Clean bilateral network calibration with a stable two-frame default and an
+  unpublished one-frame experimental qualification option.
 - Sixty-frame canonical state verification and bounded failure handling.
 - Linux libretro and Android `arm64-v8a`, `armeabi-v7a`, `x86`, and `x86_64`
   builds.
@@ -51,9 +55,10 @@ sessions, internet relay/NAT traversal, reconnection, host migration, and
 savestates during a live link session.
 
 The v2 wire/runtime contract remains experimental and may change between
-alpha builds. Cartridge sensor inputs and wall-clock-dependent RTC behavior
-are not yet synchronized between endpoints; titles requiring them are not
-qualified and may terminate at the periodic divergence check.
+alpha builds. Wall-clock-backed RTC sources are normalized to deterministic
+per-player epochs during a session. Cartridge tilt, gyro, and solar/luminance
+inputs are not synchronized, so affected titles fail before attachment rather
+than diverging later.
 
 Quick start
 -----------
@@ -81,6 +86,12 @@ To play:
    `GBA replicated link ready: player 2` on the client.
 4. Return to the game without closing content. Enter its Multi-Pak mode on
    both devices; player one makes any leader-only selections.
+
+The default **GBA Link Netplay Latency → Auto (Stable)** policy negotiates at
+least two frames of buffering. Both devices may select **Auto (Low Latency,
+Experimental)** to permit one frame, but that mode is not release-qualified
+until the exact Android artifact passes the documented long-run latency gate.
+The measured network target may select more than the chosen floor.
 
 This alpha supports exactly one host and one client. Do not choose Single-Pak,
 Wireless Adapter, or RetroArch's ordinary input-synchronizing netplay modes.

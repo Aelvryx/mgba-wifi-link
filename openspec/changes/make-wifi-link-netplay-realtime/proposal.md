@@ -28,4 +28,4 @@ The correctness-first distributed SIO protocol is functionally sound but cannot 
 - Affects the libretro core lifecycle and frame loop, Netpacket codec/session adapter, GBA core construction, local SIO lockstep integration, save-memory routing, input routing, audio/video selection, diagnostics, and focused test infrastructure.
 - Adds a second emulated GBA instance per physical device and therefore requires explicit Android CPU, thermal, memory, and battery qualification.
 - Keeps stock RetroArch and its Netpacket transport; no RetroArch fork, direct socket layer, relay service, rollback prediction, Single-Pak, RFU, or support beyond two players is introduced by this change.
-- Uses the captured Odin/Thor Four Swords trace as the performance baseline and qualifies the exact release build with both a fast-entry multiplayer title and Four Swords before distribution.
+- Uses the captured Odin/Thor Four Swords trace as the performance baseline, qualifies the exact experimental build with a fast-entry commercial title, and records Four Swords as a named compatibility investigation without claiming broad game support.

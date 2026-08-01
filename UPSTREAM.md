@@ -162,7 +162,7 @@ dlopen_and_symbol_call=pass
 
 ## Feature qualification
 
-The completed change preserves the pinned upstream ancestry and header revision
+The experimental protocol-v2 baseline preserves the pinned upstream ancestry and header revision
 above. Detailed automated, sanitizer, localhost, two-device Android, and
 independent-workload evidence is recorded in
 `docs/netplay-validation-matrix.md`; build, installation, protocol, policy, and
@@ -171,12 +171,18 @@ failure semantics are documented in `docs/wifi-link-netplay.md`.
 After splitting and rebasing the first upstream-facing stack onto
 `71aa6c7dab7654bfdbbd57e696f704671a97e55d`, a clean Linux build produced the
 shared library, libretro core, and all test executables. The complete normal
-suite passed 28 of 29 tests; its only failure remains the same
+suite passed 37 of 38 tests; its only failure remains the same
 `util-hash/stagedCrc32` baseline case documented above. Protocol v2 expands the
 focused set to 17 tests; all 17 pass normally, under ASan/UBSan with leak
 detection, and under TSan. Its real-adapter replay and 134,400-frame stock
 RetroArch soak are recorded in the validation matrix. Arm GNU Toolchain
 15.2.Rel1 reproduces the committed 32 KiB test ROM byte-for-byte.
+
+The feature workflow also configures and runs the complete normal suite while
+checking the pinned `util-hash/stagedCrc32` baseline independently. A separate
+Android job builds and inspects the arm64-v8a libretro core with NDK r27, so
+common-core and Android ABI regressions do not depend solely on focused tests
+or physical-device qualification.
 
 Android NDK r27 builds passed for `arm64-v8a`, `armeabi-v7a`, `x86`, and
 `x86_64`. The 8,029,120-byte release core built from production source commit

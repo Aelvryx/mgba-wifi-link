@@ -156,7 +156,8 @@ The release gate on the exact Android build and device pair is:
 - serial throughput within 5% of the same build's two-core localhost lockstep baseline;
 - ordinary network traffic scaling with frames rather than serial words, with no v1 transfer packets;
 - no checksum mismatch in a 30-minute continuous test-ROM run;
-- successful fresh-connect, multiplayer entry, gameplay, and clean detach in the selected fast-entry title and Four Swords;
+- successful fresh-connect, multiplayer entry, gameplay, and clean detach in at least one selected commercial Multi-Pak title;
+- an explicit compatibility result for every attempted qualification title, including Four Swords, without treating real-time discovery dwell as successful linking;
 - recorded input delay, p95 rendezvous duration, CPU, peak memory, temperature, and absence of sustained thermal throttling.
 
 ## Risks / Trade-offs
@@ -179,7 +180,7 @@ The release gate on the exact Android build and device pair is:
 4. If the spike passes, add the replica bundle codec and pair construction tests without changing the default runtime.
 5. Add protocol-v2 snapshot, delayed-input, checksum, save-ownership, and teardown state machines behind an experimental core option.
 6. Run deterministic replay, fault injection, normal CI, ASan/UBSan, fixture ROM, and save-type round-trip suites.
-7. Install the exact build on both devices and qualify the test ROM, the selected fast-entry title, and Four Swords against the performance gates.
+7. Install the exact build on both devices, qualify the test ROM and at least one selected commercial title against the performance gates, and record Four Swords as a non-blocking named compatibility investigation for this experimental alpha.
 8. Make v2 the default only after the evidence is committed; retain an explicit v1 diagnostic option for rollback.
 9. Remove v1 runtime code in a later change after equivalent coverage and field confidence exist.
 

@@ -1,9 +1,15 @@
 # GBA Link Netplay Validation Matrix
 
-Date: 2026-07-31
+Date: 2026-08-01
 
 This document maps the MVP's automated evidence to protocol phases and failure
 classes. Test names below are cmocka case names inside the named source file.
+
+This evidence supports an experimental two-player Multi-Pak alpha, not a claim
+of universal game compatibility. Mario Kart: Super Circuit and the supplied
+diagnostic workloads are verified; an Advance Wars user playtest passed;
+Four Swords is a known cable-discovery failure; other commercial titles remain
+unqualified. The v2 wire/runtime contract is deliberately not frozen yet.
 
 ## Protocol-v2 real-time evidence
 
@@ -25,6 +31,19 @@ protocol-v2 branch has the following automated and rendered-device evidence:
   changes.
 - `saveBackingBelongsOnlyToAssignedPlayer` proves host/P0 and client/P1 save
   ownership without exposing the shadow save to the frontend buffer.
+- `verifiedRollbackRestoresStateAndSaveAtomically` proves that a jointly
+  accepted machine/save/RTC checkpoint is restored as a unit, that a failed
+  replacement allocation retains the prior complete checkpoint, and that
+  uncertain save bytes and save-type changes cannot leak across rollback.
+- `failureBeforeVerificationRestoresAttachmentSave` covers every teardown path
+  before the first periodic check and verifies attachment-save restoration plus
+  complete disconnected SIOCNT/RCNT cleanup.
+- `detachedMultiSnapshotsExposeAttachedLinesBeforeExecution` seeds both
+  snapshots with disconnected MULTI lines and proves that pair installation
+  exposes P0/P1 IDs, master/slave state, readiness, and RCNT topology before
+  either logical CPU executes.
+- `experimentalPolicyMismatchFailsBeforeReplicaExchange` rejects mixed
+  experimental/stable runtimes before mutable replica exchange.
 - `runtimeInputDeadlineFailsWithSpecificReason` and
   `missingPollingAndSynchronousStopFailClosed` cover bounded input wait and
   generation invalidation during a receive callback.
@@ -440,36 +459,52 @@ Normal focused suite:
 env PYTHONPATH=/tmp/mgba-build-tools \
     LD_LIBRARY_PATH=/tmp/mgba-deps/lib64 \
   /tmp/mgba-build-tools/bin/ctest \
-    --test-dir build-netplay-review \
+    --test-dir build-dev \
     --output-on-failure \
-    -R 'gba-netplay|gba-sio|libretro-netpacket' -j8
+    -R 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' -j8
 ```
 
-Result: 8/8 tests passed.
+Result: 17/17 tests passed.
 
 ASan/UBSan focused suite:
 
 ```sh
 env PYTHONPATH=/tmp/mgba-build-tools \
-    LD_LIBRARY_PATH=/tmp/mgba-sanitizers/usr/lib64:/tmp/mgba-deps/lib64 \
+    LD_LIBRARY_PATH=/tmp/mgba-sanitizer-runtime/root/usr/lib64:/tmp/mgba-deps/lib64 \
     ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
     UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
   /tmp/mgba-build-tools/bin/ctest \
-    --test-dir build-netplay-review-sanitize \
+    --test-dir build-asan \
     --output-on-failure \
-    -R 'gba-netplay|gba-sio|libretro-netpacket' -j4
+    -R 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' -j4
 ```
 
-Result: 8/8 tests passed with no sanitizer or leak finding.
+Result: 17/17 tests passed with no sanitizer or leak finding.
 
-The complete normal suite passed 28 of 29 tests. Its sole failure is the known
+TSan focused suite:
+
+```sh
+env PYTHONPATH=/tmp/mgba-build-tools \
+    LD_LIBRARY_PATH=/tmp/mgba-tsan-runtime/root/usr/lib64:/tmp/mgba-deps/lib64 \
+    TSAN_OPTIONS=halt_on_error=1:history_size=7 \
+  /tmp/mgba-build-tools/bin/ctest \
+    --test-dir build-tsan \
+    --output-on-failure \
+    -R 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' -j4
+```
+
+Result: 17/17 tests passed with no thread-sanitizer finding.
+
+The complete normal suite passed 37 of 38 tests. Its sole failure is the known
 pinned-upstream `util-hash/stagedCrc32` case. That identical failure is recorded
 in the unmodified baseline and is unrelated to this change. These results were
 rerun after splitting the patch stack and rebasing it onto
 `71aa6c7dab7654bfdbbd57e696f704671a97e55d`.
 
-`.github/workflows/netplay-ci.yml` independently configures and builds these
-same eight focused tests on Ubuntu 24.04 in normal and ASan/UBSan jobs. A
-separate job uses the SHA-256-pinned Arm GNU Toolchain 15.2.Rel1 archive to
-rebuild the CC0 ROM and compare it byte-for-byte with
+`.github/workflows/netplay-ci.yml` independently configures and builds all 17
+focused test executables on Ubuntu 24.04 in normal, ASan/UBSan, and TSan jobs.
+It also runs the complete normal mGBA suite while independently confirming the
+single pinned upstream failure, builds and inspects an Android arm64-v8a
+libretro core with NDK r27, and uses the SHA-256-pinned Arm GNU Toolchain
+15.2.Rel1 archive to rebuild the CC0 ROM and compare it byte-for-byte with
 `tools/gba-link-test-rom/fixtures/gba-link-test.gba`.

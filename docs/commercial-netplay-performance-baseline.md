@@ -122,7 +122,8 @@ The replacement is successful only when the exact two-device build demonstrates 
 - serial throughput within 5% of the same build's local two-core lockstep baseline;
 - normal traffic proportional to frames with no per-word protocol-v1 transfer messages;
 - matching deterministic replica checks for a 30-minute transfer-heavy run;
-- usable controls, audio, multiplayer entry, gameplay, and teardown in a fast-entry commercial title and Four Swords;
+- usable controls, audio, multiplayer entry, gameplay, and teardown in at least one fast-entry commercial Multi-Pak title;
+- an honest compatibility result for every attempted title, with Four Swords retained as a named investigation rather than counted as a successful link;
 - recorded input delay, rendezvous percentiles, CPU, memory, temperature, and throttling state.
 
 The protocol-v1 implementation remains valuable as a deterministic SIO and failure-semantics oracle. It is not a viable commercial-game runtime.

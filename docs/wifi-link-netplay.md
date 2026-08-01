@@ -20,6 +20,22 @@ NORMAL8/NORMAL32 networking, RFU/Wireless Adapter, internet relay/NAT
 traversal, reconnection, host migration, rollback, or savestates during a live
 session.
 
+The runtime and wire format are explicitly experimental. Sensor inputs and a
+shared deterministic RTC epoch are not part of v2 yet, so cartridges that
+depend on tilt, solar input, or wall-clock observations are not qualified.
+
+Current game evidence is deliberately narrower than the generic cable
+architecture:
+
+| Workload | Status |
+| --- | --- |
+| Continuous diagnostic ROM | Verified |
+| LinkCable compatibility workload | Verified |
+| Mario Kart: Super Circuit Multi-Pak | Verified — full race |
+| Advance Wars | User playtest passed |
+| Zelda: Four Swords | Known failure — stalls during cable discovery |
+| Other Multi-Pak titles | Untested |
+
 ## Why protocol v2 is real-time
 
 Protocol v1 synchronized individual cable events across Wi-Fi. It was useful
@@ -130,11 +146,12 @@ paths.
 
 The assigned local machine uses the endpoint's normal RetroArch save buffer.
 The shadow never receives that path. Save dirty generations are tracked for
-both logical machines. On teardown, the local save remains live and the
-retained single core is restored to the latest quiescent state whose pair
-digest both peers acknowledged. If no periodic check completed yet, the
-original attachment snapshot is preserved rather than installing uncertain
-state.
+both logical machines. Every accepted local checkpoint atomically captures
+the serialized machine and save-controller state, the complete frontend save
+backing, RTC metadata, frame, and save generation. On teardown, all of that
+checkpoint is restored together. If no periodic check completed yet, the
+attachment checkpoint and its save bytes are restored rather than retaining
+uncertain session writes.
 
 ## Failure behavior
 

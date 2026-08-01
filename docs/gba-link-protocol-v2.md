@@ -7,6 +7,7 @@ retained distributed-SIO diagnostic protocol:
 - release compatibility string: `mgba-gba-link-replicated-v2`
 - diagnostic compatibility string: `mgba-gba-link-netplay-v1`
 - wire version: exact version `2`; no automatic downgrade
+- stability: experimental; compatibility may change between alpha builds
 - transport: reliable, ordered RetroArch Netpacket delivery
 - byte order: fixed-width little endian
 
@@ -23,8 +24,8 @@ The attachment sequence is:
 1. Both original cores stop at their first quiescent SIO boundary and remain
    paused. The attachment timeout starts at peer admission, before this wait.
 2. Bilateral `HELLO` packets require exact ROM identity, runtime compatibility,
-   replicated-pair capabilities, compatible encodings and overlapping input
-   delay ranges.
+   matching experimental/stable policy, replicated-pair capabilities,
+   compatible encodings and overlapping input delay ranges.
 3. The host assigns session and snapshot generations in `ACCEPT`; the client
    acknowledges them before mutable state is sent. The host measures that
    accept/ack round trip, combines one-way transit with its bounded jitter

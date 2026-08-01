@@ -30,10 +30,27 @@ Status
   transactions with matching state traces and no empty-audio frame, timeout,
   divergence, or disconnect.
 
+Compatibility is still experimental. The cable model is generic, but this
+alpha does not claim that every Multi-Pak title has been qualified:
+
+| Workload | Current result |
+| --- | --- |
+| Continuous diagnostic ROM | Verified |
+| LinkCable compatibility workload | Verified |
+| Mario Kart: Super Circuit | Verified — complete three-lap VS race |
+| Advance Wars | User playtest passed |
+| Zelda: Four Swords | Known failure — remains in cable discovery |
+| Other Multi-Pak games | Untested |
+
 The first release intentionally excludes Single-Pak multiboot, the GBA
 Wireless Adapter/RFU, NORMAL8/NORMAL32 networking, three- or four-player
 sessions, internet relay/NAT traversal, reconnection, host migration, and
 savestates during a live link session.
+
+The v2 wire/runtime contract remains experimental and may change between
+alpha builds. Cartridge sensor inputs and wall-clock-dependent RTC behavior
+are not yet synchronized between endpoints; titles requiring them are not
+qualified and may terminate at the periodic divergence check.
 
 Quick start
 -----------

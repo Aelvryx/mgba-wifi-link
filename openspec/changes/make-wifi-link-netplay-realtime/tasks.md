@@ -114,10 +114,13 @@
 - [x] 13.1 Build and hash the exact arm64 release candidate from the reviewed head and install only that core on both devices.
 - [x] 13.2 Run a 30-minute continuous-transfer session and verify at least 59 displayed/emulated FPS, matching state checks, normal audio delivery, frame-scaled packets, and serial throughput within five percent of local baseline.
 - [x] 13.3 Run fresh-connect, Multi-Pak entry, leader/client idle waits, a complete three-lap VS race, and coordinated exit in Mario Kart: Super Circuit as the fast-entry commercial title.
-- [x] 13.4 Run Four Swords through its linking screen and confirm the former one-FPS collapse is absent; record the lack of observed MULTI transfers separately rather than treating that dwell as a successful game link.
+- [x] 13.4 Run Four Swords through its linking screen, confirm the former one-FPS collapse is absent, and record it honestly as a known cable-discovery compatibility failure rather than a successful link.
 - [x] 13.5 Capture p50/p95/max input rendezvous, negotiated delay, packet/byte rate, CPU, peak memory, temperature, throttling, audio behavior, and save persistence for both devices.
 - [x] 13.6 Confirm normal RetroArch controls/configuration and user saves remain untouched outside the installed release core.
 - [x] 13.7 Run commercial-title peer-stop and graceful disconnect scenarios on the exact committed release candidate.
+- [x] 13.8 Restore verified machine state, save-controller state, and owned save bytes as one atomic checkpoint, including the attachment checkpoint before the first periodic verification.
+- [x] 13.9 Materialize assigned player IDs and complete guest-visible SIOCNT/RCNT topology before either restored replica executes.
+- [ ] 13.10 Re-run focused normal and sanitizer tests plus exact-head Android fixture and commercial smoke after the checkpoint/topology corrections.
 
 ## 14. Release and review hygiene
 

@@ -7,6 +7,7 @@ During a protocol-v2 link session, each endpoint SHALL run exactly two logical G
 - **WHEN** both endpoints have verified and installed the authoritative P0 and P1 bundles
 - **THEN** each endpoint constructs the pair in P0-then-P1 order
 - **AND** the resulting logical player IDs, snapshots, save bytes, and coordinator starting state match across endpoints
+- **AND** guest-visible SIOCNT and RCNT lines expose attached P0/P1 roles before either logical CPU executes
 
 #### Scenario: One logical bundle differs
 - **WHEN** an endpoint's installed bundle digest for P0 or P1 differs from its peer's accepted digest
@@ -103,7 +104,7 @@ The host endpoint SHALL present P0 and the client endpoint SHALL present P1. Onl
 - **AND** the same physical sample is not read again by the shadow core
 
 ### Requirement: Local save ownership
-P0 save persistence SHALL belong exclusively to the host device and P1 save persistence SHALL belong exclusively to the client device. Shadow save memory SHALL be volatile, memory-backed, and unable to open or overwrite the endpoint's normal save path. On teardown, only the newest valid local-role save generation SHALL be eligible for persistence.
+P0 save persistence SHALL belong exclusively to the host device and P1 save persistence SHALL belong exclusively to the client device. Shadow save memory SHALL be volatile, memory-backed, and unable to open or overwrite the endpoint's normal save path. The attachment checkpoint and every jointly accepted periodic checkpoint SHALL atomically contain local-role machine state, save-controller state, owned save bytes, RTC metadata, frame, and save generation. On uncertain teardown, the endpoint SHALL restore all fields from its newest complete valid checkpoint or retain the prior complete checkpoint; a generation number alone SHALL NOT make newer save bytes eligible for persistence.
 
 #### Scenario: Both players change save data
 - **WHEN** P0 and P1 each modify cartridge save memory during a session
@@ -114,6 +115,11 @@ P0 save persistence SHALL belong exclusively to the host device and P1 save pers
 - **WHEN** replica verification fails before a local save generation is established as safe
 - **THEN** the endpoint preserves its last valid local-owned save
 - **AND** it does not replace that save with shadow-owned or uncertain data
+
+#### Scenario: Checkpoint replacement cannot allocate
+- **WHEN** a periodic verified checkpoint cannot allocate or copy every required state and save region
+- **THEN** the prior complete checkpoint remains valid and unchanged
+- **AND** teardown cannot combine the failed replacement's save bytes with the prior machine state
 
 #### Scenario: Shadow core is destroyed
 - **WHEN** session teardown destroys the non-presented logical core
@@ -153,7 +159,12 @@ The replicated runtime SHALL not become the release default until the exact rele
 - **AND** no periodic state check differs
 - **AND** no protocol-v1 transfer packet is emitted
 
-#### Scenario: Commercial qualification runs
-- **WHEN** fresh sessions enter and play multiplayer in the selected fast-entry title and Four Swords
+#### Scenario: Commercial qualification succeeds
+- **WHEN** a fresh session enters and plays multiplayer in at least one selected commercial Multi-Pak title
 - **THEN** both devices retain usable audio, controls, and real-time gameplay
 - **AND** the evidence records input delay, p95 rendezvous, packet rate, CPU, peak memory, temperature, and thermal-throttling state
+
+#### Scenario: An attempted title does not link
+- **WHEN** an attempted commercial qualification title does not enter multiplayer
+- **THEN** the experimental alpha documents the title as a known compatibility failure
+- **AND** real-time discovery dwell alone is not reported as a successful game link or evidence of broad compatibility

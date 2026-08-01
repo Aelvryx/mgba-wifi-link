@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Protocol-v2 replicated runtime negotiation
-Both peers SHALL advertise the replicated-pair protocol version and capability before exchanging mutable machine state. The release runtime SHALL require an exact protocol-v2 match and SHALL not automatically downgrade to the distributed-SIO protocol. A retained protocol-v1 diagnostic runtime SHALL be explicitly selected on both endpoints and SHALL use a distinct compatibility string.
+Both peers SHALL advertise the replicated-pair protocol version, capability, and experimental/stable policy before exchanging mutable machine state. The release runtime SHALL require exact matches and SHALL not automatically downgrade to the distributed-SIO protocol. A retained protocol-v1 diagnostic runtime SHALL be explicitly selected on both endpoints and SHALL use a distinct compatibility string.
 
 #### Scenario: Both peers support protocol v2
 - **WHEN** both bilateral `HELLO` messages advertise the same supported replicated-pair protocol version and required capabilities
@@ -11,6 +11,10 @@ Both peers SHALL advertise the replicated-pair protocol version and capability b
 - **WHEN** one peer advertises distributed-SIO protocol v1 and the other advertises replicated-pair protocol v2
 - **THEN** attachment is rejected before snapshot exchange
 - **AND** the user is told that both devices require the same link runtime build and protocol
+
+#### Scenario: Experimental policy differs
+- **WHEN** one peer advertises an experimental runtime and the other advertises a stable runtime
+- **THEN** attachment is rejected before either endpoint captures or sends a replica bundle
 
 ### Requirement: Validated replica bundle exchange
 After exact identity and determinism validation, each endpoint SHALL provide one authoritative bundle for its assigned logical player through a manifest followed by bounded reliable chunks. The manifest SHALL version the bundle format and declare uncompressed size, transmitted size, chunk size, save-memory type and size, logical timing metadata, and cryptographic digests. The receiver SHALL allocate only within configured limits and SHALL install nothing until all bytes and digests validate.

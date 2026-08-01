@@ -201,14 +201,14 @@ void GBAUnlCartSerialize(const struct GBA* gba, struct GBASerializedState* state
 		STORE_32(multiFlags, 0, &state->multicart.flags);
 		break;
 	}
-	STORE_32(flags, 0, &state->hw.unlCartFlags);
+	STORE_16(flags, 0, &state->hw.unlCartFlags);
 }
 
 void GBAUnlCartDeserialize(struct GBA* gba, const struct GBASerializedState* state) {
 	GBASerializedUnlCartFlags flags;
 	struct GBAUnlCart* unl = &gba->memory.unl;
 
-	LOAD_32(flags, 0, &state->hw.unlCartFlags);
+	LOAD_16(flags, 0, &state->hw.unlCartFlags);
 	enum GBAUnlCartType type = GBASerializedUnlCartFlagsGetType(flags);
 	if (type != unl->type) {
 		mLOG(GBA_STATE, WARN, "Save state expects different bootleg type; not restoring bootleg state");

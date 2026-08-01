@@ -717,7 +717,10 @@ void GBASavedataSerialize(const struct GBASavedata* savedata, struct GBASerializ
 	state->savedata.command = savedata->command;
 	GBASerializedSavedataFlags flags = 0;
 	flags = GBASerializedSavedataFlagsSetFlashState(flags, savedata->flashState);
-	flags = GBASerializedSavedataFlagsTestFillFlashBank(flags, savedata->currentBank == &savedata->data[0x10000]);
+	flags = GBASerializedSavedataFlagsTestFillFlashBank(
+	    flags,
+	    savedata->data &&
+	        savedata->currentBank == &savedata->data[0x10000]);
 
 	if (mTimingIsScheduled(&savedata->p->timing, &savedata->dust)) {
 		STORE_32(savedata->dust.when - mTimingCurrentTime(&savedata->p->timing), 0, &state->savedata.settlingDust);

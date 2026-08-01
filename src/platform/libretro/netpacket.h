@@ -27,6 +27,7 @@ bool mLibretroNetpacketRejectCheatChange(void);
 
 #ifdef M_LIBRETRO_NETPACKET_TEST
 bool mLibretroNetpacketTestPollReceive(void);
+void mLibretroNetpacketTestRunBeginWithoutRendezvous(void);
 int mLibretroNetpacketTestSessionState(void);
 void mLibretroNetpacketTestSetSessionState(
     int state);

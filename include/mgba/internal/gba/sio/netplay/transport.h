@@ -12,6 +12,8 @@
 
 CXX_GUARD_START
 
+#define GBA_LINK_TRANSPORT_MAX_PACKET_SIZE (64 * 1024)
+
 enum GBALinkDiagnosticLevel {
 	GBA_LINK_DIAGNOSTIC_INFO,
 	GBA_LINK_DIAGNOSTIC_WARN,
@@ -32,7 +34,7 @@ struct GBALinkTransportVTable {
 struct GBALinkCopiedPacket {
 	uint64_t generation;
 	size_t size;
-	uint8_t data[GBA_LINK_MAX_PACKET_SIZE];
+	uint8_t* data;
 };
 
 struct GBALinkCopiedQueue {
@@ -52,6 +54,15 @@ struct GBALinkTransport {
 	struct GBALinkCopiedQueue inbound;
 	struct GBALinkCopiedQueue outbound;
 };
+
+void GBALinkCopiedPacketDeinit(struct GBALinkCopiedPacket* packet);
+void GBALinkCopiedQueueInit(struct GBALinkCopiedQueue* queue);
+void GBALinkCopiedQueueDeinit(struct GBALinkCopiedQueue* queue);
+bool GBALinkCopiedQueuePush(
+    struct GBALinkCopiedQueue* queue, uint64_t generation,
+    const void* data, size_t size);
+bool GBALinkCopiedQueuePop(
+    struct GBALinkCopiedQueue* queue, struct GBALinkCopiedPacket* packet);
 
 void GBALinkTransportInit(
     struct GBALinkTransport* transport,

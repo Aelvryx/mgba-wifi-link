@@ -84,6 +84,10 @@ void GBASIOSetDriver(struct GBASIO* sio, struct GBASIODriver* driver);
 bool GBASIODriverHandlesMode(struct GBASIO* sio, enum GBASIOMode mode);
 bool GBASIOIsExecutionBlocked(struct GBASIO* sio);
 
+void GBASIOMultiplayerMaterializeLines(
+	struct GBASIO* sio, int id, bool connected, bool ready,
+	bool clearTransfer);
+
 void GBASIOWriteRCNT(struct GBASIO* sio, uint16_t value);
 void GBASIOWriteSIOCNT(struct GBASIO* sio, uint16_t value);
 uint16_t GBASIOWriteRegister(struct GBASIO* sio, uint32_t address, uint16_t value);

@@ -64,48 +64,31 @@ static bool _beginProtocol(
 
 static void _clearPreAdmission(
     struct mLibretroNetpacketAdapter* adapter) {
-	memset(&adapter->preAdmission, 0,
-	    sizeof(adapter->preAdmission));
+	GBALinkCopiedQueueDeinit(&adapter->preAdmission);
 }
 
 static bool _queuePreAdmission(
     struct mLibretroNetpacketAdapter* adapter,
     const void* data, size_t size) {
-	if (!data || size > GBA_LINK_MAX_PACKET_SIZE ||
-	    adapter->preAdmission.size >=
-	        GBA_LINK_MAX_COPIED_PACKETS) {
-		return false;
-	}
-	size_t index =
-	    (adapter->preAdmission.readIndex +
-	     adapter->preAdmission.size) %
-	    GBA_LINK_MAX_COPIED_PACKETS;
-	struct GBALinkCopiedPacket* packet =
-	    &adapter->preAdmission.packets[index];
-	packet->generation = adapter->callbackGeneration;
-	packet->size = size;
-	memcpy(packet->data, data, size);
-	++adapter->preAdmission.size;
-	return true;
+	return GBALinkCopiedQueuePush(
+	    &adapter->preAdmission, adapter->callbackGeneration,
+	    data, size);
 }
 
 static bool _drainPreAdmission(
     struct mLibretroNetpacketAdapter* adapter) {
-	while (adapter->preAdmission.size) {
-		struct GBALinkCopiedPacket* packet =
-		    &adapter->preAdmission.packets[
-		        adapter->preAdmission.readIndex];
+	struct GBALinkCopiedPacket packet;
+	memset(&packet, 0, sizeof(packet));
+	while (GBALinkCopiedQueuePop(&adapter->preAdmission, &packet)) {
 		if (!GBALinkTransportQueueInbound(
 		        &adapter->transport,
 		        adapter->callbackGeneration,
-		        packet->data, packet->size)) {
+		        packet.data, packet.size)) {
+			GBALinkCopiedPacketDeinit(&packet);
 			_clearPreAdmission(adapter);
 			return false;
 		}
-		adapter->preAdmission.readIndex =
-		    (adapter->preAdmission.readIndex + 1) %
-		    GBA_LINK_MAX_COPIED_PACKETS;
-		--adapter->preAdmission.size;
+		GBALinkCopiedPacketDeinit(&packet);
 	}
 	_clearPreAdmission(adapter);
 	return true;
@@ -718,7 +701,7 @@ static void RETRO_CALLCONV _receive(
 		if (!_queuePreAdmission(
 		        &_adapter, data, size)) {
 			enum GBALinkReason reason =
-			    size > GBA_LINK_MAX_PACKET_SIZE
+			    size > GBA_LINK_TRANSPORT_MAX_PACKET_SIZE
 			        ? GBA_LINK_REASON_OVERSIZED_PACKET
 			        : GBA_LINK_REASON_QUEUE_EXHAUSTED;
 			_diagnostic(
@@ -932,12 +915,77 @@ static void _reportReady(void) {
 	_log(RETRO_LOG_INFO, detail);
 }
 
+static bool _waitUntilExecutionRunnable(
+    struct mLibretroNetpacketAdapter* adapter) {
+	if (!adapter || !adapter->sessionPrepared) {
+		return true;
+	}
+	/*
+	 * Attachment rendezvous is frontend-visible setup, not a frame
+	 * pacing boundary. Keep ordinary callbacks flowing until the
+	 * network link session has reached runtime READY state.
+	 */
+	if (adapter->session.state != GBA_LINK_SESSION_READY) {
+		return !GBASIONetplayDriverIsPaused(&adapter->driver);
+	}
+	uint64_t deadlineAtMs = adapter->session.deadlineAtMs;
+	bool adapterOwnsDeadline =
+	    adapter->session.deadlineOperation ==
+	        GBA_LINK_DEADLINE_NONE;
+	if (adapterOwnsDeadline) {
+		uint64_t now = GBALinkTransportMonotonicTimeMs(
+		    &adapter->transport);
+		uint32_t duration =
+		    adapter->session.config.deadlines.milliseconds[
+		        GBA_LINK_DEADLINE_GRANT];
+		deadlineAtMs = UINT64_MAX - now < duration
+		                   ? UINT64_MAX
+		                   : now + duration;
+	}
+	while (adapter->frontendStarted &&
+	       GBALinkSessionIsLive(&adapter->session) &&
+	       adapter->session.state == GBA_LINK_SESSION_READY &&
+	       GBASIONetplayDriverIsPaused(&adapter->driver)) {
+		uint64_t generation = adapter->callbackGeneration;
+		retro_netpacket_poll_receive_t pollReceive =
+		    adapter->pollReceive;
+		if (!pollReceive ||
+		    !GBASIONetplayDriverPump(
+		        &adapter->driver, true)) {
+			break;
+		}
+		/*
+		 * poll_receive_fn may synchronously invoke stop(). Never reuse
+		 * generation-scoped frontend state after returning from it.
+		 */
+		if (!adapter->frontendStarted ||
+		    adapter->callbackGeneration != generation ||
+		    adapter->pollReceive != pollReceive) {
+			break;
+		}
+		if (adapterOwnsDeadline &&
+		    GBASIONetplayDriverIsPaused(&adapter->driver) &&
+		    GBALinkTransportMonotonicTimeMs(
+		        &adapter->transport) >= deadlineAtMs) {
+			GBALinkSessionFail(
+			    &adapter->session,
+			    GBA_LINK_REASON_GRANT_TIMEOUT,
+			    "frontend execution rendezvous");
+			break;
+		}
+	}
+	return !adapter->sessionPrepared ||
+	       !GBALinkSessionIsLive(&adapter->session) ||
+	       !GBASIONetplayDriverIsPaused(&adapter->driver);
+}
+
 void mLibretroNetpacketRunBegin(void) {
 	_enterRendezvous(&_adapter);
 	if (_adapter.sessionPrepared &&
 	    GBALinkSessionIsLive(&_adapter.session)) {
 		GBASIONetplayDriverPump(
 		    &_adapter.driver, false);
+		_waitUntilExecutionRunnable(&_adapter);
 	}
 	_reportReady();
 	_finishFailedTeardown();
@@ -951,9 +999,12 @@ void mLibretroNetpacketRunEnd(void) {
 		    GBA_LINK_ROLE_HOST) {
 			GBASIONetplayDriverHostFrameBoundary(
 			    &_adapter.driver);
+			_waitUntilExecutionRunnable(&_adapter);
 		}
-		GBASIONetplayDriverPump(
-		    &_adapter.driver, false);
+		if (GBALinkSessionIsLive(&_adapter.session)) {
+			GBASIONetplayDriverPump(
+			    &_adapter.driver, false);
+		}
 	}
 	_reportReady();
 	_finishFailedTeardown();
@@ -1073,6 +1124,15 @@ bool mLibretroNetpacketTestPollReceive(void) {
 	}
 	return GBALinkTransportPoll(
 	    &_adapter.transport);
+}
+
+void mLibretroNetpacketTestRunBeginWithoutRendezvous(void) {
+	_enterRendezvous(&_adapter);
+	if (_adapter.sessionPrepared &&
+	    GBALinkSessionIsLive(&_adapter.session)) {
+		GBASIONetplayDriverPump(
+		    &_adapter.driver, false);
+	}
 }
 
 int mLibretroNetpacketTestSessionState(void) {

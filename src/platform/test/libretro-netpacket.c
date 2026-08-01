@@ -13,6 +13,7 @@
 #include <mgba/internal/gba/sio.h>
 #include <mgba/internal/gba/sio/netplay/protocol.h>
 #include <mgba/internal/gba/sio/netplay/session.h>
+#include <mgba-util/audio-buffer.h>
 #include <mgba-util/vfs.h>
 
 struct FakeFrontend {
@@ -21,10 +22,14 @@ struct FakeFrontend {
 	bool startDuringRegistration;
 	bool stopDuringPoll;
 	bool stopDuringSend;
+	bool deliverPacketDuringPoll;
+	bool acknowledgeGrantDuringPoll;
 	unsigned registrations;
 	unsigned messages;
 	unsigned sends;
 	unsigned polls;
+	unsigned deliverOnPoll;
+	unsigned advanceMsPerPoll;
 	unsigned callbackOrder;
 	unsigned sendOrder;
 	unsigned pollOrder;
@@ -32,6 +37,10 @@ struct FakeFrontend {
 	uint16_t lastTarget;
 	uint8_t lastPacket[GBA_LINK_MAX_PACKET_SIZE];
 	size_t lastPacketSize;
+	uint8_t pollPacket[GBA_LINK_MAX_PACKET_SIZE];
+	size_t pollPacketSize;
+	uint16_t pollPacketSender;
+	uint64_t testNowMs;
 	char lastMessage[384];
 };
 
@@ -107,9 +116,50 @@ static void RETRO_CALLCONV _pollReceive(void) {
 	++_frontend->polls;
 	_frontend->pollOrder =
 	    ++_frontend->callbackOrder;
+	if (_frontend->advanceMsPerPoll) {
+		_frontend->testNowMs +=
+		    _frontend->advanceMsPerPoll;
+		mLibretroNetpacketTestSetTimeMs(
+		    _frontend->testNowMs);
+	}
 	if (_frontend->stopDuringPoll) {
 		_frontend->stopDuringPoll = false;
 		_frontend->callbacks.stop();
+		return;
+	}
+	if (_frontend->acknowledgeGrantDuringPoll) {
+		struct GBALinkPacket grant;
+		assert_int_equal(
+		    GBALinkPacketDecode(
+		        _frontend->lastPacket,
+		        _frontend->lastPacketSize,
+		        GBA_LINK_ROLE_HOST, &grant),
+		    GBA_LINK_DECODE_OK);
+		assert_int_equal(
+		    grant.header.type,
+		    GBA_LINK_MESSAGE_EXECUTION_GRANT);
+		struct GBALinkPacket ack;
+		memset(&ack, 0, sizeof(ack));
+		ack.header.type = GBA_LINK_MESSAGE_GRANT_ACK;
+		ack.header.sessionId = grant.header.sessionId;
+		ack.header.packetSequence = 5;
+		ack.payload.grant = grant.payload.grant;
+		uint8_t bytes[GBA_LINK_MAX_PACKET_SIZE];
+		size_t size = 0;
+		assert_true(GBALinkPacketEncode(
+		    &ack, bytes, sizeof(bytes), &size));
+		_frontend->acknowledgeGrantDuringPoll = false;
+		_frontend->callbacks.receive(
+		    bytes, size, 1);
+		return;
+	}
+	if (_frontend->deliverPacketDuringPoll &&
+	    _frontend->polls >= _frontend->deliverOnPoll) {
+		_frontend->deliverPacketDuringPoll = false;
+		_frontend->callbacks.receive(
+		    _frontend->pollPacket,
+		    _frontend->pollPacketSize,
+		    _frontend->pollPacketSender);
 	}
 }
 
@@ -117,6 +167,11 @@ static void _makeRom(uint8_t* rom, size_t size) {
 	for (size_t i = 0; i < size; ++i) {
 		rom[i] = i * 29 + 7;
 	}
+	/* ARM `b .` keeps frame/audio tests deterministic and quiet. */
+	rom[0] = 0xFE;
+	rom[1] = 0xFF;
+	rom[2] = 0xFF;
+	rom[3] = 0xEA;
 	memcpy(&rom[0xA0], "NETPACKETTST", 12);
 	memcpy(&rom[0xAC], "NPTE", 4);
 }
@@ -126,6 +181,7 @@ static int _setup(void** state) {
 	    calloc(1, sizeof(*fixture));
 	assert_non_null(fixture);
 	fixture->frontend.supportsNetpacket = true;
+	fixture->frontend.testNowMs = 100;
 	_frontend = &fixture->frontend;
 	_makeRom(fixture->rom, sizeof(fixture->rom));
 	fixture->core = GBACoreCreate();
@@ -137,6 +193,8 @@ static int _setup(void** state) {
 	    VFileFromConstMemory(
 	        fixture->rom, sizeof(fixture->rom))));
 	fixture->core->reset(fixture->core);
+	mLibretroNetpacketTestSetTimeMs(
+	    fixture->frontend.testNowMs);
 	*state = fixture;
 	return 0;
 }
@@ -437,16 +495,298 @@ M_TEST_DEFINE(oversizedAndWrongSenderPacketsFailClosed) {
 	assert_false(mLibretroNetpacketSessionActive());
 }
 
-static void _deliver(
+static void _deliverFrom(
     struct FakeFrontend* frontend,
-    const struct GBALinkPacket* packet) {
+    const struct GBALinkPacket* packet,
+    uint16_t sender) {
 	uint8_t data[GBA_LINK_MAX_PACKET_SIZE];
 	size_t size = 0;
 	assert_true(GBALinkPacketEncode(
 	    packet, data, sizeof(data), &size));
 	frontend->callbacks.receive(
-	    data, size, 0);
+	    data, size, sender);
 	frontend->callbacks.poll();
+}
+
+static void _deliver(
+    struct FakeFrontend* frontend,
+    const struct GBALinkPacket* packet) {
+	_deliverFrom(frontend, packet, 0);
+}
+
+static struct GBALinkPacket _lastPacket(
+    const struct FakeFrontend* frontend,
+    enum GBALinkRole sender) {
+	struct GBALinkPacket packet;
+	assert_int_equal(
+	    GBALinkPacketDecode(
+	        frontend->lastPacket,
+	        frontend->lastPacketSize,
+	        sender, &packet),
+	    GBA_LINK_DECODE_OK);
+	return packet;
+}
+
+static void _selectMultiMode(struct AdapterFixture* fixture) {
+	struct GBA* gba = fixture->core->board;
+	GBASIOWriteRCNT(&gba->sio, 0);
+	GBASIOWriteSIOCNT(&gba->sio, 0x2000);
+}
+
+static uint64_t _makeClientReady(
+    struct AdapterFixture* fixture) {
+	_selectMultiMode(fixture);
+	assert_true(mLibretroNetpacketRegister(
+	    _environment, fixture->core));
+	fixture->frontend.testNowMs = 100;
+	mLibretroNetpacketTestSetTimeMs(
+	    fixture->frontend.testNowMs);
+	fixture->frontend.callbacks.start(
+	    1, _send, _pollReceive);
+
+	struct GBALinkPacket localHello = _lastPacket(
+	    &fixture->frontend, GBA_LINK_ROLE_CLIENT);
+	assert_int_equal(
+	    localHello.header.type, GBA_LINK_MESSAGE_HELLO);
+	struct GBALinkPacket remoteHello = localHello;
+	remoteHello.header.packetSequence = 1;
+	_deliver(&fixture->frontend, &remoteHello);
+
+	struct GBALinkPacket accept;
+	memset(&accept, 0, sizeof(accept));
+	accept.header.type = GBA_LINK_MESSAGE_ACCEPT;
+	accept.header.packetSequence = 2;
+	accept.payload.accept.proposedSessionId = 1;
+	accept.payload.accept.hostTransportId = 0;
+	accept.payload.accept.clientTransportId = 1;
+	accept.payload.accept.policy =
+	    GBA_LINK_COMPATIBILITY_EXACT_ROM;
+	accept.payload.accept.attachCycle =
+	    localHello.payload.hello.rendezvousCycle;
+	accept.payload.accept.initialModeGeneration = 1;
+	_deliver(&fixture->frontend, &accept);
+
+	struct GBALinkPacket ready;
+	memset(&ready, 0, sizeof(ready));
+	ready.header.type = GBA_LINK_MESSAGE_SESSION_READY;
+	ready.header.sessionId = 1;
+	ready.header.packetSequence = 3;
+	ready.payload.sessionReady.attachCycle =
+	    accept.payload.accept.attachCycle;
+	ready.payload.sessionReady.initialModeGeneration = 1;
+	_deliver(&fixture->frontend, &ready);
+
+	struct GBALinkPacket modeCommit;
+	memset(&modeCommit, 0, sizeof(modeCommit));
+	modeCommit.header.type = GBA_LINK_MESSAGE_MODE_COMMIT;
+	modeCommit.header.sessionId = 1;
+	modeCommit.header.packetSequence = 4;
+	modeCommit.payload.modeCommit.modeGeneration = 1;
+	modeCommit.payload.modeCommit.commitCycle =
+	    accept.payload.accept.attachCycle;
+	modeCommit.payload.modeCommit.hostMode =
+	    GBA_LINK_MODE_MULTI;
+	modeCommit.payload.modeCommit.clientMode =
+	    GBA_LINK_MODE_MULTI;
+	modeCommit.payload.modeCommit.jointlyReady = true;
+	_deliver(&fixture->frontend, &modeCommit);
+
+	struct GBALinkPacket modeAck;
+	memset(&modeAck, 0, sizeof(modeAck));
+	modeAck.header.type = GBA_LINK_MESSAGE_MODE_ACK;
+	modeAck.header.sessionId = 1;
+	modeAck.header.packetSequence = 5;
+	modeAck.payload.modeAck.modeGeneration = 1;
+	modeAck.payload.modeAck.commitCycle =
+	    accept.payload.accept.attachCycle;
+	_deliver(&fixture->frontend, &modeAck);
+
+	assert_int_equal(
+	    mLibretroNetpacketTestSessionState(),
+	    GBA_LINK_SESSION_READY);
+	assert_true(mLibretroNetpacketExecutionBlocked());
+	return accept.payload.accept.attachCycle;
+}
+
+static void _makeHostReady(struct AdapterFixture* fixture) {
+	_selectMultiMode(fixture);
+	assert_true(mLibretroNetpacketRegister(
+	    _environment, fixture->core));
+	fixture->frontend.testNowMs = 100;
+	mLibretroNetpacketTestSetTimeMs(
+	    fixture->frontend.testNowMs);
+	fixture->frontend.callbacks.start(
+	    0, _send, _pollReceive);
+	assert_true(fixture->frontend.callbacks.connected(1));
+
+	struct GBALinkPacket localHello = _lastPacket(
+	    &fixture->frontend, GBA_LINK_ROLE_HOST);
+	struct GBALinkPacket remoteHello = localHello;
+	remoteHello.header.packetSequence = 1;
+	_deliverFrom(&fixture->frontend, &remoteHello, 1);
+	struct GBALinkPacket accept = _lastPacket(
+	    &fixture->frontend, GBA_LINK_ROLE_HOST);
+	assert_int_equal(
+	    accept.header.type, GBA_LINK_MESSAGE_ACCEPT);
+
+	struct GBALinkPacket acceptAck;
+	memset(&acceptAck, 0, sizeof(acceptAck));
+	acceptAck.header.type = GBA_LINK_MESSAGE_ACCEPT_ACK;
+	acceptAck.header.sessionId =
+	    accept.payload.accept.proposedSessionId;
+	acceptAck.header.packetSequence = 2;
+	acceptAck.payload.sessionId.acceptedSessionId =
+	    accept.payload.accept.proposedSessionId;
+	_deliverFrom(&fixture->frontend, &acceptAck, 1);
+
+	struct GBALinkPacket sessionReady = _lastPacket(
+	    &fixture->frontend, GBA_LINK_ROLE_HOST);
+	assert_int_equal(
+	    sessionReady.header.type,
+	    GBA_LINK_MESSAGE_SESSION_READY);
+	struct GBALinkPacket sessionReadyAck = sessionReady;
+	sessionReadyAck.header.type =
+	    GBA_LINK_MESSAGE_SESSION_READY_ACK;
+	sessionReadyAck.header.packetSequence = 3;
+	_deliverFrom(
+	    &fixture->frontend, &sessionReadyAck, 1);
+
+	struct GBALinkPacket hostModeAck = _lastPacket(
+	    &fixture->frontend, GBA_LINK_ROLE_HOST);
+	assert_int_equal(
+	    hostModeAck.header.type,
+	    GBA_LINK_MESSAGE_MODE_ACK);
+	struct GBALinkPacket clientModeAck = hostModeAck;
+	clientModeAck.header.packetSequence = 4;
+	_deliverFrom(
+	    &fixture->frontend, &clientModeAck, 1);
+	assert_int_equal(
+	    mLibretroNetpacketTestSessionState(),
+	    GBA_LINK_SESSION_READY);
+	assert_false(mLibretroNetpacketExecutionBlocked());
+}
+
+M_TEST_DEFINE(legacySingleFlightProducesEmptyFrontendCalls) {
+	struct AdapterFixture* fixture = *state;
+	_makeClientReady(fixture);
+	struct mAudioBuffer* audio =
+	    fixture->core->getAudioBuffer(fixture->core);
+	mAudioBufferClear(audio);
+
+	unsigned frontendCalls = 0;
+	unsigned coreFrames = 0;
+	unsigned emptyAudioReturns = 0;
+	for (unsigned i = 0; i < 3; ++i) {
+		++frontendCalls;
+		mLibretroNetpacketTestRunBeginWithoutRendezvous();
+		if (!mLibretroNetpacketExecutionBlocked()) {
+			fixture->core->runFrame(fixture->core);
+			++coreFrames;
+		} else if (!mAudioBufferAvailable(audio)) {
+			++emptyAudioReturns;
+		}
+	}
+	assert_int_equal(frontendCalls, 3);
+	assert_int_equal(coreFrames, 0);
+	assert_int_equal(emptyAudioReturns, 3);
+	assert_int_equal(mAudioBufferAvailable(audio), 0);
+	assert_int_equal(fixture->frontend.polls, 0);
+}
+
+M_TEST_DEFINE(clientRunBeginWaitsForGrantAndProducesAudio) {
+	struct AdapterFixture* fixture = *state;
+	uint64_t attachCycle = _makeClientReady(fixture);
+	struct GBALinkPacket grant;
+	memset(&grant, 0, sizeof(grant));
+	grant.header.type = GBA_LINK_MESSAGE_EXECUTION_GRANT;
+	grant.header.sessionId = 1;
+	grant.header.packetSequence = 6;
+	grant.payload.grant.grantSequence = 1;
+	grant.payload.grant.horizon =
+	    attachCycle + 280896;
+	assert_true(GBALinkPacketEncode(
+	    &grant,
+	    fixture->frontend.pollPacket,
+	    sizeof(fixture->frontend.pollPacket),
+	    &fixture->frontend.pollPacketSize));
+	fixture->frontend.pollPacketSender = 0;
+	fixture->frontend.deliverPacketDuringPoll = true;
+	fixture->frontend.deliverOnPoll = 4;
+
+	struct mAudioBuffer* audio =
+	    fixture->core->getAudioBuffer(fixture->core);
+	mAudioBufferClear(audio);
+	unsigned frontendCalls = 1;
+	unsigned coreFrames = 0;
+	unsigned audioReturns = 0;
+	mLibretroNetpacketRunBegin();
+	assert_false(mLibretroNetpacketExecutionBlocked());
+	if (!mLibretroNetpacketExecutionBlocked()) {
+		fixture->core->runFrame(fixture->core);
+		++coreFrames;
+		if (mAudioBufferAvailable(audio)) {
+			++audioReturns;
+		}
+	}
+	mLibretroNetpacketRunEnd();
+
+	assert_int_equal(frontendCalls, 1);
+	assert_int_equal(coreFrames, 1);
+	assert_int_equal(audioReturns, 1);
+	assert_int_equal(fixture->frontend.polls, 4);
+	assert_true(mAudioBufferAvailable(audio) > 0);
+}
+
+M_TEST_DEFINE(hostRunEndWaitsForGrantAcknowledgement) {
+	struct AdapterFixture* fixture = *state;
+	_makeHostReady(fixture);
+	fixture->core->runFrame(fixture->core);
+	unsigned sends = fixture->frontend.sends;
+	fixture->frontend.acknowledgeGrantDuringPoll = true;
+	mLibretroNetpacketRunEnd();
+	assert_int_equal(fixture->frontend.sends, sends + 1);
+	assert_int_equal(fixture->frontend.polls, 1);
+	assert_false(mLibretroNetpacketExecutionBlocked());
+	struct GBALinkPacket grant = _lastPacket(
+	    &fixture->frontend, GBA_LINK_ROLE_HOST);
+	assert_int_equal(
+	    grant.header.type,
+	    GBA_LINK_MESSAGE_EXECUTION_GRANT);
+}
+
+M_TEST_DEFINE(frameRendezvousTimeoutFailsClosed) {
+	struct AdapterFixture* fixture = *state;
+	_makeClientReady(fixture);
+	uint64_t generation =
+	    mLibretroNetpacketTestCallbackGeneration();
+	fixture->frontend.advanceMsPerPoll = 1000;
+	mLibretroNetpacketRunBegin();
+	assert_true(fixture->frontend.polls > 0);
+	assert_true(fixture->frontend.polls <= 3);
+	assert_false(mLibretroNetpacketSessionActive());
+	assert_true(
+	    mLibretroNetpacketTestCallbackGeneration() !=
+	    generation);
+	assert_true(fixture->frontend.messages > 0);
+	assert_non_null(strstr(
+	    fixture->frontend.lastMessage,
+	    "execution grant timed out"));
+}
+
+M_TEST_DEFINE(stopDuringFrameRendezvousUsesNoStaleCallback) {
+	struct AdapterFixture* fixture = *state;
+	_makeClientReady(fixture);
+	unsigned sends = fixture->frontend.sends;
+	uint64_t generation =
+	    mLibretroNetpacketTestCallbackGeneration();
+	fixture->frontend.stopDuringPoll = true;
+	mLibretroNetpacketRunBegin();
+	assert_int_equal(fixture->frontend.polls, 1);
+	assert_false(mLibretroNetpacketSessionActive());
+	assert_int_equal(fixture->frontend.sends, sends);
+	assert_true(
+	    mLibretroNetpacketTestCallbackGeneration() !=
+	    generation);
 }
 
 M_TEST_DEFINE(receiveCallbackCopiesBeforeFrontendReturns) {
@@ -662,6 +1002,21 @@ M_TEST_SUITE_DEFINE(
         _setup, _teardown),
     cmocka_unit_test_setup_teardown(
         oversizedAndWrongSenderPacketsFailClosed,
+        _setup, _teardown),
+    cmocka_unit_test_setup_teardown(
+        legacySingleFlightProducesEmptyFrontendCalls,
+        _setup, _teardown),
+    cmocka_unit_test_setup_teardown(
+        clientRunBeginWaitsForGrantAndProducesAudio,
+        _setup, _teardown),
+    cmocka_unit_test_setup_teardown(
+        hostRunEndWaitsForGrantAcknowledgement,
+        _setup, _teardown),
+    cmocka_unit_test_setup_teardown(
+        frameRendezvousTimeoutFailsClosed,
+        _setup, _teardown),
+    cmocka_unit_test_setup_teardown(
+        stopDuringFrameRendezvousUsesNoStaleCallback,
         _setup, _teardown),
     cmocka_unit_test_setup_teardown(
         receiveCallbackCopiesBeforeFrontendReturns,

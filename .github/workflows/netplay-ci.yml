@@ -5,6 +5,7 @@ on:
     branches:
       - feature/wifi-link-netplay
       - feature/wifi-link-netplay-upstream
+      - feature/wifi-link-netplay-v2
   pull_request:
 
 permissions:
@@ -15,6 +16,55 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  full-normal-suite:
+    name: Complete normal mGBA suite
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes cmake ninja-build pkg-config libcmocka-dev
+
+      - name: Configure complete suite
+        run: |
+          cmake -S . -B build-ci-complete -G Ninja \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DBUILD_QT=OFF -DBUILD_SDL=OFF -DBUILD_LIBRETRO=ON \
+            -DBUILD_TEST=ON -DBUILD_SUITE=ON -DBUILD_CINEMA=OFF \
+            -DBUILD_HEADLESS=OFF -DBUILD_EXAMPLE=OFF \
+            -DUSE_ZLIB=OFF -DUSE_MINIZIP=OFF -DUSE_PNG=OFF \
+            -DUSE_LIBZIP=OFF -DUSE_SQLITE3=OFF -DUSE_LZMA=OFF \
+            -DUSE_JSON_C=OFF -DUSE_FREETYPE=OFF -DUSE_FFMPEG=OFF \
+            -DUSE_ELF=OFF -DUSE_LUA=OFF -DENABLE_SCRIPTING=OFF \
+            -DUSE_DISCORD_RPC=OFF
+
+      - name: Build complete suite
+        run: cmake --build build-ci-complete --parallel 2
+
+      - name: Run all tests except pinned upstream failure
+        run: |
+          ctest --test-dir build-ci-complete --output-on-failure \
+            --exclude-regex '^util-hash$' --parallel 2
+
+      - name: Confirm pinned upstream util-hash baseline
+        shell: bash
+        run: |
+          set +e
+          output="$(ctest --test-dir build-ci-complete \
+            --output-on-failure --tests-regex '^util-hash$' 2>&1)"
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          test "$status" -ne 0
+          grep --fixed-strings 'stagedCrc32' <<<"$output"
+          grep --fixed-strings '0% tests passed, 1 tests failed out of 1' \
+            <<<"$output"
+
   focused-tests:
     name: Focused tests (${{ matrix.name }})
     runs-on: ubuntu-24.04
@@ -24,10 +74,13 @@ jobs:
         include:
           - name: normal
             build_dir: build-ci
-            sanitizers: false
+            sanitizers: none
           - name: ASan + UBSan
             build_dir: build-ci-sanitize
-            sanitizers: true
+            sanitizers: address,undefined
+          - name: TSan
+            build_dir: build-ci-tsan
+            sanitizers: thread
 
     steps:
       - name: Check out source
@@ -42,12 +95,12 @@ jobs:
         shell: bash
         run: |
           sanitizer_flags=()
-          if [[ "${{ matrix.sanitizers }}" == "true" ]]; then
+          if [[ "${{ matrix.sanitizers }}" != "none" ]]; then
             sanitizer_flags+=(
-              -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
-              -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
-              -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
-              -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined"
+              -DCMAKE_C_FLAGS="-fsanitize=${{ matrix.sanitizers }} -fno-omit-frame-pointer"
+              -DCMAKE_CXX_FLAGS="-fsanitize=${{ matrix.sanitizers }} -fno-omit-frame-pointer"
+              -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=${{ matrix.sanitizers }}"
+              -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=${{ matrix.sanitizers }}"
             )
           fi
 
@@ -69,21 +122,32 @@ jobs:
           cmake --build "${{ matrix.build_dir }}" --parallel 2 --target \
             test-gba-netplay-driver \
             test-gba-netplay-identity \
+            test-gba-netplay-input-sync \
             test-gba-netplay-integration \
             test-gba-netplay-protocol \
+            test-gba-netplay-protocol-v2 \
             test-gba-netplay-session \
+            test-gba-netplay-session-v2 \
             test-gba-netplay-transport \
+            test-gba-replica \
+            test-gba-replicated-pair \
+            test-gba-replicated-pair-spike \
             test-gba-sio \
-            test-libretro-netpacket
+            test-libretro-replicated-pair-spike \
+            test-libretro-netpacket \
+            test-libretro-netpacket-v2 \
+            test-libretro-netpacket-v2-replay
 
       - name: Run focused suite
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          LSAN_OPTIONS: exitcode=23
+          TSAN_OPTIONS: halt_on_error=1:history_size=7
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: |
           ctest --test-dir "${{ matrix.build_dir }}" \
             --output-on-failure \
-            --tests-regex 'gba-netplay|gba-sio|libretro-netpacket' \
+            --tests-regex 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' \
             --parallel 2
 
   fixture:
@@ -112,3 +176,51 @@ jobs:
         run: |
           make -C tools/gba-link-test-rom verify-fixture \
             CROSS=/tmp/gba-link-arm-toolchain/bin/arm-none-eabi-
+
+      - name: Validate structured-log analyzers
+        run: |
+          python3 tools/test-analyze-link-netplay-log.py
+          python3 tools/test-analyze-replicated-netplay.py
+
+  android-arm64:
+    name: Android arm64 libretro build
+    runs-on: ubuntu-24.04
+    env:
+      ANDROID_NDK_VERSION: 27.2.12479018
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Install build tools and pinned NDK
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes cmake ninja-build
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "ndk;${ANDROID_NDK_VERSION}"
+
+      - name: Configure Android arm64 core
+        env:
+          # Do not let host pkg-config metadata add x86-64 library paths to
+          # the Android link. Dependencies must come from the NDK sysroot or
+          # the source-tree fallbacks selected by CMake.
+          PKG_CONFIG_LIBDIR: /tmp/mgba-empty-pkgconfig
+          PKG_CONFIG_PATH: ""
+        run: |
+          mkdir -p "$PKG_CONFIG_LIBDIR"
+          cmake -S . -B build-ci-android-arm64 -G Ninja \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-21 \
+            -DBUILD_QT=OFF -DBUILD_SDL=OFF -DBUILD_LIBRETRO=ON \
+            -DBUILD_TEST=OFF -DBUILD_SUITE=OFF -DBUILD_CINEMA=OFF \
+            -DBUILD_HEADLESS=OFF -DBUILD_EXAMPLE=OFF
+
+      - name: Build and inspect Android arm64 core
+        run: |
+          cmake --build build-ci-android-arm64 --parallel 2 \
+            --target mgba_libretro
+          test -s build-ci-android-arm64/mgba_libretro.so
+          file build-ci-android-arm64/mgba_libretro.so \
+            | grep --fixed-strings 'ARM aarch64'

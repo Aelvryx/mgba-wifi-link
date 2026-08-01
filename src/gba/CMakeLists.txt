@@ -20,6 +20,9 @@ set(SOURCE_FILES
 	io.c
 	memory.c
 	overrides.c
+	replica.c
+	replicated-pair.c
+	replicated-runtime.c
 	renderers/cache-set.c
 	renderers/common.c
 	renderers/gl.c
@@ -38,14 +41,20 @@ set(SOURCE_FILES
 set(NETPLAY_FILES
 	sio/netplay/driver.c
 	sio/netplay/identity.c
+	sio/netplay/input-sync.c
 	sio/netplay/protocol.c
+	sio/netplay/protocol-v2.c
 	sio/netplay/session.c
+	sio/netplay/session-v2.c
 	sio/netplay/timeline.c
 	sio/netplay/transport.c)
 
+set(LOCKSTEP_FILES
+	sio/lockstep.c)
+
 set(SIO_FILES
 	sio/dolphin.c
-	sio/lockstep.c
+	${LOCKSTEP_FILES}
 	${NETPLAY_FILES})
 
 set(EXTRA_FILES
@@ -60,10 +69,16 @@ set(TEST_FILES
 	test/core.c
 	test/netplay-driver.c
 	test/netplay-identity.c
+	test/netplay-input-sync.c
 	test/netplay-integration.c
 	test/netplay-protocol.c
+	test/netplay-protocol-v2.c
 	test/netplay-session.c
+	test/netplay-session-v2.c
 	test/netplay-transport.c
+	test/replica.c
+	test/replicated-pair.c
+	test/replicated-pair-spike.c
 	test/sio.c)
 
 source_group("GBA board" FILES ${SOURCE_FILES})
@@ -72,6 +87,7 @@ source_group("GBA debugger" FILES ${DEBUGGER_FILES})
 source_group("GBA tests" FILES ${TEST_FILES})
 
 export_directory(GBA SOURCE_FILES)
+export_directory(GBA_LOCKSTEP LOCKSTEP_FILES)
 export_directory(GBA_SIO SIO_FILES)
 export_directory(GBA_NETPLAY NETPLAY_FILES)
 export_directory(GBA_EXTRA EXTRA_FILES)

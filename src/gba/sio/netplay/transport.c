@@ -5,33 +5,65 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include <mgba/internal/gba/sio/netplay/transport.h>
 
-static void _clearQueue(struct GBALinkCopiedQueue* queue) {
+void GBALinkCopiedPacketDeinit(struct GBALinkCopiedPacket* packet) {
+	if (!packet) {
+		return;
+	}
+	free(packet->data);
+	memset(packet, 0, sizeof(*packet));
+}
+
+void GBALinkCopiedQueueInit(struct GBALinkCopiedQueue* queue) {
+	if (queue) {
+		memset(queue, 0, sizeof(*queue));
+	}
+}
+
+void GBALinkCopiedQueueDeinit(struct GBALinkCopiedQueue* queue) {
+	if (!queue) {
+		return;
+	}
+	for (size_t i = 0; i < GBA_LINK_MAX_COPIED_PACKETS; ++i) {
+		GBALinkCopiedPacketDeinit(&queue->packets[i]);
+	}
 	memset(queue, 0, sizeof(*queue));
 }
 
-static bool _queuePush(
+bool GBALinkCopiedQueuePush(
     struct GBALinkCopiedQueue* queue, uint64_t generation,
     const void* data, size_t size) {
-	if (queue->size >= GBA_LINK_MAX_COPIED_PACKETS) {
+	if (!queue || !data || !size ||
+	    size > GBA_LINK_TRANSPORT_MAX_PACKET_SIZE ||
+	    queue->size >= GBA_LINK_MAX_COPIED_PACKETS) {
 		return false;
 	}
 	size_t index = (queue->readIndex + queue->size) % GBA_LINK_MAX_COPIED_PACKETS;
 	struct GBALinkCopiedPacket* packet = &queue->packets[index];
+	uint8_t* copy = malloc(size);
+	if (!copy) {
+		return false;
+	}
+	memcpy(copy, data, size);
+	GBALinkCopiedPacketDeinit(packet);
 	packet->generation = generation;
 	packet->size = size;
-	memcpy(packet->data, data, size);
+	packet->data = copy;
 	++queue->size;
 	return true;
 }
 
-static bool _queuePop(
+bool GBALinkCopiedQueuePop(
     struct GBALinkCopiedQueue* queue, struct GBALinkCopiedPacket* packet) {
-	if (!queue->size) {
+	if (!queue || !queue->size) {
 		return false;
 	}
 	if (packet) {
 		*packet = queue->packets[queue->readIndex];
+	} else {
+		GBALinkCopiedPacketDeinit(&queue->packets[queue->readIndex]);
 	}
+	memset(&queue->packets[queue->readIndex], 0,
+	    sizeof(queue->packets[queue->readIndex]));
 	queue->readIndex = (queue->readIndex + 1) % GBA_LINK_MAX_COPIED_PACKETS;
 	--queue->size;
 	return true;
@@ -53,6 +85,8 @@ void GBALinkTransportInit(
 	memset(transport, 0, sizeof(*transport));
 	transport->vtable = vtable;
 	transport->context = context;
+	GBALinkCopiedQueueInit(&transport->inbound);
+	GBALinkCopiedQueueInit(&transport->outbound);
 }
 
 void GBALinkTransportDeinit(struct GBALinkTransport* transport) {
@@ -64,6 +98,8 @@ void GBALinkTransportDeinit(struct GBALinkTransport* transport) {
 		    transport, GBA_LINK_REASON_TRANSPORT_STOP,
 		    "transport deinitialized while active");
 	}
+	GBALinkCopiedQueueDeinit(&transport->inbound);
+	GBALinkCopiedQueueDeinit(&transport->outbound);
 	memset(transport, 0, sizeof(*transport));
 }
 
@@ -85,8 +121,8 @@ bool GBALinkTransportStart(
 	transport->active = true;
 	transport->inCallback = false;
 	transport->failureReason = 0;
-	_clearQueue(&transport->inbound);
-	_clearQueue(&transport->outbound);
+	GBALinkCopiedQueueDeinit(&transport->inbound);
+	GBALinkCopiedQueueDeinit(&transport->outbound);
 	return true;
 }
 
@@ -99,8 +135,8 @@ void GBALinkTransportInvalidate(
 	bool wasActive = transport->active;
 	transport->active = false;
 	transport->failureReason = reason;
-	_clearQueue(&transport->inbound);
-	_clearQueue(&transport->outbound);
+	GBALinkCopiedQueueDeinit(&transport->inbound);
+	GBALinkCopiedQueueDeinit(&transport->outbound);
 	if (wasActive && diagnostic) {
 		_diagnostic(transport, GBA_LINK_DIAGNOSTIC_ERROR, reason, diagnostic);
 	}
@@ -132,13 +168,13 @@ bool GBALinkTransportQueueInbound(
 	if (!GBALinkTransportIsActive(transport, generation) || !data) {
 		return false;
 	}
-	if (size > GBA_LINK_MAX_PACKET_SIZE) {
+	if (size > GBA_LINK_TRANSPORT_MAX_PACKET_SIZE) {
 		GBALinkTransportInvalidate(
 		    transport, GBA_LINK_REASON_OVERSIZED_PACKET,
 		    "received packet exceeds copied-packet limit");
 		return false;
 	}
-	if (!_queuePush(&transport->inbound, generation, data, size)) {
+	if (!GBALinkCopiedQueuePush(&transport->inbound, generation, data, size)) {
 		GBALinkTransportInvalidate(
 		    transport, GBA_LINK_REASON_QUEUE_EXHAUSTED,
 		    "inbound copied-packet queue exhausted");
@@ -152,10 +188,11 @@ bool GBALinkTransportPopInbound(
 	if (!transport || !transport->active || !packet) {
 		return false;
 	}
-	while (_queuePop(&transport->inbound, packet)) {
+	while (GBALinkCopiedQueuePop(&transport->inbound, packet)) {
 		if (packet->generation == transport->generation) {
 			return true;
 		}
+		GBALinkCopiedPacketDeinit(packet);
 	}
 	return false;
 }
@@ -167,14 +204,14 @@ bool GBALinkTransportSend(
 	    !transport->vtable || !transport->vtable->sendReliable) {
 		return false;
 	}
-	if (size > GBA_LINK_MAX_PACKET_SIZE) {
+	if (size > GBA_LINK_TRANSPORT_MAX_PACKET_SIZE) {
 		GBALinkTransportInvalidate(
 		    transport, GBA_LINK_REASON_OVERSIZED_PACKET,
 		    "outbound packet exceeds copied-packet limit");
 		return false;
 	}
 	uint64_t generation = transport->generation;
-	if (!_queuePush(&transport->outbound, generation, data, size)) {
+	if (!GBALinkCopiedQueuePush(&transport->outbound, generation, data, size)) {
 		GBALinkTransportInvalidate(
 		    transport, GBA_LINK_REASON_QUEUE_EXHAUSTED,
 		    "outbound copied-packet queue exhausted");
@@ -182,7 +219,8 @@ bool GBALinkTransportSend(
 	}
 
 	struct GBALinkCopiedPacket packet;
-	if (!_queuePop(&transport->outbound, &packet)) {
+	memset(&packet, 0, sizeof(packet));
+	if (!GBALinkCopiedQueuePop(&transport->outbound, &packet)) {
 		GBALinkTransportInvalidate(
 		    transport, GBA_LINK_REASON_INVALID_TRANSITION,
 		    "outbound copied-packet queue ordering failed");
@@ -190,6 +228,7 @@ bool GBALinkTransportSend(
 	}
 	bool sent = transport->vtable->sendReliable(
 	    transport->context, packet.data, packet.size, flush);
+	GBALinkCopiedPacketDeinit(&packet);
 	if (!GBALinkTransportIsActive(transport, generation)) {
 		return false;
 	}

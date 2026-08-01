@@ -7,18 +7,18 @@
 - Pinned upstream commit: `71aa6c7dab7654bfdbbd57e696f704671a97e55d`
 - Pinned commit date: `2026-07-30T23:01:50-07:00`
 - Pinned commit subject: `Qt: Remove unneeded Qt Multimedia-only include`
-- Upstream-facing branch: `feature/wifi-link-netplay-upstream`
+- Upstream-facing protocol-v2 branch: `feature/wifi-link-netplay-v2`
 - Integration/evidence branch: `feature/wifi-link-netplay`
 
 The repository was initialized directly from mGBA Git history. The
-upstream-facing branch descends from the pinned commit above and contains only
-the reviewable product, test, CI, and user-documentation commits. Project-only
-OpenSpec and `.codex` material remains on the integration/evidence branch and
-is deliberately absent from this patch stack.
+protocol-v2 branch descends from the pinned commit above and contains the
+reviewable product, tests, CI, user documentation, and the active OpenSpec
+change. Project-local `.codex` helpers, device captures, logs, commercial ROMs,
+and generated build products remain outside this patch stack.
 
 ```sh
 git fetch upstream master --tags
-git switch -c feature/wifi-link-netplay-upstream \
+git switch -c feature/wifi-link-netplay-v2 \
   71aa6c7dab7654bfdbbd57e696f704671a97e55d
 ```
 
@@ -162,20 +162,50 @@ dlopen_and_symbol_call=pass
 
 ## Feature qualification
 
-The completed change preserves the pinned upstream ancestry and header revision
+The experimental protocol-v2 baseline preserves the pinned upstream ancestry and header revision
 above. Detailed automated, sanitizer, localhost, two-device Android, and
 independent-workload evidence is recorded in
 `docs/netplay-validation-matrix.md`; build, installation, protocol, policy, and
 failure semantics are documented in `docs/wifi-link-netplay.md`.
 
-After splitting and rebasing the upstream-facing stack onto
+After splitting and rebasing the first upstream-facing stack onto
 `71aa6c7dab7654bfdbbd57e696f704671a97e55d`, a clean Linux build produced the
 shared library, libretro core, and all test executables. The complete normal
-suite passed 28 of 29 tests; its only failure remains the same
-`util-hash/stagedCrc32` baseline case documented above. The focused normal and
-ASan/UBSan netplay/SIO/libretro suites each passed 8 of 8 tests, and Arm GNU
-Toolchain 15.2.Rel1 reproduced the committed 32 KiB test ROM byte-for-byte.
+suite passed 37 of 38 tests; its only failure remains the same
+`util-hash/stagedCrc32` baseline case documented above. Protocol v2 expands the
+focused set to 17 tests; all 17 pass normally, under ASan/UBSan with leak
+detection, and under TSan. Its real-adapter replay and 134,400-frame stock
+RetroArch soak are recorded in the validation matrix. Arm GNU Toolchain
+15.2.Rel1 reproduces the committed 32 KiB test ROM byte-for-byte.
 
-The previously qualified Android NDK r27 production source also built for
-`arm64-v8a`, `armeabi-v7a`, `x86`, and `x86_64`, with the ARM64 core validated
-on the two physical Android devices described in the validation matrix.
+The feature workflow also configures and runs the complete normal suite while
+checking the pinned `util-hash/stagedCrc32` baseline independently. A separate
+Android job builds and inspects the arm64-v8a libretro core with NDK r27, so
+common-core and Android ABI regressions do not depend solely on focused tests
+or physical-device qualification.
+
+Android NDK r27 builds passed for `arm64-v8a`, `armeabi-v7a`, `x86`, and
+`x86_64`. The current post-review ARM64 release candidate was built from
+source commit `c9b181aa24d5f2136a6e11fca56179b5204555be` (tree
+`c4ecab88bd6270ad1884f6629e3f2dbe6a15983e`). The 8,043,736-byte core has
+SHA-256
+`14978106a3978ab4ef6ec025add82e0e9a38decda72404e3dc8c02b3373f179d`.
+Its embedded version and commit strings were verified after installation on
+both physical Android devices. The exact-head continuous smoke sustained 60
+FPS with matching P0/P1 traces, normal audio delivery, zero serial errors or
+timeouts, and atomic verified-checkpoint restoration after forced peer stop.
+The same binary passed a 15,600-frame Mario Kart Multi-Pak gameplay smoke with
+13,100 local cable words and no audiovisual or protocol fault. Detailed hashes
+and observations are in `docs/netplay-validation-matrix.md`.
+
+The earlier 8,029,120-byte production candidate from
+`9c528d38965998b15c8e7325326fd96f74362088` had SHA-256
+`9cbdf6adc49ada15fc670bea3e4c2bad64803fe7d5d749d3143e98773a0a14f8`
+and supplied the terminal-path evidence retained in the validation matrix.
+
+The earlier exact ARM64 candidate from
+`217c231f2b1152b9e7b8484b0245f2210ae709d0`, SHA-256
+`e045d614e5b2def408ee636c7cbffe46e94105edcb8abda65c8142879cca2989`,
+completed the 120,600-frame continuous-link qualification recorded there.
+The later production commit removes completed feasibility switches without
+changing the qualified replicated scheduler or wire protocol.

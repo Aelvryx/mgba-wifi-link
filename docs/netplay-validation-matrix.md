@@ -1,9 +1,397 @@
 # GBA Link Netplay Validation Matrix
 
-Date: 2026-07-31
+Date: 2026-08-01
 
 This document maps the MVP's automated evidence to protocol phases and failure
 classes. Test names below are cmocka case names inside the named source file.
+
+This evidence supports an experimental two-player Multi-Pak alpha, not a claim
+of universal game compatibility. Mario Kart: Super Circuit and the supplied
+diagnostic workloads are verified; an Advance Wars user playtest passed;
+Four Swords is a known cable-discovery failure; other commercial titles remain
+unqualified. The v2 wire/runtime contract is deliberately not frozen yet.
+
+## Protocol-v2 real-time evidence
+
+Protocol v2 replaces per-cable-event network barriers with one replicated
+P0/P1 pair on each endpoint and frame-authoritative input packets. The
+protocol-v2 branch has the following automated and rendered-device evidence:
+
+- All 17 focused SIO, input-ring, v2 codec/session, replica, pair,
+  save-routing, and libretro-adapter test executables pass normally, under
+  ASan/UBSan with leak detection, and under TSan.
+- `test-libretro-netpacket-v2-replay` compiles the actual adapter twice into
+  one process and connects the independent host/client instances through an
+  ordered deterministic-latency wire. It covers a complete bilateral replica
+  exchange, 125 input frames, state checks, role presentation, every
+  attachment packet boundary, runtime input/check loss, detach, synchronous
+  stop, reset, and unload.
+- `canonicalDigestsCoverFutureStateOnly` detects injected one-bit P0 memory,
+  P1 memory, timing, and save changes while ignoring presentation-buffer
+  changes.
+- `saveBackingBelongsOnlyToAssignedPlayer` proves host/P0 and client/P1 save
+  ownership without exposing the shadow save to the frontend buffer.
+- `verifiedRollbackRestoresStateAndSaveAtomically` proves that a jointly
+  accepted machine/save/RTC checkpoint is restored as a unit, that a failed
+  replacement allocation retains the prior complete checkpoint, and that
+  uncertain save bytes and save-type changes cannot leak across rollback.
+- `failureBeforeVerificationRestoresAttachmentSave` covers every teardown path
+  before the first periodic check and verifies attachment-save restoration plus
+  complete disconnected SIOCNT/RCNT cleanup.
+- `detachedMultiSnapshotsExposeAttachedLinesBeforeExecution` seeds both
+  snapshots with disconnected MULTI lines and proves that pair installation
+  exposes P0/P1 IDs, master/slave state, readiness, and RCNT topology before
+  either logical CPU executes.
+- `experimentalPolicyMismatchFailsBeforeReplicaExchange` rejects mixed
+  experimental/stable runtimes before mutable replica exchange.
+- `runtimeInputDeadlineFailsWithSpecificReason` and
+  `missingPollingAndSynchronousStopFailClosed` cover bounded input wait and
+  generation invalidation during a receive callback.
+- A stock-RetroArch localhost soak completed 134,400 replicated frames, or
+  37 minutes 20 seconds of emulated time. All 448 rolling trace digests (224
+  sampled frames times P0/P1) matched between endpoints, and 2,239 periodic
+  verification rounds completed on each endpoint without divergence.
+- The soak completed 124,680 generic MULTI transfers and 249,360 cable words.
+  Its 0.927679 transfers per replicated frame differed by only 0.002% from a
+  direct local-pair baseline of 100,187 transfers over 108,000 frames.
+- The host/client sent 136,680/136,679 application packets at the final
+  periodic sample: approximately 1.017 packets per endpoint per replicated
+  frame, independent of the much larger serial-word count.
+- Both logical cores produced audio for every completed frame (the periodic
+  log observes 134,399 presented frames immediately before frame 134,400) and
+  both endpoints recorded zero empty-audio frames. Copied-queue high-water
+  marks remained 34/32 packets and the maximum in-call rendezvous was 7/4 ms
+  on this localhost run.
+- Normal max-frame shutdown restored each retained single core to frame
+  134,400, the latest jointly verified quiescent state, while retaining its
+  live local save generation.
+
+The short structured summaries include cumulative packets/bytes, verification
+count, local SIO transfers/words/waits, input rendezvous timing, future input
+depth, queue high-water, audio samples/frames/empties, per-core scheduler work,
+and separate full rolling P0/P1 trace digests. The checked
+`tools/analyze-replicated-netplay.py` validator compares the two logs and the
+direct-pair baseline, enforcing the frame floor, every sampled trace, serial
+counters, state-check coverage, audio coverage, packet scaling, queue bound,
+and five-percent throughput limit. The soak used core SHA-256
+`62edfb5504f66e3ece28f18ed6418d4ae401ef24841abdacc61496d622d4be5d`
+and cartridge-sized continuous fixture SHA-256
+`c302487462e6f1241e038fab8b135a43909cfce9f07cfe7498a2b1fc7b4c8330`.
+The exact ARM64 physical-device qualification is recorded below.
+
+### Mario Kart Multi-Pak commercial qualification
+
+A human-assisted two-device run used stock RetroArch 1.22.2 on an AYN Thor
+host and AYN Odin2 Portal client over the same Wi-Fi LAN. Both devices loaded
+the same effective Mario Kart: Super Circuit image (RetroArch content CRC32
+`ed316e37`) from isolated qualification paths, connected through protocol v2,
+entered Multi-Pak, selected a two-player VS race, chose separate characters,
+and completed all three laps. The captured round-one results ranked P1 first
+and P2 second on both endpoints.
+
+The installed 8,067,160-byte ARM64 candidate had SHA-256
+`54e37896117762430efad018a51c38a69153ecf93974a931794d9096ff35db21`.
+It was built from integration base `6bfd68439e199fb5686d399748e8328caf4a8f51`
+plus the production scheduler/diagnostic changes subsequently committed
+unchanged as `525ff8644`. The qualification capture also recorded the dirty
+worktree's binary Git diff SHA-256 as
+`67998b9e7ba943f9fac878b493279dc29ce0dd989ac91f6bed1547e3999ed7eb`.
+Together the commit and captured build hash identify the physically exercised
+candidate while keeping commercial content outside the repository. The later
+clean production-core smoke and terminal-path checks that close the release
+gate are recorded below.
+
+The strict commercial-log analyzer result was:
+
+```text
+frames=31200 checks=519/519 packets=31756/31755
+serial=45127/90254 audio_empty=0/0 fps=60.234/60.237
+rv_p50=5/8ms rv_p95=13/23ms rv_max=84/30ms
+packet_rate=61.308/61.309pps byte_rate=7765.1/7765.3Bps
+lead=1/1 trace_samples=52
+```
+
+The session ran for 517.98/517.95 seconds at the last common sample. All 52
+P0 and all 52 P1 rolling state digests matched between endpoints. Cable
+traffic began only when the game entered Multi-Pak: the frame-8,400 sample had
+zero transfers and frame 9,000 had 1,326. The final sample contained 45,127
+completed two-player MULTI transactions and 90,254 transferred words. Both
+logical cores remained in MULTI mode throughout gameplay. Each endpoint
+reported audio for 31,199 of the 31,200 sampled frames and zero empty-audio
+frames. No link failure, protocol error, timeout, divergence, mismatch, or
+disconnect appeared in either log.
+
+The host measured an 82 ms attachment round trip and selected a fixed
+five-frame input delay. Runtime input rendezvous was 5/13/84 ms p50/p95/max on
+Thor and 8/23/30 ms on Odin. One bounded scheduler lead was recovered for each
+logical core; the lead counters then remained stable through the race. The
+human players completed the race normally without reporting an audiovisual or
+control fault.
+
+Raw logs and screenshots remain outside the repository. Their verification
+hashes are:
+
+| Evidence | SHA-256 |
+| --- | --- |
+| Thor result screenshot | `51c9a8f3febc09504f692dfdb2a8df46d6663f576060f77026e54c5900f48bf6` |
+| Odin result screenshot | `571cc37bcf932fc7fbdc8582bc64c9d9fd3241fcca0e9b0398fa43b9fa8c03a7` |
+| Thor RetroArch/core log | `64ae30a83cea624cd16bfdbcb93c55de667692059ff7a84ad13888d6dadef376` |
+| Odin RetroArch/core log | `aa4deaea89320ba8eb4d4a93cd0e0136ff6da4349596f8b5dde8be1d03c36a07` |
+
+The analyzer command for a real-game run is:
+
+```sh
+python3 tools/analyze-replicated-netplay.py \
+  /path/to/host.log /path/to/client.log \
+  --minimum-frames 30000 --commercial
+```
+
+### Exact-build Android continuous-link qualification
+
+The ARM64 candidate built from source head
+`217c231f2b1152b9e7b8484b0245f2210ae709d0` (tree
+`a1cca0be9434d3beeac79788fbfa745845381d76`) with Android NDK r27 was installed
+through stock RetroArch 1.22.2 on the AYN Thor host and AYN Odin2 Portal
+client. The installed 8,063,296-byte core had SHA-256
+`e045d614e5b2def408ee636c7cbffe46e94105edcb8abda65c8142879cca2989`.
+The isolated, black-screen qualification ROM had SHA-256
+`09580c39920cafa6f597f20a9019098260442242fbdbd7402e15d1217484abe3`.
+
+The continuous rendered run exceeded 33 minutes and completed 120,600 common
+replicated frames. The strict analyzer result was:
+
+```text
+frames=120600 checks=2010/2009 packets=122650/122649
+serial=60297/120594 audio_empty=0/0 fps=60.219/60.220
+rv_p50=21/21ms rv_p95=53/46ms rv_max=251/223ms
+packet_rate=61.243/61.244pps byte_rate=7130.2/7130.3Bps
+trace_samples=201 baseline_delta=0.008%
+```
+
+All 201 sampled P0/P1 trace pairs matched. The fixture reported RUNNING on
+both logical players, 60,295 matching measured transfers per endpoint, and
+zero fixture errors or timeouts. The two extra local SIO transfers are fixture
+synchronization transactions. Every completed frame supplied ordinary
+local-role audio and neither endpoint returned an empty audio frame. The
+negotiated input delay was four frames. Ordinary traffic remained about one
+packet per endpoint per frame rather than scaling with the much larger serial
+word count.
+
+The direct frame-paced pair baseline produced 59.719 serial words per emulated
+second. The rendered Android run differed by only 0.008%, well inside the
+five-percent gate. ADB sampling caused isolated rendezvous maxima of 251 ms on
+Thor and 223 ms on Odin without causing a timeout, divergence, or sustained
+frame-rate reduction.
+
+| Metric | AYN Thor | AYN Odin2 Portal |
+| --- | ---: | ---: |
+| ADB samples / observed collector window | 61 / 1,971 s | 61 / 1,992 s |
+| Process CPU mean / p95 / max | 33.31% / 38.40% / 50.00% | 48.72% / 57.60% / 61.50% |
+| Peak resident memory | 153,232 KiB | 155,828 KiB |
+| Hottest CPU/GPU sensor p50 / p95 / max | 50.3 / 57.4 / 59.4 C | 40.0 / 43.2 / 50.7 C |
+| Maximum battery temperature | 28.0 C | 27.0 C |
+| Android thermal status | 0 in all samples | 0 in all samples |
+
+The run used isolated configs, options, logs, saves, and states. The normal
+RetroArch configs, normal mGBA options, and canonical user-save manifests were
+hashed before and after qualification and were byte-identical:
+
+| Preserved data | Before and after SHA-256 |
+| --- | --- |
+| Thor RetroArch config | `eb3a81dd57e247715c71e76ade295080c1a45a9e7830d311568b3ac1d1365c24` |
+| Odin RetroArch config | `f7b9545632423876000627d3181db095700de2d1ed941ce11ca5fdbe6b36d7f1` |
+| Thor/Odin normal mGBA options | `65fd9076a4f1cd6f4aa09ad3965bab83c00ea4b7a90c0626674737d7f1f6a468` |
+| Thor user-save manifest | `a7017a805b801f60f7bafcf97ea7e0ce52bd0a1afa6b72c4909d7d4344dadcc6` |
+| Odin user-save manifest | `65d2e3196cd7f4c36454855b8ee01805aa9643fddeabcc2c7f8db5678a6f86fb` |
+
+Raw logs remain outside the repository and contain no committed ROM or save
+data. Their verification hashes are:
+
+| Evidence | SHA-256 |
+| --- | --- |
+| Thor core log | `46ddfe4bbe4ebbabdbb0252e6264e1b5d8711f98afb9a2757edb3ba4782d9bf2` |
+| Odin core log | `94d975ad9baa6a3e4d9aab501ac589f7d21311db3dc3de599265c3ec149072c8` |
+| Thor ADB samples | `f52f082685e55b27faf632ac65b2c548fba1c963176808cfb80d2eff0e4b161c` |
+| Odin ADB samples | `f2bc69474cb498ee672c6344c803aab483ace79357fc4ff85a12633015488e61` |
+
+The qualification fixture renders black while waiting and running, and dim
+red only on failure, avoiding a static bright OLED workload during long soaks.
+Both RetroArch processes were stopped after evidence capture and Android
+reported every built-in display panel `OFF`.
+
+### Final production-core smoke and disconnect qualification
+
+The production source commit used for the publishable ARM64 core is
+`9c528d38965998b15c8e7325326fd96f74362088` (tree
+`0f36ec14bb94f26ab1a17a688c065908aa8d9dd6`). The 8,029,120-byte
+`mgba_libretro.so` built with Android NDK r27 has SHA-256
+`9cbdf6adc49ada15fc670bea3e4c2bad64803fe7d5d749d3143e98773a0a14f8`.
+Both installed instances displayed the embedded version
+`0.11-feature/wifi-link-netplay-v2-9135-9c528d389` in stock RetroArch
+1.22.2. This build excludes the completed local-pair diagnostic runtime and
+its user-facing core option; the dedicated test targets retain the reusable
+coverage.
+
+A fresh two-device continuous-link smoke reached 1,800 common replicated
+frames before the deliberate peer-stop. Both endpoint logs contained the same
+sampled P0/P1 traces, 29 or more successful state checks, 895 matching fixture
+transfers per logical player, zero fixture errors/timeouts, and zero empty
+audio frames. The observed rates were 60.164 FPS on Thor and 60.315 FPS on
+Odin. Player two was then force-stopped. Player zero emitted its complete
+teardown summary, restored verified local state at frame 1,920, invalidated
+the session as peer-detached, and continued rendering instead of hanging.
+
+The same exact core was then exercised with Mario Kart: Super Circuit
+(RetroArch content CRC32 `ed316e37`) for both terminal paths. The test did not
+enter Multi-Pak again; the completed three-lap Multi-Pak race is recorded
+above. Its purpose was to prove commercial-content session teardown:
+
+- In the abrupt path, both peers attached and passed two periodic verification
+  intervals at approximately 60.3 FPS. Force-stopping player two caused player
+  zero to tear down at replicated frame 1,671 and restore its last jointly
+  verified state at frame 1,620 without a hang, crash, empty-audio frame, or
+  corruption of the ordinary ROM/save locations.
+- In the explicit path, player two selected RetroArch's **Disconnect from
+  Netplay Host** command after 49 successful state checks. The two roles
+  emitted teardown at frames 2,962/2,961 and both restored frame 2,940. The
+  client observed the frontend transport-stop reason and the host observed
+  peer-detached, which is the expected role-specific terminal diagnostic for
+  RetroArch's stop callback. Neither retained a replicated pair or transport
+  callback after teardown.
+
+The device tests used temporary configurations, saves, states, staged content
+copies, and logs. After evidence capture those paths, all diagnostic cores and
+ROMs, and the public installer copy were removed from both devices. The
+privately installed production core and ordinary ROM, save, and RetroArch
+configuration locations were retained; both displays were then put into the
+Android dozing state.
+
+Raw evidence remains outside the repository. Verification hashes for the
+final gate are:
+
+| Evidence | SHA-256 |
+| --- | --- |
+| Exact-smoke Thor log | `916f081d80f46c3f37c819fe160abe6016dbd32ae749e9aebb02901af39fef3f` |
+| Exact-smoke Odin log | `f8d9da354b225e46b8a7d92d517e94f54f39a70afc2eddc332dd529eec4bc34` |
+| Exact-smoke Thor screenshot | `40e471c748a3801c79f3683c2b2b284d92db1bbd714eac6ad69688fa72b79383` |
+| Exact-smoke Odin screenshot | `d020e631ac082a280faf6a6625f2cb07332fbdc4cf846c0c602e1ae3a7a77aa3` |
+| Mario Kart abrupt-stop Thor log | `454755461c68e579407b8843c8f494be1c265ee82b32a6c48f74bf214e230d20` |
+| Mario Kart abrupt-stop Odin log | `1087ea4375637a17f8cd67917fda090a8fb000ca866aa438536f6dc2d2ac6271` |
+| Mario Kart explicit-disconnect Thor log | `181a706bd5557c2579a3af864c668043e767bb9c6a075dedabee220426cad55d` |
+| Mario Kart explicit-disconnect Odin log | `83a891bb2f1f1fad942a60c10724fb21d4e15cc5991a7e3ad98a3f8fd6b0bc18` |
+| Explicit-disconnect menu screenshot | `cd074ba8e0a9f7b1da3a80d54c01ee6d1a716235f60b47fb240fbaf65c1ffee7` |
+
+### Post-review exact-head qualification
+
+The checkpoint, visible-topology, trace-initialization, experimental-policy,
+host-admission, and Android-CI corrections were then qualified together from
+source head `c9b181aa24d5f2136a6e11fca56179b5204555be` (tree
+`c4ecab88bd6270ad1884f6629e3f2dbe6a15983e`). The 8,043,736-byte ARM64
+Android NDK r27 core had SHA-256
+`14978106a3978ab4ef6ec025add82e0e9a38decda72404e3dc8c02b3373f179d`.
+Both stock RetroArch 1.22.2 instances displayed embedded version
+`0.11-feature/wifi-link-netplay-v2-9146-c9b181aa2` before qualification.
+
+A fresh continuous-link session reached 4,800 common healthy frames before a
+deliberate client stop. The strict analyzer result for the healthy window was:
+
+```text
+frames=4800 checks=79/80 packets=4920/4919
+serial=2397/4794 audio_empty=0/0 fps=60.280/60.275
+rv_p50=29/0ms rv_p95=46/0ms rv_max=53/0ms
+packet_rate=61.787/61.769pps byte_rate=13541.8/13539.6Bps
+lead=0/0 trace_samples=8
+```
+
+All eight sampled P0/P1 trace pairs matched, the fixture reported no serial
+error or timeout, and every presented frame supplied audio. The complete host
+run reached frame 5,177 before the forced peer stop, emitted its teardown
+summary, and atomically restored the jointly verified local checkpoint at
+frame 5,160. The retained single core reported the expected peer-detached
+terminal reason rather than hanging.
+
+The same installed core was then exercised with Mario Kart: Super Circuit.
+Both endpoints entered two-player Multi-Pak; cable traffic rose from zero
+during the menus to 6,550 completed MULTI transactions and 13,100 words at the
+last common sample. A human-assisted representative gameplay smoke reported
+normal controls, animation, speed, and audio. This was intentionally a short
+post-fix regression, not a replacement claim for the earlier complete
+three-lap qualification. Its strict commercial-log result was:
+
+```text
+frames=15600 checks=259/260 packets=15896/15895
+serial=6550/13100 audio_empty=0/0 fps=60.245/60.243
+rv_p50=23/0ms rv_p95=37/0ms rv_max=53/0ms
+packet_rate=61.389/61.383pps byte_rate=8665.2/8664.6Bps
+lead=1/1 trace_samples=26
+```
+
+All 26 sampled P0/P1 trace pairs matched. No timeout, state divergence,
+protocol error, or empty-audio frame appeared in either captured healthy log.
+The exact-head normal, ASan/UBSan, TSan, complete normal-suite, fixture
+reproducibility, and Android ARM64 GitHub Actions jobs also passed before this
+physical-device run.
+
+Raw logs remain outside the repository. Their verification hashes are:
+
+| Evidence | SHA-256 |
+| --- | --- |
+| Exact-head fixture Thor healthy window | `ac305b1e4d69501bfec80c8548a9fe01668e12d89a1ff37630fb7476fe6e0024` |
+| Exact-head fixture Thor teardown log | `5bd1d22dc86fd03030f3cd8d187e60c91a075f082e291ddda226ba321c2411c0` |
+| Exact-head fixture Odin log | `c0360d766193dd712816bb9bfbe795b4f569dd0d2495bb17a3d8f55068472a0a` |
+| Exact-head Mario Kart Thor healthy log | `2ba469b4d551abbacc3c152770b80757871345fce0b1c99203fc27bf6653c98f` |
+| Exact-head Mario Kart Odin healthy log | `5aa762cd86e853ef65bd5f5f2fa8def4296a7965a600ac30e4008edcc758dd80` |
+
+The desktop soak is reproducible with a stock RetroArch executable, the built
+libretro core, and the continuous CC0 fixture. Copy the core-option templates
+to their disposable paths first: RetroArch rewrites a core-options file on
+unload even when the main configuration is read-only in intent.
+
+```sh
+install -d /tmp/mgba-v2-qualification-save \
+  /tmp/mgba-v2-qualification-state
+cp tools/netpacket-spike/qualification-core-options.cfg \
+  /tmp/mgba-v2-qualification-core-options.cfg
+
+retroarch=/path/to/retroarch
+core=/path/to/mgba_libretro.so
+rom=/path/to/gba-link-continuous.gba
+port=55448
+
+"$retroarch" -v \
+  --config tools/netpacket-spike/retroarch-qualification.cfg \
+  --host --port="$port" --max-frames=180000 \
+  -L "$core" "$rom" > /tmp/mgba-v2-host.log 2>&1 &
+host_pid=$!
+sleep 0.2
+"$retroarch" -v \
+  --config tools/netpacket-spike/retroarch-qualification.cfg \
+  --connect=127.0.0.1 --port="$port" --max-frames=180000 \
+  -L "$core" "$rom" > /tmp/mgba-v2-client.log 2>&1 &
+client_pid=$!
+wait "$host_pid"
+wait "$client_pid"
+
+python3 tools/analyze-replicated-netplay.py \
+  /tmp/mgba-v2-host.log /tmp/mgba-v2-client.log
+```
+
+The release core no longer exposes the temporary local-pair diagnostic option.
+The transport-independent `test-gba-replicated-pair-spike` and
+`test-libretro-replicated-pair-spike` targets retain that scheduler and
+frontend-boundary coverage without adding a user-visible release switch. The
+analyzer's optional `--baseline` input remains available for comparing a run
+with a captured `replicated-pair diagnostic` summary such as the exact
+qualification evidence recorded below.
+
+The analyzer exits nonzero for fewer than 108,000 common frames, a missing or
+different sampled trace, mismatched serial counters, inadequate verification
+or audio coverage, empty audio, non-frame-scaled packet counts, excessive
+queue growth, or more than five-percent serial-throughput difference.
+
+The remaining sections document protocol-v1 correctness and its earlier
+physical qualification. That code remains a diagnostic SIO oracle; it is not
+the normal release runtime.
 
 ## Deterministic two-core evidence
 
@@ -132,36 +520,52 @@ Normal focused suite:
 env PYTHONPATH=/tmp/mgba-build-tools \
     LD_LIBRARY_PATH=/tmp/mgba-deps/lib64 \
   /tmp/mgba-build-tools/bin/ctest \
-    --test-dir build-netplay-review \
+    --test-dir build-dev \
     --output-on-failure \
-    -R 'gba-netplay|gba-sio|libretro-netpacket' -j8
+    -R 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' -j8
 ```
 
-Result: 8/8 tests passed.
+Result: 17/17 tests passed.
 
 ASan/UBSan focused suite:
 
 ```sh
 env PYTHONPATH=/tmp/mgba-build-tools \
-    LD_LIBRARY_PATH=/tmp/mgba-sanitizers/usr/lib64:/tmp/mgba-deps/lib64 \
+    LD_LIBRARY_PATH=/tmp/mgba-sanitizer-runtime/root/usr/lib64:/tmp/mgba-deps/lib64 \
     ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
     UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
   /tmp/mgba-build-tools/bin/ctest \
-    --test-dir build-netplay-review-sanitize \
+    --test-dir build-asan \
     --output-on-failure \
-    -R 'gba-netplay|gba-sio|libretro-netpacket' -j4
+    -R 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' -j4
 ```
 
-Result: 8/8 tests passed with no sanitizer or leak finding.
+Result: 17/17 tests passed with no sanitizer or leak finding.
 
-The complete normal suite passed 28 of 29 tests. Its sole failure is the known
+TSan focused suite:
+
+```sh
+env PYTHONPATH=/tmp/mgba-build-tools \
+    LD_LIBRARY_PATH=/tmp/mgba-tsan-runtime/root/usr/lib64:/tmp/mgba-deps/lib64 \
+    TSAN_OPTIONS=halt_on_error=1:history_size=7 \
+  /tmp/mgba-build-tools/bin/ctest \
+    --test-dir build-tsan \
+    --output-on-failure \
+    -R 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' -j4
+```
+
+Result: 17/17 tests passed with no thread-sanitizer finding.
+
+The complete normal suite passed 37 of 38 tests. Its sole failure is the known
 pinned-upstream `util-hash/stagedCrc32` case. That identical failure is recorded
 in the unmodified baseline and is unrelated to this change. These results were
 rerun after splitting the patch stack and rebasing it onto
 `71aa6c7dab7654bfdbbd57e696f704671a97e55d`.
 
-`.github/workflows/netplay-ci.yml` independently configures and builds these
-same eight focused tests on Ubuntu 24.04 in normal and ASan/UBSan jobs. A
-separate job uses the SHA-256-pinned Arm GNU Toolchain 15.2.Rel1 archive to
-rebuild the CC0 ROM and compare it byte-for-byte with
+`.github/workflows/netplay-ci.yml` independently configures and builds all 17
+focused test executables on Ubuntu 24.04 in normal, ASan/UBSan, and TSan jobs.
+It also runs the complete normal mGBA suite while independently confirming the
+single pinned upstream failure, builds and inspects an Android arm64-v8a
+libretro core with NDK r27, and uses the SHA-256-pinned Arm GNU Toolchain
+15.2.Rel1 archive to rebuild the CC0 ROM and compare it byte-for-byte with
 `tools/gba-link-test-rom/fixtures/gba-link-test.gba`.

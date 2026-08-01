@@ -28,6 +28,7 @@
 
 #include "libretro_core_options.h"
 #include "netpacket.h"
+#include "netpacket-v2.h"
 
 #define GB_SAMPLES 512
 /* An alpha factor of 1/180 is *somewhat* equivalent
@@ -99,6 +100,7 @@ static bool deferredSetup = false;
 static bool gameLoaded;
 static bool useBitmasks = true;
 static bool envVarsUpdated;
+static bool netplayV1Diagnostic;
 static int32_t tiltX = 0;
 static int32_t tiltY = 0;
 static int32_t gyroZ = 0;
@@ -309,6 +311,14 @@ static void _reloadSettings(void) {
 	var.value = 0;
 	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
 		opts.skipBios = strcmp(var.value, "ON") == 0;
+	}
+
+	netplayV1Diagnostic = false;
+	var.key = "mgba_gba_link_netplay_runtime";
+	var.value = 0;
+	if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
+		netplayV1Diagnostic =
+		    strcmp(var.value, "cable-v1") == 0;
 	}
 
 	var.key = "mgba_frameskip";
@@ -548,7 +558,11 @@ void retro_run(void) {
 	if (deferredSetup) {
 		_doDeferredSetup();
 	}
-	mLibretroNetpacketRunBegin();
+	if (netplayV1Diagnostic) {
+		mLibretroNetpacketRunBegin();
+	} else {
+		mLibretroNetpacketV2RunBegin();
+	}
 	uint16_t keys;
 
 	inputPollCallback();
@@ -562,6 +576,8 @@ void retro_run(void) {
 			.value = 0
 		};
 		if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value &&
+		    !mLibretroNetpacketV2RejectOperation(
+		        "Changing input-direction settings") &&
 		    !mLibretroNetpacketRejectTimingChange("input-direction")) {
 			mCoreConfigSetIntValue(&core->config, "allowOpposingDirections", strcmp(var.value, "yes") == 0);
 			core->reloadConfigOption(core, "allowOpposingDirections", NULL);
@@ -592,7 +608,10 @@ void retro_run(void) {
 			keys |= (!!inputCallback(0, RETRO_DEVICE_JOYPAD, 0, keymap[i])) << i;
 		}
 	}
-	core->setKeys(core, keys);
+	if (netplayV1Diagnostic ||
+	    !mLibretroNetpacketV2OwnsExecution()) {
+		core->setKeys(core, keys);
+	}
 
 	if (!luxSensorUsed) {
 		static bool wasAdjustingLux = false;
@@ -616,17 +635,37 @@ void retro_run(void) {
 		}
 	}
 
-	if (!mLibretroNetpacketExecutionBlocked()) {
+	if (netplayV1Diagnostic) {
+		if (!mLibretroNetpacketExecutionBlocked()) {
+			core->runFrame(core);
+		}
+		mLibretroNetpacketRunEnd();
+	} else if (mLibretroNetpacketV2OwnsExecution()) {
+		mLibretroNetpacketV2RunFrame(keys);
+	} else if (!mLibretroNetpacketV2ExecutionBlocked()) {
 		core->runFrame(core);
 	}
-	mLibretroNetpacketRunEnd();
+	struct mCore* presentedCore =
+	    mLibretroNetpacketV2PresentedCore();
+	bool replicatedPresentation = presentedCore != NULL;
+	mColor* presentedVideo =
+	    mLibretroNetpacketV2PresentedVideo();
+	if (!presentedCore) {
+		presentedCore = core;
+		presentedVideo = outputBuffer;
+	}
 	unsigned width, height;
-	core->currentVideoSize(core, &width, &height);
-	videoCallback(outputBuffer, width, height, BYTES_PER_PIXEL * 256);
+	presentedCore->currentVideoSize(
+	    presentedCore, &width, &height);
+	videoCallback(
+	    presentedVideo, width, height,
+	    BYTES_PER_PIXEL * 256);
 
 #ifdef M_CORE_GBA
-	if (core->platform(core) == mPLATFORM_GBA) {
-		struct mAudioBuffer *buffer = core->getAudioBuffer(core);
+	size_t replicatedAudioSamples = 0;
+	if (presentedCore->platform(presentedCore) == mPLATFORM_GBA) {
+		struct mAudioBuffer *buffer =
+		    presentedCore->getAudioBuffer(presentedCore);
 		int samplesAvail            = mAudioBufferAvailable(buffer);
 		if (samplesAvail > 0) {
 			/* Update 'running average' of number of
@@ -646,12 +685,17 @@ void retro_run(void) {
 			}
 			int produced = mAudioBufferRead(buffer, audioSampleBuffer, samplesToRead);
 			if (produced > 0) {
+				replicatedAudioSamples = produced;
 				if (audioLowPassEnabled) {
 					_audioLowPassFilter(audioSampleBuffer, produced);
 				}
 				audioCallback(audioSampleBuffer, (size_t)produced);
 			}
 		}
+	}
+	if (replicatedPresentation) {
+		mLibretroNetpacketV2ReportAudio(
+		    replicatedAudioSamples);
 	}
 #endif
 }
@@ -844,7 +888,11 @@ static void _setupMaps(struct mCore* core) {
 }
 
 void retro_reset(void) {
-	mLibretroNetpacketReset();
+	if (netplayV1Diagnostic) {
+		mLibretroNetpacketReset();
+	} else {
+		mLibretroNetpacketV2Reset();
+	}
 	core->reset(core);
 	mRumbleIntegratorReset(&rumble);
 	_setupMaps(core);
@@ -1000,14 +1048,24 @@ bool retro_load_game(const struct retro_game_info* game) {
 	core->reset(core);
 	_setupMaps(core);
 
-	mLibretroNetpacketRegister(environCallback, core);
+	if (netplayV1Diagnostic) {
+		mLibretroNetpacketRegister(environCallback, core);
+	} else {
+		mLibretroNetpacketV2Register(
+		    environCallback, core, savedata,
+		    GBA_SIZE_FLASH1M);
+	}
 	gameLoaded = true;
 	return true;
 }
 
 void retro_unload_game(void) {
 	gameLoaded = false;
-	mLibretroNetpacketUnload();
+	if (netplayV1Diagnostic) {
+		mLibretroNetpacketUnload();
+	} else {
+		mLibretroNetpacketV2Unload();
+	}
 	if (!core) {
 		return;
 	}
@@ -1020,6 +1078,10 @@ void retro_unload_game(void) {
 }
 
 size_t retro_serialize_size(void) {
+	if (mLibretroNetpacketV2SessionActive() ||
+	    mLibretroNetpacketSessionActive()) {
+		return 0;
+	}
 	if (deferredSetup) {
 		_doDeferredSetup();
 	}
@@ -1031,7 +1093,8 @@ size_t retro_serialize_size(void) {
 }
 
 bool retro_serialize(void* data, size_t size) {
-	if (mLibretroNetpacketRejectStateOperation("Saving state")) {
+	if (mLibretroNetpacketV2RejectOperation("Saving state") ||
+	    mLibretroNetpacketRejectStateOperation("Saving state")) {
 		return false;
 	}
 	if (deferredSetup) {
@@ -1052,7 +1115,8 @@ bool retro_serialize(void* data, size_t size) {
 }
 
 bool retro_unserialize(const void* data, size_t size) {
-	if (mLibretroNetpacketRejectStateOperation("Loading state")) {
+	if (mLibretroNetpacketV2RejectOperation("Loading state") ||
+	    mLibretroNetpacketRejectStateOperation("Loading state")) {
 		return false;
 	}
 	if (deferredSetup) {
@@ -1065,14 +1129,16 @@ bool retro_unserialize(const void* data, size_t size) {
 }
 
 void retro_cheat_reset(void) {
-	if (mLibretroNetpacketRejectCheatChange()) {
+	if (mLibretroNetpacketV2RejectOperation("Changing cheats") ||
+	    mLibretroNetpacketRejectCheatChange()) {
 		return;
 	}
 	mCheatDeviceClear(core->cheatDevice(core));
 }
 
 void retro_cheat_set(unsigned index, bool enabled, const char* code) {
-	if (mLibretroNetpacketRejectCheatChange()) {
+	if (mLibretroNetpacketV2RejectOperation("Changing cheats") ||
+	    mLibretroNetpacketRejectCheatChange()) {
 		return;
 	}
 	UNUSED(index);

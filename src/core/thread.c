@@ -324,7 +324,10 @@ static THREAD_ENTRY _mCoreThreadRun(void* context) {
 					ConditionWait(&impl->stateOnThreadCond, &impl->stateMutex);
 				}
 
-				if (impl->sync.audioWait) {
+				MutexLock(&impl->sync.audioBufferMutex);
+				bool audioWait = impl->sync.audioWait;
+				MutexUnlock(&impl->sync.audioBufferMutex);
+				if (audioWait) {
 					MutexUnlock(&impl->stateMutex);
 					mCoreSyncLockAudio(&impl->sync);
 					mCoreSyncProduceAudio(&impl->sync, core->getAudioBuffer(core));

@@ -38,10 +38,26 @@ if(BUILD_SUITE)
 			target_compile_definitions(test-${TEST_NAME} PRIVATE
 				GBA_LINK_TEST_ROM_PATH="${PROJECT_SOURCE_DIR}/tools/gba-link-test-rom/fixtures/gba-link-test.gba")
 		endif()
+		if(TEST_NAME STREQUAL "gba-replicated-pair-spike" OR
+		   TEST_NAME STREQUAL "gba-replicated-pair")
+			target_compile_definitions(test-${TEST_NAME} PRIVATE
+				GBA_LINK_CONTINUOUS_ROM_PATH="${PROJECT_SOURCE_DIR}/tools/gba-link-test-rom/fixtures/gba-link-continuous.gba")
+		endif()
 		add_test(${TEST_NAME} test-${TEST_NAME})
 	endforeach()
 
 	if(BUILD_LIBRETRO AND M_CORE_GBA)
+		add_executable(test-libretro-replicated-pair-spike
+			${CMAKE_CURRENT_SOURCE_DIR}/libretro-replicated-pair-spike.c
+			${PROJECT_SOURCE_DIR}/src/platform/libretro/replicated-pair-spike.c)
+		target_include_directories(test-libretro-replicated-pair-spike PRIVATE
+			${PROJECT_SOURCE_DIR}/src/platform/libretro)
+		target_link_libraries(test-libretro-replicated-pair-spike
+			${BINARY_NAME} ${PLATFORM_LIBRARY} cmocka)
+		set_target_properties(test-libretro-replicated-pair-spike PROPERTIES
+			COMPILE_DEFINITIONS "${OS_DEFINES};${FEATURE_DEFINES};${FUNCTION_DEFINES};GBA_LINK_CONTINUOUS_ROM_PATH=\"${PROJECT_SOURCE_DIR}/tools/gba-link-test-rom/fixtures/gba-link-continuous.gba\"")
+		add_test(libretro-replicated-pair-spike test-libretro-replicated-pair-spike)
+
 		add_executable(test-libretro-netpacket
 			${CMAKE_CURRENT_SOURCE_DIR}/libretro-netpacket.c
 			${PROJECT_SOURCE_DIR}/src/platform/libretro/netpacket.c)
@@ -52,6 +68,37 @@ if(BUILD_SUITE)
 		set_target_properties(test-libretro-netpacket PROPERTIES
 			COMPILE_DEFINITIONS "${OS_DEFINES};${FEATURE_DEFINES};${FUNCTION_DEFINES};M_LIBRETRO_NETPACKET_TEST")
 		add_test(libretro-netpacket test-libretro-netpacket)
+
+		add_executable(test-libretro-netpacket-v2
+			${CMAKE_CURRENT_SOURCE_DIR}/libretro-netpacket-v2.c
+			${PROJECT_SOURCE_DIR}/src/platform/libretro/netpacket-v2.c)
+		target_include_directories(test-libretro-netpacket-v2 PRIVATE
+			${PROJECT_SOURCE_DIR}/src/platform/libretro)
+		target_link_libraries(test-libretro-netpacket-v2
+			${BINARY_NAME} ${PLATFORM_LIBRARY} cmocka)
+		set_target_properties(test-libretro-netpacket-v2 PROPERTIES
+			COMPILE_DEFINITIONS "${OS_DEFINES};${FEATURE_DEFINES};${FUNCTION_DEFINES};M_LIBRETRO_NETPACKET_V2_TEST")
+		add_test(libretro-netpacket-v2 test-libretro-netpacket-v2)
+
+		foreach(REPLAY_ROLE IN ITEMS Host Client)
+			add_library(test-libretro-netpacket-v2-replay-${REPLAY_ROLE} OBJECT
+				${PROJECT_SOURCE_DIR}/src/platform/libretro/netpacket-v2.c)
+			target_include_directories(test-libretro-netpacket-v2-replay-${REPLAY_ROLE} PRIVATE
+				${PROJECT_SOURCE_DIR}/src/platform/libretro)
+			set_target_properties(test-libretro-netpacket-v2-replay-${REPLAY_ROLE} PROPERTIES
+				COMPILE_DEFINITIONS "${OS_DEFINES};${FEATURE_DEFINES};${FUNCTION_DEFINES};M_LIBRETRO_NETPACKET_V2_TEST;M_LIBRETRO_NETPACKET_V2_INSTANCE_PREFIX=mLibretroNetpacketV2Replay${REPLAY_ROLE}")
+		endforeach()
+		add_executable(test-libretro-netpacket-v2-replay
+			${CMAKE_CURRENT_SOURCE_DIR}/libretro-netpacket-v2-replay.c
+			$<TARGET_OBJECTS:test-libretro-netpacket-v2-replay-Host>
+			$<TARGET_OBJECTS:test-libretro-netpacket-v2-replay-Client>)
+		target_include_directories(test-libretro-netpacket-v2-replay PRIVATE
+			${PROJECT_SOURCE_DIR}/src/platform/libretro)
+		target_link_libraries(test-libretro-netpacket-v2-replay
+			${BINARY_NAME} ${PLATFORM_LIBRARY} cmocka)
+		set_target_properties(test-libretro-netpacket-v2-replay PROPERTIES
+			COMPILE_DEFINITIONS "${OS_DEFINES};${FEATURE_DEFINES};${FUNCTION_DEFINES};GBA_LINK_CONTINUOUS_ROM_PATH=\"${PROJECT_SOURCE_DIR}/tools/gba-link-test-rom/fixtures/gba-link-continuous.gba\"")
+		add_test(libretro-netpacket-v2-replay test-libretro-netpacket-v2-replay)
 	endif()
 endif()
 

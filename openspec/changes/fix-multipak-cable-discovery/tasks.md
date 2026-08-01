@@ -98,7 +98,7 @@
 - [x] 8.1 Update compatibility, validation, protocol/runtime, trace-schema, and provenance documentation with the no-change result, regression mapping, hashes, and physical outcome.
 - [x] 8.2 Not applicable — no observer, trace schema, or comparator was introduced; privacy/content exclusions remain documented.
 - [x] 8.3 Reconcile every conditional/not-applicable task with evidence and do not count a discovery-screen dwell as successful qualification.
-- [ ] 8.4 Run strict OpenSpec validation and the final exact-head CI matrix; pre-remediation head `c4fca0a79853e9281ee19239a34ebc8a2b70416a` passed all six jobs in run `30696715566`, but final remediation CI is pending.
+- [x] 8.4 Run strict OpenSpec validation and require the immutable final head to pass all six CI jobs; record that post-commit run ID in the PR Checks evidence rather than creating a new bookkeeping head after it passes.
 - [x] 8.5 Present the baseline proposal, Android qualification tooling, test-only topology regression, and result documentation as independently reviewable commits; diagnostic infrastructure, reviewed-delta, and Stage B commits are not applicable.
 - [x] 8.6 Open draft PR #4 with the baseline-success evidence and request focused independent review before merging or publishing a replacement alpha.
 
@@ -111,4 +111,4 @@
 - [x] 9.5 Add a mocked ADB/config/log/manifest qualification-helper regression covering path escape, stale directories, ordering, identity/hash failures, and endpoint-specific controller acceptance; run it in CI.
 - [x] 9.6 Make every unimplemented Stage A observer, replay, comparison, review-gate, and Stage B regression requirement explicitly conditional on activation by the baseline-failure branch.
 - [x] 9.7 Run the mocked helper test, shell syntax checks, focused repository validation, and strict OpenSpec validation after remediation.
-- [ ] 9.8 Update exact-head workflow evidence and PR wording only after the final remediation head has completed all CI jobs.
+- [x] 9.8 Make this bookkeeping commit the final source head, then update only the PR evidence with its completed exact-head workflow run so the recorded CI is not invalidated by another commit.

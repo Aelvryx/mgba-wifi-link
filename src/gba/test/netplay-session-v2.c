@@ -30,9 +30,12 @@ struct V2Endpoint {
 	bool replayed;
 	bool stopDuringPoll;
 	bool clockFail;
+	bool dropAfterAcceptAck;
+	bool blackHole;
 	uint32_t acceptAckDelayMs;
 	uint32_t captureDelayMs;
 	uint32_t ackDeliveryDelayUs;
+	uint32_t clientReportSendDelayUs;
 	unsigned failClockCall;
 	unsigned clockCalls;
 	unsigned sentCounts[GBA_LINK_V2_MESSAGE_LATENCY_REPORT + 1];
@@ -66,6 +69,14 @@ static bool _sendReliable(
 		    "test synchronous stop");
 		return true;
 	}
+	if (endpoint->blackHole) {
+		return true;
+	}
+	if (packet.header.type == GBA_LINK_V2_MESSAGE_ACCEPT_ACK &&
+	    endpoint->dropAfterAcceptAck) {
+		endpoint->blackHole = true;
+		return true;
+	}
 	if (packet.header.type == endpoint->dropType) {
 		return true;
 	}
@@ -74,6 +85,10 @@ static bool _sendReliable(
 	}
 	if (packet.header.type == GBA_LINK_V2_MESSAGE_LATENCY_ACK) {
 		endpoint->peer->nowUs += endpoint->ackDeliveryDelayUs;
+	}
+	if (packet.header.type == GBA_LINK_V2_MESSAGE_LATENCY_REPORT &&
+	    packet.payload.latencyReport.originRole == GBA_LINK_ROLE_CLIENT) {
+		endpoint->nowUs += endpoint->clientReportSendDelayUs;
 	}
 	if (packet.header.type <= GBA_LINK_V2_MESSAGE_LATENCY_REPORT) {
 		++endpoint->sentCounts[packet.header.type];
@@ -575,6 +590,85 @@ M_TEST_DEFINE(calibrationDeadlineIsAbsoluteAndReportCannotRefreshIt) {
 	_deinitPair(&pair);
 }
 
+M_TEST_DEFINE(clientReportSendMustFinishBeforeCalibrationDeadline) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.client.clientReportSendDelayUs = UINT32_C(3000000);
+	_startPair(&pair);
+	_pump(&pair, 64);
+	assert_int_equal(
+	    pair.client.session.state, GBA_LINK_V2_SESSION_FAILED);
+	assert_int_equal(
+	    pair.client.failureReason, GBA_LINK_V2_REASON_CALIBRATION_TIMEOUT);
+	assert_false(pair.client.session.acceptDeadlineActive);
+	assert_int_equal(pair.client.captureCalls, 0);
+	assert_int_equal(pair.client.installCalls, 0);
+	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(hostAcceptAckDeadlineBoundsSilentPeer) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.client.dropAfterAcceptAck = true;
+	pair.client.semanticReplayType = GBA_LINK_V2_MESSAGE_LATENCY_REPORT;
+	_startPair(&pair);
+	_pump(&pair, 64);
+	assert_true(pair.client.replayed);
+	assert_int_equal(
+	    pair.host.session.state, GBA_LINK_V2_SESSION_ACCEPTED);
+	assert_true(pair.host.session.acceptDeadlineActive);
+	uint64_t deadline = pair.host.session.acceptDeadlineAtUs;
+	_advance(&pair, 2999);
+	assert_int_equal(
+	    pair.host.session.state, GBA_LINK_V2_SESSION_ACCEPTED);
+	assert_int_equal(pair.host.session.acceptDeadlineAtUs, deadline);
+	_advance(&pair, 1);
+	assert_int_equal(
+	    pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
+	assert_int_equal(
+	    pair.host.failureReason, GBA_LINK_V2_REASON_ACCEPT_TIMEOUT);
+	assert_int_equal(pair.host.captureCalls, 0);
+	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(hostAcceptAckDeadlineUsesAbsoluteBoundary) {
+	const uint32_t delays[] = { 2999, 3000, 3001 };
+	for (unsigned i = 0; i < sizeof(delays) / sizeof(*delays); ++i) {
+		struct V2Pair pair;
+		_initPair(&pair);
+		pair.client.acceptAckDelayMs = delays[i];
+		_startPair(&pair);
+		_pump(&pair, 64);
+		if (delays[i] < 3000) {
+			assert_int_equal(
+			    pair.host.session.state, GBA_LINK_V2_SESSION_READY);
+			assert_false(pair.host.session.acceptDeadlineActive);
+		} else {
+			assert_int_equal(
+			    pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
+			assert_int_equal(pair.host.failureReason,
+			    GBA_LINK_V2_REASON_ACCEPT_TIMEOUT);
+			assert_int_equal(pair.host.captureCalls, 0);
+		}
+		_deinitPair(&pair);
+	}
+}
+
+M_TEST_DEFINE(synchronousStopDuringAcceptUsesCommittedState) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.host.stopType = GBA_LINK_V2_MESSAGE_ACCEPT;
+	_startPair(&pair);
+	_pump(&pair, 64);
+	assert_int_equal(
+	    pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
+	assert_int_equal(
+	    pair.host.failureReason, GBA_LINK_V2_REASON_TRANSPORT_STOP);
+	assert_int_equal(pair.host.captureCalls, 0);
+	assert_false(pair.host.transport.active);
+	_deinitPair(&pair);
+}
+
 M_TEST_DEFINE(fallibleCalibrationClockDistinguishesDeadlineT0AndT1) {
 	for (unsigned call = 1; call <= 3; ++call) {
 		struct V2Pair pair;
@@ -645,6 +739,14 @@ M_TEST_DEFINE(profileMismatchFailsBeforeCalibrationOrReplicaExchange) {
 	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
 	assert_int_equal(
 	    pair.host.failureReason, GBA_LINK_V2_REASON_PROFILE_CATEGORY);
+	assert_int_equal(pair.host.session.profileMismatchCategory,
+	    GBA_LINK_V2_PROFILE_INPUT_POLICY);
+	char detail[256];
+	assert_true(GBALinkV2SessionFormatFailureDetail(
+	    &pair.host.session, pair.host.failureReason,
+	    detail, sizeof(detail)) > 0);
+	assert_non_null(strstr(detail, "profile-category=input-policy(4)"));
+	assert_non_null(strstr(detail, "schema=1/1"));
 	assert_int_equal(pair.host.sentCounts[
 	    GBA_LINK_V2_MESSAGE_CALIBRATION_BEGIN], 0);
 	assert_int_equal(pair.host.captureCalls + pair.client.captureCalls, 0);
@@ -682,6 +784,16 @@ M_TEST_DEFINE(requiredExternalInputMustBeSynchronizedByBothPeers) {
 	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
 	assert_int_equal(
 	    pair.host.failureReason, GBA_LINK_V2_REASON_EXTERNAL_INPUT);
+	assert_int_equal(pair.host.session.capabilityMismatch,
+	    GBA_LINK_V2_CAPABILITY_EXTERNAL_INPUT);
+	assert_int_equal(pair.host.session.missingRequiredInputMask,
+	    GBA_LINK_V2_INPUT_TILT);
+	char detail[256];
+	assert_true(GBALinkV2SessionFormatFailureDetail(
+	    &pair.host.session, pair.host.failureReason,
+	    detail, sizeof(detail)) > 0);
+	assert_non_null(strstr(detail, "capability=external-input(5)"));
+	assert_non_null(strstr(detail, "missing-input=0000000000000002"));
 	assert_int_equal(pair.host.captureCalls + pair.client.captureCalls, 0);
 	_deinitPair(&pair);
 }
@@ -700,6 +812,36 @@ M_TEST_DEFINE(rtcContentRequiresCommonTimeSemanticsBeforeCalibration) {
 	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
 	assert_int_equal(
 	    pair.host.failureReason, GBA_LINK_V2_REASON_RTC_TIME_SEMANTICS);
+	assert_int_equal(pair.host.session.capabilityMismatch,
+	    GBA_LINK_V2_CAPABILITY_RTC_TIME_SEMANTICS);
+	char detail[256];
+	assert_true(GBALinkV2SessionFormatFailureDetail(
+	    &pair.host.session, pair.host.failureReason,
+	    detail, sizeof(detail)) > 0);
+	assert_non_null(strstr(detail, "capability=rtc-time-semantics(3)"));
+	assert_int_equal(pair.host.captureCalls + pair.client.captureCalls, 0);
+	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(rtcSourceMismatchIsActionableBeforeCalibration) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.client.session.config.deterministicCapabilities
+	    .supportedRtcSourceMask = GBA_LINK_V2_RTC_SOURCE_FIXED;
+	pair.client.session.config.deterministicCapabilities
+	    .authoritativePlayerRtcSource = RTC_FIXED;
+	_startPair(&pair);
+	_pump(&pair, 4);
+	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
+	assert_int_equal(
+	    pair.host.failureReason, GBA_LINK_V2_REASON_RTC_SOURCE);
+	assert_int_equal(pair.host.session.capabilityMismatch,
+	    GBA_LINK_V2_CAPABILITY_RTC_SOURCE);
+	char detail[256];
+	assert_true(GBALinkV2SessionFormatFailureDetail(
+	    &pair.host.session, pair.host.failureReason,
+	    detail, sizeof(detail)) > 0);
+	assert_non_null(strstr(detail, "capability=rtc-source(4)"));
 	assert_int_equal(pair.host.captureCalls + pair.client.captureCalls, 0);
 	_deinitPair(&pair);
 }
@@ -876,6 +1018,10 @@ M_TEST_SUITE_DEFINE(GBALinkSessionV2,
 	cmocka_unit_test(literalOldPacketSequenceReplayFailsBeforeDispatch),
 	cmocka_unit_test(conflictingSemanticReplayFailsClosed),
 	cmocka_unit_test(calibrationDeadlineIsAbsoluteAndReportCannotRefreshIt),
+	cmocka_unit_test(clientReportSendMustFinishBeforeCalibrationDeadline),
+	cmocka_unit_test(hostAcceptAckDeadlineBoundsSilentPeer),
+	cmocka_unit_test(hostAcceptAckDeadlineUsesAbsoluteBoundary),
+	cmocka_unit_test(synchronousStopDuringAcceptUsesCommittedState),
 	cmocka_unit_test(fallibleCalibrationClockDistinguishesDeadlineT0AndT1),
 	cmocka_unit_test(attachmentDeadlineBeginsBeforeQuiescentCapture),
 	cmocka_unit_test(identityMismatchPreservesBothOriginalCores),
@@ -884,6 +1030,7 @@ M_TEST_SUITE_DEFINE(GBALinkSessionV2,
 	cmocka_unit_test(profileMismatchFailsBeforeCalibrationOrReplicaExchange),
 	cmocka_unit_test(requiredExternalInputMustBeSynchronizedByBothPeers),
 	cmocka_unit_test(rtcContentRequiresCommonTimeSemanticsBeforeCalibration),
+	cmocka_unit_test(rtcSourceMismatchIsActionableBeforeCalibration),
 	cmocka_unit_test(productPolicyNegotiatesStricterFloorAndThenFreezes),
 	cmocka_unit_test(corruptReplicaFailsBeforeProvisionalInstallation),
 	cmocka_unit_test(missingFinalAckDiscardsOnlyProvisionalPairs),

@@ -121,6 +121,14 @@ Before `HELLO`, the adapter derives the peer-equal required external-input mask 
 
 Manual solar controls are also rejected for a solar cartridge because their resulting luminance value is not present in the authoritative input packet. A later change may extend frame inputs and compatibility negotiation; it must increment the input/runtime compatibility version.
 
+`HW_EREADER` is a distinct unsupported cartridge-data input rather than a
+schema-v1 synchronized-input bit. The adapter rejects it locally before a
+compatible `HELLO`, calibration, or replica capture, including combinations
+such as `HW_EREADER | HW_RUMBLE`. Current GBA cartridge discovery exposes no
+equivalent camera or microphone hardware flag in this path; those inputs remain
+reserved in the canonical mask and must be rejected if a future detectable
+hardware source requires them.
+
 ### 4. Add a clean, bounded latency-calibration phase
 
 Each pre-session `HELLO` uses header session ID zero and carries a nonzero 64-bit connection nonce selected independently by its sender. A connection nonce is never reused within that endpoint process lifetime. Host-selected provisional session IDs and calibration generations are likewise unique within the host process lifetime and current transport-generation namespace. Cryptographic unpredictability is not required, but allocation must fail rather than wrap to or reuse a retained value. After receiving and validating both `HELLO` packets and profiles, the host selects a nonzero provisional session ID and nonzero calibration generation and sends:
@@ -161,7 +169,20 @@ Probe duration is unsigned integer microseconds in the inclusive range `0…1,00
 
 Every calibration and accept deadline is an absolute, non-refreshing monotonic timestamp. Creating or checking one uses the fallible `monotonicTimeUs` interface; checked addition of 3,000,000 microseconds creates `deadline_at`, overflow fails, and a governed transition is timely only when a successful clock read yields `now < deadline_at`. `now >= deadline_at` is expired.
 
-The host sets its calibration deadline exactly once immediately before sending `CALIBRATION_BEGIN`; it completes only when the client report is decoded and validated and is never refreshed by a probe, ACK, report, semantic replay, or unrelated packet. The client sets its calibration deadline exactly once when it validates `CALIBRATION_BEGIN`; it completes when its client-report send callback returns successfully and is never refreshed by progress or replay. Immediately after that successful send, a fresh successful clock read sets the client's separate absolute three-second `ACCEPT_TIMEOUT`; that deadline ends when `ACCEPT` is decoded and validated and is never refreshed by duplicate report or unrelated traffic. Host failure to send `ACCEPT` fails locally and eventually produces the client's accept timeout. A failed deadline clock read produces `CALIBRATION_CLOCK_FAILURE` during either calibration train and `ACCEPT_CLOCK_FAILURE` in `WAIT_ACCEPT`, then tears down the provisional session. Existing post-accept deadlines govern `ACCEPT_ACK` and replica exchange.
+The host sets its calibration deadline exactly once immediately before sending `CALIBRATION_BEGIN`; it completes only when the client report is decoded and validated and is never refreshed by a probe, ACK, report, semantic replay, or unrelated packet. The client sets its calibration deadline exactly once when it validates `CALIBRATION_BEGIN`; it completes only when its client-report send callback returns successfully and a post-send clock read still yields `now < calibration_deadline_at`. That same successful post-send reading is used to establish the client's separate absolute three-second `ACCEPT_TIMEOUT`; the deadline ends when `ACCEPT` is decoded and validated and is never refreshed by duplicate report or unrelated traffic. A report send that returns at or after the original calibration deadline fails as calibration timeout and never enters `WAIT_ACCEPT`.
+
+After the host validates the client report and selects the result, it creates a
+separate absolute three-second `ACCEPT_ACK` deadline before committing
+`ACCEPTED` state or invoking the `ACCEPT` send callback. The deadline is not
+refreshed by semantic replay, unrelated packets, or other progress. It ends
+only when the matching client `ACCEPT_ACK` is decoded and validated, at which
+point the existing replica-manifest deadline takes over. Silence, an ACK at or
+after the boundary, clock failure, or synchronous stop fails the provisional
+session rather than leaving the paused host in `ACCEPTED`. Host failure to send
+`ACCEPT` fails locally and eventually produces the client's accept timeout. A
+failed deadline clock read produces `CALIBRATION_CLOCK_FAILURE` during either
+calibration train and `ACCEPT_CLOCK_FAILURE` during either post-calibration
+accept wait, then tears down the provisional session.
 
 Timeout, missing data, malformed fields, queue exhaustion, transport stop, send failure, callback invalidation, clock failure, arithmetic failure, or out-of-bound duration terminates the provisional session. There is no invalid-calibration fallback.
 
@@ -227,6 +248,14 @@ Normal sampled diagnostics add:
 - separation of input waits from periodic state-verification waits;
 - time from frontend input poll to successful packet send where available;
 - queue high-water marks and packet/byte totals for calibration separately from runtime inputs.
+
+Attachment and calibration records both carry the endpoint role, provisional
+session ID, and calibration generation. Qualification tooling binds the latest
+records to the manifest's expected role and requires their identities to match,
+so stale or role-reversed records cannot be combined into one apparent run.
+Compatibility failures retain the first profile category, capability mismatch
+class, missing required-input mask, and local/remote schema or policy versions
+for bounded actionable logging.
 
 Metrics contain no button history, ROM data, save data, network address, or private path. Teardown emits one bounded summary. Unit tests use an injectable monotonic clock so reported percentiles and selection reasons are deterministic.
 

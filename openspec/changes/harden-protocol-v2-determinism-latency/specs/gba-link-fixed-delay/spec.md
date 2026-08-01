@@ -72,7 +72,9 @@ Calibration SHALL execute sequentially as host probes `0…11`, host report, cli
 ### Requirement: Calibration wire values are exactly bounded
 Probe and report durations SHALL use unsigned integer microseconds with field range `0…1,000,000` inclusive. Probe ordinals SHALL be exactly `0…11`, and each report SHALL contain exactly twelve values in ascending ordinal order. Every calibration deadline SHALL be an absolute, non-refreshing timestamp created and checked only through the fallible monotonic interface. Checked addition of 3,000,000 microseconds SHALL create `deadline_at`; addition overflow or clock-read failure SHALL fail. A governed transition SHALL be timely only when a successful read yields `now < deadline_at`; `now >= deadline_at` SHALL be expired.
 
-The host SHALL set its calibration deadline exactly once immediately before sending `CALIBRATION_BEGIN` and retain it through host validation of the client report. The client SHALL set its calibration deadline exactly once when it validates `CALIBRATION_BEGIN` and retain it through successful sending of its report. The client SHALL then use a fresh successful clock read to set a separate absolute three-second `ACCEPT_TIMEOUT` ending when `ACCEPT` is validated. No probe, ACK, report, semantic replay, duplicate report, unrelated packet, or other progress SHALL refresh any deadline. Timeout, missing data, malformed fields, conflicting duplicate, wrong identity/ordinal/state/role, out-of-range duration, queue exhaustion, transport stop, send failure, callback invalidation, clock failure, or arithmetic failure SHALL terminate the provisional session without fallback. Deadline clock failure SHALL report `CALIBRATION_CLOCK_FAILURE` during calibration and `ACCEPT_CLOCK_FAILURE` in `WAIT_ACCEPT`.
+The host SHALL set its calibration deadline exactly once immediately before sending `CALIBRATION_BEGIN` and retain it through host validation of the client report. The client SHALL set its calibration deadline exactly once when it validates `CALIBRATION_BEGIN` and retain it through successful sending of its report. After that send returns, one fresh successful clock read SHALL prove `now < calibration_deadline_at`; the same reading SHALL establish the client's separate absolute three-second `ACCEPT_TIMEOUT` ending when `ACCEPT` is validated. A report send returning at or after the original boundary SHALL fail as calibration timeout and SHALL NOT enter `WAIT_ACCEPT`.
+
+After validating the client report, the host SHALL establish a separate absolute three-second `ACCEPT_ACK` deadline before committing `ACCEPTED` state and invoking the `ACCEPT` send callback. That deadline SHALL end only when the matching client `ACCEPT_ACK` is decoded and validated, after which the replica-manifest deadline takes over. No probe, ACK, report, semantic replay, duplicate report, unrelated packet, or other progress SHALL refresh any deadline. Timeout, missing data, malformed fields, conflicting duplicate, wrong identity/ordinal/state/role, out-of-range duration, queue exhaustion, transport stop, send failure, callback invalidation, clock failure, or arithmetic failure SHALL terminate the provisional session without fallback. Deadline clock failure SHALL report `CALIBRATION_CLOCK_FAILURE` during calibration and `ACCEPT_CLOCK_FAILURE` in either post-calibration accept wait.
 
 #### Scenario: Zero-duration loopback sample is valid
 - **WHEN** both reads from a conforming monotonic clock succeed with `T0 == T1` for a loopback probe
@@ -94,6 +96,10 @@ The host SHALL set its calibration deadline exactly once immediately before send
 - **WHEN** the client successfully sends its report within three seconds after validating `CALIBRATION_BEGIN`
 - **THEN** its calibration deadline ends and its separate three-second `ACCEPT_TIMEOUT` begins
 
+#### Scenario: Client report send crosses the calibration boundary
+- **WHEN** the client report send callback returns at or after the original calibration deadline
+- **THEN** the client fails as calibration timeout and does not enter `WAIT_ACCEPT` or establish a later accept window
+
 #### Scenario: ACCEPT does not arrive after client report
 - **WHEN** the client remains in `WAIT_ACCEPT` for three seconds without validating `ACCEPT`
 - **THEN** the client fails with `ACCEPT_TIMEOUT` rather than calibration timeout
@@ -105,6 +111,18 @@ The host SHALL set its calibration deadline exactly once immediately before send
 #### Scenario: ACCEPT boundary is absolute
 - **WHEN** `ACCEPT` is validated once immediately before and once at or immediately after independently injected absolute deadline boundaries
 - **THEN** the before-deadline case may proceed and the at-or-after case fails as `ACCEPT_TIMEOUT`
+
+#### Scenario: Host cannot wait forever for ACCEPT_ACK
+- **WHEN** the host sends `ACCEPT` successfully but no matching `ACCEPT_ACK` arrives
+- **THEN** the host fails at its absolute post-`ACCEPT` deadline rather than remaining paused in `ACCEPTED`
+
+#### Scenario: Host ACCEPT_ACK boundary is absolute and non-refreshing
+- **WHEN** matching acknowledgements arrive immediately before, exactly at, and immediately after the host deadline while semantic replay or unrelated packets occur
+- **THEN** only the before-deadline ACK may proceed, at-or-after fails, and no intervening traffic changes the original deadline
+
+#### Scenario: Synchronous stop during ACCEPT is bounded
+- **WHEN** the reliable `ACCEPT` send callback synchronously invalidates the transport
+- **THEN** committed `ACCEPTED` state and its deadline already describe the attempted operation and teardown completes without callback reuse
 
 #### Scenario: Deadline clock failure is distinct
 - **WHEN** deadline creation or expiry checking fails even though probe timestamp reads would succeed
@@ -248,7 +266,7 @@ Latency telemetry SHALL separately account for input rendezvous and periodic sta
 - **THEN** it does not conform to this change without a separately reviewed requirement
 
 ### Requirement: Latency diagnostics explain the selected policy
-Attach and teardown diagnostics SHALL record the provisional/calibration identity, vector digest, policy version, sample count, minimum, nearest-rank p50, nearest-rank p95, maximum, production floor, selected delay, and selection reason. Runtime summaries SHALL record per-player input arrival lead, input-rendezvous frame count and duration distribution, deadline misses, poll-to-send timing where available, calibration packet totals, and queue high-water marks. Diagnostics SHALL exclude raw input history, ROM or save data, network addresses, and private paths.
+Attach and teardown diagnostics SHALL record the endpoint role, provisional session ID, calibration generation, vector digest, policy version, sample count, minimum, nearest-rank p50, nearest-rank p95, maximum, production floor, selected delay, and selection reason. Runtime summaries SHALL record per-player input arrival lead, input-rendezvous frame count and duration distribution, deadline misses, poll-to-send timing where available, calibration packet totals, and queue high-water marks. Physical-qualification validation SHALL require the latest attach and calibration records to match the manifest's expected endpoint role and one another's provisional session ID and calibration generation; it SHALL reject stale, mixed-session, or role-reversed records. Diagnostics SHALL exclude raw input history, ROM or save data, network addresses, and private paths.
 
 #### Scenario: Healthy run is explainable from logs
 - **WHEN** a session completes normally
@@ -257,6 +275,10 @@ Attach and teardown diagnostics SHALL record the provisional/calibration identit
 #### Scenario: Sensitive data is absent
 - **WHEN** latency diagnostics are emitted at attach, interval, failure, or teardown
 - **THEN** they contain no button sequence, content bytes, save bytes, IP address, or private filesystem path
+
+#### Scenario: Qualification evidence is role and session bound
+- **WHEN** a runtime log reports the wrong endpoint role, disagreeing attach/calibration roles, or records from different provisional session identities
+- **THEN** qualification validation fails instead of combining them into evidence for the manifest's claimed run
 
 ### Requirement: One-frame operation has an exact evidence gate
 The unpublished release candidate SHALL already contain the low-latency option. That identical artifact may be published with the option only after it passes deterministic selector boundaries, byte-identical delayed and duplicate input traces, a two-device continuous run lasting at least 1,800 seconds and releasing at least 106,200 post-`SESSION_READY` frames at at least 59 FPS, zero divergence/timeouts/empty-audio frames/input loss, a human-owned Mario Kart responsiveness smoke, and a healthy stable-policy injected-jitter run.

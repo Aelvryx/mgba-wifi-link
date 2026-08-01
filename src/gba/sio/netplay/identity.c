@@ -9,6 +9,33 @@
 #include <mgba-util/sha1.h>
 #include <mgba-util/sha256.h>
 
+const char* GBALinkV2DeterminismCategoryName(uint16_t category) {
+	switch (category) {
+	case GBA_LINK_V2_PROFILE_BIOS: return "bios";
+	case GBA_LINK_V2_PROFILE_CPU_TIMING: return "cpu-timing";
+	case GBA_LINK_V2_PROFILE_IDLE_OPTIMIZATION: return "idle-optimization";
+	case GBA_LINK_V2_PROFILE_INPUT_POLICY: return "input-policy";
+	case GBA_LINK_V2_PROFILE_RTC_POLICY: return "rtc-policy";
+	case GBA_LINK_V2_PROFILE_CHEATS: return "cheats";
+	case GBA_LINK_V2_PROFILE_EXTERNAL_INPUT: return "external-input";
+	default: return "unknown";
+	}
+}
+
+const char* GBALinkV2CapabilityMismatchName(
+		enum GBALinkV2CapabilityMismatch mismatch) {
+	switch (mismatch) {
+	case GBA_LINK_V2_CAPABILITY_MATCH: return "match";
+	case GBA_LINK_V2_CAPABILITY_PROFILE: return "profile";
+	case GBA_LINK_V2_CAPABILITY_RTC_CONTENT: return "rtc-content";
+	case GBA_LINK_V2_CAPABILITY_RTC_TIME_SEMANTICS:
+		return "rtc-time-semantics";
+	case GBA_LINK_V2_CAPABILITY_RTC_SOURCE: return "rtc-source";
+	case GBA_LINK_V2_CAPABILITY_EXTERNAL_INPUT: return "external-input";
+	}
+	return "unknown";
+}
+
 static void _update32(struct SHA1Context* context, uint32_t value) {
 	const uint8_t bytes[] = {
 		value,

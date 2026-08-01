@@ -22,10 +22,12 @@ LATENCY_POLICIES = {
 }
 ATTACH_RE = re.compile(
     r"attach P(?P<role>[01]) policy=(?P<policy>[0-9]+) "
-    r"delay=(?P<delay>[0-9]+) calibration=(?P<calibration>[0-9]+)ms"
+    r"delay=(?P<delay>[0-9]+) calibration=(?P<calibration>[0-9]+)ms "
+    r"provisional=(?P<provisional>[0-9]+) generation=(?P<generation>[0-9]+)"
 )
 CALIBRATION_RE = re.compile(
-    r"calibration P(?P<role>[01]).* samples=(?P<samples>[0-9]+) "
+    r"calibration P(?P<role>[01]) provisional=(?P<provisional>[0-9]+) "
+    r"generation=(?P<generation>[0-9]+) samples=(?P<samples>[0-9]+) "
     r"min=(?P<minimum>[0-9]+)us p50=(?P<p50>[0-9]+)us "
     r"p95=(?P<p95>[0-9]+)us max=(?P<maximum>[0-9]+)us "
     r"selector=(?P<selector>[0-9]+) floor=(?P<floor>[0-9]+) "
@@ -153,15 +155,16 @@ def validate_manifest(args: argparse.Namespace) -> None:
         by_name[name] = device
 
     expected_devices = {
-        "thor": (args.thor_serial, args.thor_controller),
-        "odin": (args.odin_serial, args.odin_controller),
+        "thor": (args.thor_serial, args.thor_controller, "host"),
+        "odin": (args.odin_serial, args.odin_controller, "client"),
     }
-    for name, (serial, controller) in expected_devices.items():
+    for name, (serial, controller, role) in expected_devices.items():
         if name not in by_name:
             _fail(f"missing {name} device record")
         device = by_name[name]
         _require_equal(device.get("serial"), serial, f"{name} serial")
         _require_equal(device.get("expected_controller"), controller, f"{name} controller")
+        _require_equal(device.get("role"), role, f"{name} role")
         _require_equal(device.get("staged_core_sha256"), args.core_sha256, f"{name} staged core hash")
         _require_equal(device.get("installed_core_sha256"), None, f"{name} installed core hash")
         _require_equal(
@@ -315,6 +318,17 @@ def validate_runtime_log(args: argparse.Namespace) -> None:
         _fail("runtime log does not contain complete latency calibration evidence")
     attach = attaches[-1].groupdict()
     calibration = calibrations[-1].groupdict()
+    _require_equal(int(attach["role"]), args.expected_role, "runtime attach endpoint role")
+    _require_equal(
+        int(calibration["role"]), args.expected_role, "runtime calibration endpoint role"
+    )
+    _require_equal(attach["role"], calibration["role"], "attach/calibration endpoint role")
+    _require_equal(
+        attach["provisional"], calibration["provisional"], "attach/calibration provisional ID"
+    )
+    _require_equal(
+        attach["generation"], calibration["generation"], "attach/calibration generation"
+    )
     _require_equal(int(attach["policy"]), expected_policy, "runtime latency policy")
     _require_equal(int(attach["delay"]), args.selected_delay, "runtime selected input delay")
     _require_equal(int(calibration["samples"]), 24, "runtime calibration sample count")
@@ -379,6 +393,7 @@ def build_parser() -> argparse.ArgumentParser:
     runtime.add_argument("--content-crc32", required=True)
     runtime.add_argument("--remote-root", required=True)
     runtime.add_argument("--expected-controller", required=True)
+    runtime.add_argument("--expected-role", type=int, choices=(0, 1), required=True)
     runtime.add_argument("--latency-policy", choices=sorted(LATENCY_POLICIES), required=True)
     runtime.add_argument("--selected-delay", type=int, choices=range(1, 9), required=True)
     runtime.set_defaults(handler=validate_runtime_log)

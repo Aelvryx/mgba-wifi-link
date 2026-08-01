@@ -187,7 +187,7 @@ RTC normalization SHALL be captured with machine state, cartridge RTC metadata, 
 - **THEN** the previous complete machine, save, and RTC checkpoint remains the only rollback target
 
 ### Requirement: Unsynchronized external inputs fail closed
-The adapter SHALL derive the peer-equal cartridge-required external-input mask from effective cartridge hardware before `HELLO`, and each endpoint SHALL separately advertise its synchronized-input capability mask. Protocol v2 SHALL require the required mask to be a subset of both endpoint masks and SHALL reject a session requiring tilt, gyroscope, luminance/solar, camera, microphone, or another input not carried authoritatively by both endpoints under the negotiated frame-input format. An endpoint's unused capability superset SHALL NOT reject. Local-output capabilities such as rumble SHALL NOT cause rejection.
+The adapter SHALL derive the peer-equal cartridge-required external-input mask from effective cartridge hardware before `HELLO`, and each endpoint SHALL separately advertise its synchronized-input capability mask. Protocol v2 SHALL require the required mask to be a subset of both endpoint masks and SHALL reject a session requiring tilt, gyroscope, luminance/solar, camera, microphone, or another input not carried authoritatively by both endpoints under the negotiated frame-input format. `HW_EREADER` SHALL be rejected explicitly as unsupported cartridge-data input before a compatible `HELLO`, calibration, or replica capture rather than being admitted as digital-only content. An endpoint's unused capability superset SHALL NOT reject. Local-output capabilities such as rumble SHALL NOT cause rejection. Current camera and microphone inputs have no equivalent detected GBA cartridge-hardware flag in this adapter path; reserved mask bits remain unavailable and any future detectable requirement SHALL fail unless carried authoritatively.
 
 #### Scenario: Digital-only cartridge proceeds
 - **WHEN** the cartridge requires only the synchronized digital GBA keys
@@ -205,6 +205,10 @@ The adapter SHALL derive the peer-equal cartridge-required external-input mask f
 - **WHEN** a cartridge produces rumble but requires no unsupported input source
 - **THEN** rumble does not prevent attachment and remains visible only from the locally owned player
 
+#### Scenario: e-Reader cartridge data is rejected before HELLO
+- **WHEN** effective cartridge hardware contains `HW_EREADER`, alone or combined with `HW_RUMBLE`
+- **THEN** attachment fails with an actionable unsupported cartridge-data diagnostic before compatible `HELLO`, calibration, replica capture, or manifest transmission
+
 ### Requirement: Live deterministic settings are immutable
 Every setting represented by the deterministic profile, RTC normalization policy, or authoritative-input capability negotiation SHALL be frozen for every non-disconnected protocol-v2 state. A requested change SHALL be rejected, or the session SHALL be fully torn down before the change takes effect.
 
@@ -217,7 +221,7 @@ Every setting represented by the deterministic profile, RTC normalization policy
 - **THEN** ordinary core configuration changes may take effect through the normal frontend path
 
 ### Requirement: Compatibility and diagnostics are versioned
-The determinism-profile schema, external-input capability mask, RTC normalization policy, and protocol-v2 runtime compatibility SHALL be explicitly versioned. Unsupported versions and older peers SHALL reject one another during `HELLO` without automatic downgrade. Diagnostics SHALL identify the stable category and local/remote policy versions without logging paths, save contents, raw input history, or commercial content.
+The determinism-profile schema, external-input capability mask, RTC normalization policy, and protocol-v2 runtime compatibility SHALL be explicitly versioned. Unsupported versions and older peers SHALL reject one another during `HELLO` without automatic downgrade. Diagnostics SHALL retain and identify the first stable profile category, capability mismatch class, missing required-input mask, and local/remote schema or policy versions without logging profile digests, paths, BIOS data, save contents, raw input history, or commercial content.
 
 #### Scenario: Older experimental peer is rejected
 - **WHEN** a peer with the pre-hardening protocol-v2 runtime attempts to connect

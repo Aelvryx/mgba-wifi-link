@@ -1221,11 +1221,16 @@ static void _failed(void* context, enum GBALinkV2Reason reason) {
 	if (reason == GBA_LINK_V2_REASON_INPUT_TIMEOUT) {
 		++adapter->metrics.inputDeadlineMisses;
 	}
-	char message[224];
+	char detail[224];
+	size_t detailLength = GBALinkV2SessionFormatFailureDetail(
+	    &adapter->session, reason, detail, sizeof(detail));
+	char message[480];
 	snprintf(message, sizeof(message),
-	    "protocol-v2 session failed: reason=%u state=%s frame=%" PRIu64,
+	    "protocol-v2 session failed: reason=%u state=%s frame=%" PRIu64
+	    "%s%s",
 	    reason, GBALinkV2SessionStateName(adapter->session.state),
-	    adapter->runtimeInitialized ? adapter->runtime.input.nextFrame : 0);
+	    adapter->runtimeInitialized ? adapter->runtime.input.nextFrame : 0,
+	    detailLength ? " " : "", detailLength ? detail : "");
 	_log(RETRO_LOG_ERROR, message);
 }
 
@@ -1300,6 +1305,13 @@ static bool _manualSolarControl(
 static bool _buildConfig(
 	struct mLibretroNetpacketV2Adapter* adapter) {
 	memset(&adapter->sessionConfig, 0, sizeof(adapter->sessionConfig));
+	if (adapter->gba->memory.hw.devices & HW_EREADER) {
+		const char* message =
+		    "e-Reader cartridge data is not synchronized by GBA link netplay";
+		_log(RETRO_LOG_ERROR, message);
+		_frontendMessage(RETRO_LOG_ERROR, message);
+		return false;
+	}
 	if (_cheatsEnabled(adapter->core) ||
 	    !GBALinkContentIdentityFromCore(
 	        adapter->core, &adapter->sessionConfig.identity)) {
@@ -1676,11 +1688,14 @@ void mLibretroNetpacketV2RunBegin(void) {
 		_log(RETRO_LOG_INFO, message);
 		_frontendMessage(RETRO_LOG_INFO, message);
 		snprintf(message, sizeof(message),
-		    "attach P%u policy=%u delay=%u calibration=%" PRIu64 "ms",
+		    "attach P%u policy=%u delay=%u calibration=%" PRIu64
+		    "ms provisional=%" PRIu64 " generation=%" PRIu64,
 		    _adapter.localId, _adapter.session.productPolicy,
 		    _adapter.session.inputDelay,
 		    _adapter.metrics.readyAtMs -
-		        _adapter.metrics.startedAtMs);
+		        _adapter.metrics.startedAtMs,
+		    _adapter.session.sessionId,
+		    _adapter.session.calibration.generation);
 		_log(RETRO_LOG_INFO, message);
 		char digest[MGBA_SHA256_DIGEST_SIZE * 2 + 1];
 		_digestText(_adapter.session.selection.digest, digest);

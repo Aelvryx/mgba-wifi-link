@@ -118,11 +118,16 @@ struct GBALinkV2Session {
 	uint64_t calibrationDeadlineAtUs;
 	uint64_t acceptDeadlineAtUs;
 	uint64_t firstFrame;
+	uint64_t missingRequiredInputMask;
 	struct GBALinkInputCalibration calibration;
 	struct GBALinkInputSelection selection;
 	uint64_t probeStartedAtUs;
 	uint8_t nextProbeOrdinal;
 	uint8_t nextRemoteProbeOrdinal;
+	uint16_t profileMismatchCategory;
+	uint16_t remoteProfileSchemaVersion;
+	uint32_t remoteRuntimeCompatibilityVersion;
+	enum GBALinkV2CapabilityMismatch capabilityMismatch;
 	enum GBALinkV2ProductPolicy productPolicy;
 	uint16_t productionFloor;
 	bool probeOutstanding;
@@ -173,6 +178,9 @@ bool GBALinkV2SessionIsLive(const struct GBALinkV2Session* session);
 const char* GBALinkV2SessionStateName(enum GBALinkV2SessionState state);
 const char* GBALinkV2DeadlineOperationName(
 	enum GBALinkV2DeadlineOperation operation);
+size_t GBALinkV2SessionFormatFailureDetail(
+	const struct GBALinkV2Session* session, enum GBALinkV2Reason reason,
+	char* output, size_t capacity);
 
 CXX_GUARD_END
 

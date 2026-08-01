@@ -88,8 +88,8 @@ assert_path_contract() {
 
 for_each_device() {
   local callback=$1
-  "$callback" "$THOR_SERIAL" thor "$THOR_CONTROLLER"
-  "$callback" "$ODIN_SERIAL" odin "$ODIN_CONTROLLER"
+  "$callback" "$THOR_SERIAL" thor "$THOR_CONTROLLER" 0
+  "$callback" "$ODIN_SERIAL" odin "$ODIN_CONTROLLER" 1
 }
 
 assert_device() {
@@ -254,6 +254,7 @@ check_control_device() {
   local serial=$1
   local name=$2
   local expected_controller=$3
+  local expected_role=$4
   local log
   local remote
   assert_device "$serial" "$name"
@@ -271,6 +272,7 @@ check_control_device() {
         --content-crc32 "$EXPECTED_CONTENT_CRC32" \
         --remote-root "$remote" \
         --expected-controller "$expected_controller" \
+        --expected-role "$expected_role" \
         --latency-policy "$EXPECTED_LATENCY_POLICY" \
         --selected-delay "$EXPECTED_SELECTED_DELAY"; then
     echo "$name failed prepared-run validation; stop and relaunch without ADB input injection" >&2

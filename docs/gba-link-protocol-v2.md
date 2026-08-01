@@ -71,11 +71,13 @@ metadata are excluded. Unknown required categories reject. Enabled cheats
 reject before calibration. Timing-sensitive session policy is frozen until
 the transport returns to `DISCONNECTED`.
 
-Schema-1 frame input contains digital keys only. Tilt, gyroscope and
-luminance/solar hardware—including manual solar control—therefore rejects
-before calibration with an external-input diagnostic. Rumble is local output
-and does not block admission. Logs contain masks and category identities, not
-button history or sensor values.
+Schema-1 frame input contains digital keys only. Tilt, gyroscope,
+luminance/solar hardware—including manual solar control—and e-Reader card
+input therefore reject before calibration with an external-input diagnostic.
+Rumble is local output and does not block admission. This GBA hardware path
+currently has no corresponding camera or microphone cartridge flag to detect.
+Logs retain the safe profile category, capability class, and missing-input
+mask, not profile digests, button history, sensor values, BIOS data, or paths.
 
 ## RTC normalization
 

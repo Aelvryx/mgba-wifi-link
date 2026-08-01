@@ -20,7 +20,8 @@ Status
 - Exact effective-ROM matching, with independent saves and inputs.
 - Replicated P0/P1 execution with one input packet per player per frame.
 - Canonical deterministic-policy negotiation, per-player RTC normalization,
-  and fail-fast rejection of unsynchronized cartridge sensors.
+  and fail-fast rejection of unsynchronized cartridge sensors and e-Reader
+  card input.
 - Clean bilateral network calibration with a stable two-frame default and an
   unpublished one-frame experimental qualification option.
 - Sixty-frame canonical state verification and bounded failure handling.
@@ -57,8 +58,9 @@ savestates during a live link session.
 The v2 wire/runtime contract remains experimental and may change between
 alpha builds. Wall-clock-backed RTC sources are normalized to deterministic
 per-player epochs during a session. Cartridge tilt, gyro, and solar/luminance
-inputs are not synchronized, so affected titles fail before attachment rather
-than diverging later.
+inputs and e-Reader card data are not synchronized, so affected titles fail
+before attachment rather than diverging later. Current cartridge hardware
+metadata exposes no equivalent GBA camera or microphone flag in this path.
 
 Quick start
 -----------

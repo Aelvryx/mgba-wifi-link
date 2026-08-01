@@ -118,6 +118,12 @@
 - [x] 11.5 Reproduce the CC0 link and RTC fixtures plus analyzer outputs from source with the pinned toolchain.
 - [x] 11.6 Build and inspect the Android ARM64 libretro shared object in CI.
 - [ ] 11.7 Obtain focused independent review of the deterministic profile, RTC policy, external-input rejection, selector mathematics, session transitions, and test evidence before physical release qualification.
+- [x] 11.8 Add a host post-`ACCEPT` absolute deadline before the send callback, transfer deadline ownership only after validated `ACCEPT_ACK`, and prove silence, before/at/after boundaries, replay/non-refresh, and synchronous-stop behavior.
+- [x] 11.9 Recheck the client calibration deadline after its report send returns, use that same successful timestamp to begin `WAIT_ACCEPT`, and prove a blocking send cannot cross the original boundary.
+- [x] 11.10 Reject `HW_EREADER` and e-Reader-plus-rumble before compatible `HELLO`, calibration, replica capture, or manifest transmission while documenting the current absence of camera/microphone detection flags.
+- [x] 11.11 Preserve bounded actionable profile/capability mismatch details through adapter failure logging and add category, RTC-source, time-semantics, and missing-input diagnostic regressions.
+- [x] 11.12 Bind physical runtime logs to manifest endpoint role plus matching attach/calibration provisional identity, add wrong-role/stale/mixed-session helper fixtures, and keep current valid logs accepted.
+- [x] 11.13 Rerun focused normal, ASan/UBSan, TSan, complete normal, fixture/analyzer/helper reproducibility, and Android ARM64 gates on the immutable remediation head before resuming task 11.7 review.
 
 ## 12. Exact-device latency qualification
 

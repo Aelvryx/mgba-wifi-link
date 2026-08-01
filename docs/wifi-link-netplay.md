@@ -22,9 +22,11 @@ session.
 
 The runtime and wire format are explicitly experimental. RTC-bearing games use
 per-cartridge deterministic session epochs on supported 64-bit-time platforms.
-Cartridges requiring tilt, gyro, or luminance/solar input are rejected before
-connection because those values are not yet carried in authoritative frame
-input. Rumble remains local output and is allowed.
+Cartridges requiring tilt, gyro, luminance/solar, or e-Reader card input are
+rejected before connection because those values are not yet carried in
+authoritative frame input. Rumble remains local output and is allowed. The
+current cartridge-hardware metadata has no equivalent camera or microphone
+flag in this admission path.
 
 Current game evidence is deliberately narrower than the generic cable
 architecture:
@@ -59,9 +61,9 @@ The host presents P0 and the client presents P1. Each endpoint still runs both
 logical machines, so serial traffic no longer changes network packet volume.
 The local-role machine alone receives that device's controller, rumble, video,
 audio, and persistent save backing. Shadow outputs are drained without
-frontend callbacks and shadow saves remain in memory. Rotation and solar
-cartridges fail admission rather than feeding endpoint-local sensor values to
-only one replica.
+frontend callbacks and shadow saves remain in memory. Rotation, solar, and
+e-Reader cartridges fail admission rather than feeding endpoint-local input
+to only one replica.
 
 ## Build
 

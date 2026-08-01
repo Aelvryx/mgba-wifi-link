@@ -307,12 +307,17 @@ class QualificationHelperTest(unittest.TestCase):
         serial: str,
         assignments: list[tuple[str, int]],
         *,
+        role: int | None = None,
+        provisional: int = 9,
+        generation: int = 10,
         policy: int = 1,
         floor: int = 2,
         delay: int | None = None,
     ) -> None:
         if delay is None:
             delay = self.selected_delay
+        if role is None:
+            role = 0 if serial == self.thor_serial else 1
         log = self.device_path(serial, f"{self.remote_root}/logs/retroarch.log")
         log.parent.mkdir(parents=True, exist_ok=True)
         controller_lines = "\n".join(
@@ -327,8 +332,10 @@ class QualificationHelperTest(unittest.TestCase):
                     f'[Override] Redirecting save file to "{self.remote_root}/saves/mGBA/game.srm".',
                     f'[Override] Redirecting save state to "{self.remote_root}/states/mGBA/game.state".',
                     "Status: GBA replicated link: registered replicated-pair Netpacket protocol v2",
-                    f"attach P0 policy={policy} delay={delay} calibration=25ms",
-                    "calibration P0 provisional=9 generation=10 samples=24 min=1000us "
+                    f"attach P{role} policy={policy} delay={delay} calibration=25ms "
+                    f"provisional={provisional} generation={generation}",
+                    f"calibration P{role} provisional={provisional} generation={generation} "
+                    "samples=24 min=1000us "
                     f"p50=2000us p95=3000us max=4000us selector=1 floor={floor} "
                     f"range=1-8 delay={delay} reason=2 digest={'a' * 64}",
                     controller_lines,
@@ -415,6 +422,57 @@ class QualificationHelperTest(unittest.TestCase):
         self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
         result = self.run_helper("check-controls")
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_runtime_gate_rejects_role_reversed_endpoints(self) -> None:
+        self.stage()
+        for serial, controller, wrong_role in (
+            (self.thor_serial, "Ayn Odin", 1),
+            (self.odin_serial, "Ayn Odin (Xbox Mode)", 0),
+        ):
+            with self.subTest(serial=serial):
+                self.write_log(self.thor_serial, [("Ayn Odin", 1)])
+                self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
+                self.write_log(serial, [(controller, 1)], role=wrong_role)
+                result = self.run_helper("check-controls")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("endpoint role", result.stderr)
+
+    def test_runtime_gate_rejects_disagreeing_attach_and_calibration_roles(self) -> None:
+        self.stage()
+        self.write_log(self.thor_serial, [("Ayn Odin", 1)])
+        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
+        thor_log = self.device_path(self.thor_serial, f"{self.remote_root}/logs/retroarch.log")
+        thor_log.write_text(
+            thor_log.read_text(encoding="utf-8").replace("calibration P0", "calibration P1"),
+            encoding="utf-8",
+        )
+        result = self.run_helper("check-controls")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("endpoint role", result.stderr)
+
+    def test_runtime_gate_rejects_stale_role_and_mixed_session_records(self) -> None:
+        self.stage()
+        self.write_log(self.thor_serial, [("Ayn Odin", 1)])
+        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
+        thor_log = self.device_path(self.thor_serial, f"{self.remote_root}/logs/retroarch.log")
+        with thor_log.open("a", encoding="utf-8") as output:
+            output.write(
+                "attach P1 policy=1 delay=2 calibration=25ms "
+                "provisional=11 generation=12\n"
+            )
+        stale_role = self.run_helper("check-controls")
+        self.assertNotEqual(stale_role.returncode, 0)
+        self.assertIn("endpoint role", stale_role.stderr)
+
+        self.write_log(self.thor_serial, [("Ayn Odin", 1)])
+        with thor_log.open("a", encoding="utf-8") as output:
+            output.write(
+                "attach P0 policy=1 delay=2 calibration=25ms "
+                "provisional=11 generation=12\n"
+            )
+        mixed_session = self.run_helper("check-controls")
+        self.assertNotEqual(mixed_session.returncode, 0)
+        self.assertIn("attach/calibration provisional ID", mixed_session.stderr)
 
     def test_low_latency_prepared_run_is_accepted_when_manifest_matches(self) -> None:
         manifest_path = self.run_root / "manifest.json"

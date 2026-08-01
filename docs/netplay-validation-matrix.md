@@ -625,13 +625,13 @@ slow in that regression and no longer changes selector-policy-v1 output.
 | --- | --- |
 | Canonical deterministic profile and capability supersets | `gba-netplay-identity`: category golden vectors, poisoned storage, schema/order/flag failures, mismatch diagnostics, unused capability supersets |
 | RTC normalization and source restoration | `gba-netplay-rtc-sync`, `libretro-netpacket-v2-replay`: wall clock/offset conversion, fixed/fake preservation, negative and overflow boundaries, corresponding P0/P1 replicas, teardown restoration |
-| Unsynchronized sensor rejection | `gba-netplay-rtc-sync`, `gba-netplay-session-v2`: digital/tilt/gyro/solar/rumble masks and pre-calibration capability rejection |
+| Unsynchronized external-input rejection | `gba-netplay-rtc-sync`, `gba-netplay-session-v2`, `libretro-netpacket-v2`: digital/tilt/gyro/solar/rumble masks, e-Reader hardware rejection, actionable mismatch diagnostics, and rejection before calibration or replica capture |
 | Protocol codec | `gba-netplay-protocol-v2`: every new fixed payload, truncation/extension, Boolean/reserved bytes, ordinals, duration bounds and role validation |
 | Bilateral calibration | `gba-netplay-session-v2`: 12 host plus 12 client probes, complete vector reports, semantic replay, absolute deadlines, fallible clocks, wrong role/identity/state and stop re-entry |
 | Exact selector | `gba-netplay-input-sync`: nearest-rank p50/p95, rational frame boundaries, outlier and range behavior, one-/two-frame `F -> F + D` mapping |
 | Attachment and runtime | `libretro-netpacket-v2` and paired replay: profile/calibration before replica capture, immutable selected delay, normalized pair installation, checkpoint teardown, delayed/jittered/lost inputs |
 | Runtime latency evidence | paired replay and `tools/test-analyze-replicated-netplay.py`: per-endpoint wait-free ratio, aggregate waited-frame p95/max, insertion lead, deadline/clock failures, one-frame gate and one-endpoint tail rejection |
-| Android qualification custody | `tools/four-swords-discovery/test-qualification-helper.py`: exact policy/options staging, selected-delay runtime proof, stale/missing/malformed evidence and remote hash checks |
+| Android qualification custody | `tools/four-swords-discovery/test-qualification-helper.py`: exact policy/options staging, selected-delay runtime proof, endpoint-role and session-identity binding, stale/mixed/malformed evidence, and remote hash checks |
 
 The paired replay accepts an optional local `GBA_LINK_REPLAY_ROM_PATH` so an
 independently distributed workload can pass through the same adapters without

@@ -193,6 +193,9 @@ bool GBALinkV2DeterminismCapabilitiesCompatible(
 	const struct GBALinkV2DeterminismCapabilities* client,
 	uint64_t cartridgeRequiredInputMask,
 	enum GBALinkV2CapabilityMismatch* mismatch);
+const char* GBALinkV2DeterminismCategoryName(uint16_t category);
+const char* GBALinkV2CapabilityMismatchName(
+	enum GBALinkV2CapabilityMismatch mismatch);
 
 CXX_GUARD_END
 

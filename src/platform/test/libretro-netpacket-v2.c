@@ -274,6 +274,37 @@ M_TEST_DEFINE(effectiveLoadedPolicyAndHardwareShapeHello) {
 	    "stable"));
 }
 
+M_TEST_DEFINE(eReaderFailsBeforeHelloWhileRumbleOnlyProceeds) {
+	struct V2AdapterFixture* fixture = *state;
+	struct GBA* gba = fixture->core->board;
+	gba->memory.hw.devices = HW_RUMBLE;
+	assert_true(mLibretroNetpacketV2Register(
+	    _environment, fixture->core, fixture->save,
+	    sizeof(fixture->save)));
+	fixture->frontend.callbacks.start(1, _send, _pollReceive);
+	assert_true(mLibretroNetpacketV2SessionActive());
+	assert_int_equal(fixture->frontend.sends, 1);
+	mLibretroNetpacketV2Unload();
+
+	const uint32_t hardware[] = {
+		HW_EREADER,
+		HW_EREADER | HW_RUMBLE,
+	};
+	for (unsigned i = 0; i < sizeof(hardware) / sizeof(*hardware); ++i) {
+		fixture->frontend.sends = 0;
+		fixture->frontend.messages = 0;
+		gba->memory.hw.devices = hardware[i];
+		assert_true(mLibretroNetpacketV2Register(
+		    _environment, fixture->core, fixture->save,
+		    sizeof(fixture->save)));
+		fixture->frontend.callbacks.start(1, _send, _pollReceive);
+		assert_false(mLibretroNetpacketV2SessionActive());
+		assert_int_equal(fixture->frontend.sends, 0);
+		assert_true(fixture->frontend.messages > 0);
+		mLibretroNetpacketV2Unload();
+	}
+}
+
 M_TEST_DEFINE(hostAdmissionBoundsProvisionalTraffic) {
 	struct V2AdapterFixture* fixture = *state;
 	assert_true(mLibretroNetpacketV2Register(
@@ -539,6 +570,8 @@ M_TEST_SUITE_DEFINE_SETUP_TEARDOWN(LibretroNetpacketV2,
 	    clientStartsWithReliableFlushedV2Hello, _setup, _teardown),
 	cmocka_unit_test_setup_teardown(
 	    effectiveLoadedPolicyAndHardwareShapeHello, _setup, _teardown),
+	cmocka_unit_test_setup_teardown(
+	    eReaderFailsBeforeHelloWhileRumbleOnlyProceeds, _setup, _teardown),
 	cmocka_unit_test_setup_teardown(
 	    hostAdmissionBoundsProvisionalTraffic, _setup, _teardown),
 	cmocka_unit_test_setup_teardown(

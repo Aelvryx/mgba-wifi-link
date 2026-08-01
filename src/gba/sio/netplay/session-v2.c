@@ -119,6 +119,47 @@ const char* GBALinkV2SessionStateName(enum GBALinkV2SessionState state) {
 	return "invalid";
 }
 
+size_t GBALinkV2SessionFormatFailureDetail(
+		const struct GBALinkV2Session* session, enum GBALinkV2Reason reason,
+		char* output, size_t capacity) {
+	if (!session || !output || !capacity) {
+		return 0;
+	}
+	output[0] = '\0';
+	int written = 0;
+	if (reason == GBA_LINK_V2_REASON_PROFILE_CATEGORY) {
+		written = snprintf(output, capacity,
+		    "profile-category=%s(%u) schema=%u/%u runtime=%u/%u",
+		    GBALinkV2DeterminismCategoryName(
+		        session->profileMismatchCategory),
+		    session->profileMismatchCategory,
+		    session->config.determinismProfile.schemaVersion,
+		    session->remoteProfileSchemaVersion,
+		    GBA_LINK_V2_RUNTIME_COMPATIBILITY_VERSION,
+		    session->remoteRuntimeCompatibilityVersion);
+	} else if (reason == GBA_LINK_V2_REASON_CAPABILITY_MISMATCH ||
+	           reason == GBA_LINK_V2_REASON_RTC_TIME_SEMANTICS ||
+	           reason == GBA_LINK_V2_REASON_RTC_SOURCE ||
+	           reason == GBA_LINK_V2_REASON_EXTERNAL_INPUT) {
+		written = snprintf(output, capacity,
+		    "capability=%s(%u) missing-input=%016" PRIx64
+		    " schema=%u/%u runtime=%u/%u",
+		    GBALinkV2CapabilityMismatchName(
+		        session->capabilityMismatch),
+		    session->capabilityMismatch,
+		    session->missingRequiredInputMask,
+		    session->config.determinismProfile.schemaVersion,
+		    session->remoteProfileSchemaVersion,
+		    GBA_LINK_V2_RUNTIME_COMPATIBILITY_VERSION,
+		    session->remoteRuntimeCompatibilityVersion);
+	}
+	if (written <= 0) {
+		output[0] = '\0';
+		return 0;
+	}
+	return (size_t) written < capacity ? (size_t) written : capacity - 1;
+}
+
 static void _setDeadline(
 	struct GBALinkV2Session* session,
 	enum GBALinkV2DeadlineOperation operation) {
@@ -394,6 +435,9 @@ bool GBALinkV2SessionStart(
 
 static bool _helloCompatible(
 	struct GBALinkV2Session* session, const struct GBALinkV2Hello* hello) {
+	session->remoteRuntimeCompatibilityVersion =
+	    hello->runtimeCompatibilityVersion;
+	session->remoteProfileSchemaVersion = hello->profile.schemaVersion;
 	if (hello->runtimeCompatibilityVersion !=
 	        GBA_LINK_V2_RUNTIME_COMPATIBILITY_VERSION ||
 	    hello->emulationCompatibilityVersion !=
@@ -425,6 +469,7 @@ static bool _helloCompatible(
 	if (!GBALinkV2DeterminismProfilesCompatible(
 	        &session->config.determinismProfile, &hello->profile,
 	        &profileMismatch)) {
+		session->profileMismatchCategory = profileMismatch;
 		GBALinkV2SessionFail(
 		    session, GBA_LINK_V2_REASON_PROFILE_CATEGORY,
 		    "protocol-v2 deterministic profile mismatch");
@@ -442,6 +487,13 @@ static bool _helloCompatible(
 	if (!GBALinkV2DeterminismCapabilitiesCompatible(
 	        host, client, session->config.cartridgeRequiredInputMask,
 	        &capabilityMismatch)) {
+		session->capabilityMismatch = capabilityMismatch;
+		if (capabilityMismatch == GBA_LINK_V2_CAPABILITY_EXTERNAL_INPUT) {
+			session->missingRequiredInputMask =
+			    session->config.cartridgeRequiredInputMask &
+			    ~(host->synchronizedInputCapabilityMask &
+			      client->synchronizedInputCapabilityMask);
+		}
 		enum GBALinkV2Reason reason = GBA_LINK_V2_REASON_CAPABILITY_MISMATCH;
 		if (capabilityMismatch ==
 		    GBA_LINK_V2_CAPABILITY_RTC_TIME_SEMANTICS) {
@@ -843,8 +895,19 @@ static bool _sendAccept(struct GBALinkV2Session* session) {
 	accept.payload.accept.inputDelay = session->inputDelay;
 	accept.payload.accept.productPolicy = session->productPolicy;
 	_fillSummary(session, &accept.payload.accept.calibration);
+	uint64_t now;
+	if (!_monotonicUs(
+	        session, &now, GBA_LINK_V2_REASON_ACCEPT_CLOCK_FAILURE,
+	        "protocol-v2 ACCEPT_ACK deadline clock failed") ||
+	    !_absoluteDeadline(
+	        session, now, &session->acceptDeadlineAtUs,
+	        GBA_LINK_V2_REASON_ACCEPT_CLOCK_FAILURE,
+	        "protocol-v2 ACCEPT_ACK deadline overflow")) {
+		return false;
+	}
 	session->state = GBA_LINK_V2_SESSION_ACCEPTED;
 	session->calibrationDeadlineActive = false;
+	session->acceptDeadlineActive = true;
 	return _send(session, &accept, true);
 }
 
@@ -1086,16 +1149,26 @@ static bool _handleLatencyAck(
 	if (!_sendCalibrationReport(session, GBA_LINK_ROLE_CLIENT)) {
 		return false;
 	}
-	session->calibrationDeadlineActive = false;
 	if (!_monotonicUs(
-	        session, &now, GBA_LINK_V2_REASON_ACCEPT_CLOCK_FAILURE,
-	        "protocol-v2 accept deadline clock failed") ||
+	        session, &now, GBA_LINK_V2_REASON_CALIBRATION_CLOCK_FAILURE,
+	        "protocol-v2 client report deadline clock failed")) {
+		return false;
+	}
+	if (!session->calibrationDeadlineAtUs ||
+	    now >= session->calibrationDeadlineAtUs) {
+		GBALinkV2SessionFail(
+		    session, GBA_LINK_V2_REASON_CALIBRATION_TIMEOUT,
+		    "protocol-v2 client report send crossed calibration deadline");
+		return false;
+	}
+	if (
 	    !_absoluteDeadline(
 	        session, now, &session->acceptDeadlineAtUs,
 	        GBA_LINK_V2_REASON_ACCEPT_CLOCK_FAILURE,
 	        "protocol-v2 accept deadline overflow")) {
 		return false;
 	}
+	session->calibrationDeadlineActive = false;
 	session->acceptDeadlineActive = true;
 	return true;
 }
@@ -1210,7 +1283,12 @@ static bool _handleAcceptAck(
 	    session->state != GBA_LINK_V2_SESSION_ACCEPTED ||
 	    packet->payload.acceptAck.acceptedSessionId != session->sessionId ||
 	    packet->payload.acceptAck.snapshotGeneration !=
-	        session->snapshotGeneration || !_captureLocal(session)) {
+	        session->snapshotGeneration ||
+	    !_calibrationTimely(session, true)) {
+		return false;
+	}
+	session->acceptDeadlineActive = false;
+	if (!_captureLocal(session)) {
 		return false;
 	}
 	session->state = GBA_LINK_V2_SESSION_REPLICA_EXCHANGE;

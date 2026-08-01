@@ -93,7 +93,7 @@ Project documentation
 - [GBA SIO register characterization](docs/gba-sio-characterization.md)
 - [Netpacket and Android feasibility results](docs/netpacket-feasibility-spike.md)
 - [Pinned upstream and libretro revisions](UPSTREAM.md)
-- [Active real-time OpenSpec change](openspec/changes/make-wifi-link-netplay-realtime/)
+- [Archived real-time OpenSpec change](openspec/changes/archive/2026-08-01-make-wifi-link-netplay-realtime/)
 - [Archived cable-v1 OpenSpec change](openspec/changes/archive/2026-07-31-add-wifi-link-cable-netplay/)
 - [Redistributable GBA link-test ROM](tools/gba-link-test-rom/)
 

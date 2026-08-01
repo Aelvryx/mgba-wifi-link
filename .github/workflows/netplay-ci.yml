@@ -200,7 +200,14 @@ jobs:
             "ndk;${ANDROID_NDK_VERSION}"
 
       - name: Configure Android arm64 core
+        env:
+          # Do not let host pkg-config metadata add x86-64 library paths to
+          # the Android link. Dependencies must come from the NDK sysroot or
+          # the source-tree fallbacks selected by CMake.
+          PKG_CONFIG_LIBDIR: /tmp/mgba-empty-pkgconfig
+          PKG_CONFIG_PATH: ""
         run: |
+          mkdir -p "$PKG_CONFIG_LIBDIR"
           cmake -S . -B build-ci-android-arm64 -G Ninja \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \

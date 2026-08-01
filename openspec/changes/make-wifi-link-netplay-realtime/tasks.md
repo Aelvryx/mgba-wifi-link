@@ -120,7 +120,7 @@
 - [x] 13.7 Run commercial-title peer-stop and graceful disconnect scenarios on the exact committed release candidate.
 - [x] 13.8 Restore verified machine state, save-controller state, and owned save bytes as one atomic checkpoint, including the attachment checkpoint before the first periodic verification.
 - [x] 13.9 Materialize assigned player IDs and complete guest-visible SIOCNT/RCNT topology before either restored replica executes.
-- [ ] 13.10 Re-run focused normal and sanitizer tests plus exact-head Android fixture and commercial smoke after the checkpoint/topology corrections.
+- [x] 13.10 Re-run focused normal and sanitizer tests plus exact-head Android fixture and commercial smoke after the checkpoint/topology corrections.
 
 ## 14. Release and review hygiene
 

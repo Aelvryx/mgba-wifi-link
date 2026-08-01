@@ -281,6 +281,67 @@ final gate are:
 | Mario Kart explicit-disconnect Odin log | `83a891bb2f1f1fad942a60c10724fb21d4e15cc5991a7e3ad98a3f8fd6b0bc18` |
 | Explicit-disconnect menu screenshot | `cd074ba8e0a9f7b1da3a80d54c01ee6d1a716235f60b47fb240fbaf65c1ffee7` |
 
+### Post-review exact-head qualification
+
+The checkpoint, visible-topology, trace-initialization, experimental-policy,
+host-admission, and Android-CI corrections were then qualified together from
+source head `c9b181aa24d5f2136a6e11fca56179b5204555be` (tree
+`c4ecab88bd6270ad1884f6629e3f2dbe6a15983e`). The 8,043,736-byte ARM64
+Android NDK r27 core had SHA-256
+`14978106a3978ab4ef6ec025add82e0e9a38decda72404e3dc8c02b3373f179d`.
+Both stock RetroArch 1.22.2 instances displayed embedded version
+`0.11-feature/wifi-link-netplay-v2-9146-c9b181aa2` before qualification.
+
+A fresh continuous-link session reached 4,800 common healthy frames before a
+deliberate client stop. The strict analyzer result for the healthy window was:
+
+```text
+frames=4800 checks=79/80 packets=4920/4919
+serial=2397/4794 audio_empty=0/0 fps=60.280/60.275
+rv_p50=29/0ms rv_p95=46/0ms rv_max=53/0ms
+packet_rate=61.787/61.769pps byte_rate=13541.8/13539.6Bps
+lead=0/0 trace_samples=8
+```
+
+All eight sampled P0/P1 trace pairs matched, the fixture reported no serial
+error or timeout, and every presented frame supplied audio. The complete host
+run reached frame 5,177 before the forced peer stop, emitted its teardown
+summary, and atomically restored the jointly verified local checkpoint at
+frame 5,160. The retained single core reported the expected peer-detached
+terminal reason rather than hanging.
+
+The same installed core was then exercised with Mario Kart: Super Circuit.
+Both endpoints entered two-player Multi-Pak; cable traffic rose from zero
+during the menus to 6,550 completed MULTI transactions and 13,100 words at the
+last common sample. A human-assisted representative gameplay smoke reported
+normal controls, animation, speed, and audio. This was intentionally a short
+post-fix regression, not a replacement claim for the earlier complete
+three-lap qualification. Its strict commercial-log result was:
+
+```text
+frames=15600 checks=259/260 packets=15896/15895
+serial=6550/13100 audio_empty=0/0 fps=60.245/60.243
+rv_p50=23/0ms rv_p95=37/0ms rv_max=53/0ms
+packet_rate=61.389/61.383pps byte_rate=8665.2/8664.6Bps
+lead=1/1 trace_samples=26
+```
+
+All 26 sampled P0/P1 trace pairs matched. No timeout, state divergence,
+protocol error, or empty-audio frame appeared in either captured healthy log.
+The exact-head normal, ASan/UBSan, TSan, complete normal-suite, fixture
+reproducibility, and Android ARM64 GitHub Actions jobs also passed before this
+physical-device run.
+
+Raw logs remain outside the repository. Their verification hashes are:
+
+| Evidence | SHA-256 |
+| --- | --- |
+| Exact-head fixture Thor healthy window | `ac305b1e4d69501bfec80c8548a9fe01668e12d89a1ff37630fb7476fe6e0024` |
+| Exact-head fixture Thor teardown log | `5bd1d22dc86fd03030f3cd8d187e60c91a075f082e291ddda226ba321c2411c0` |
+| Exact-head fixture Odin log | `c0360d766193dd712816bb9bfbe795b4f569dd0d2495bb17a3d8f55068472a0a` |
+| Exact-head Mario Kart Thor healthy log | `2ba469b4d551abbacc3c152770b80757871345fce0b1c99203fc27bf6653c98f` |
+| Exact-head Mario Kart Odin healthy log | `5aa762cd86e853ef65bd5f5f2fa8def4296a7965a600ac30e4008edcc758dd80` |
+
 The desktop soak is reproducible with a stock RetroArch executable, the built
 libretro core, and the continuous CC0 fixture. Copy the core-option templates
 to their disposable paths first: RetroArch rewrites a core-options file on

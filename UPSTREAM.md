@@ -185,17 +185,23 @@ common-core and Android ABI regressions do not depend solely on focused tests
 or physical-device qualification.
 
 Android NDK r27 builds passed for `arm64-v8a`, `armeabi-v7a`, `x86`, and
-`x86_64`. The 8,029,120-byte release core built from production source commit
-`9c528d38965998b15c8e7325326fd96f74362088` (tree
-`0f36ec14bb94f26ab1a17a688c065908aa8d9dd6`) has SHA-256
-`9cbdf6adc49ada15fc670bea3e4c2bad64803fe7d5d749d3143e98773a0a14f8`.
+`x86_64`. The current post-review ARM64 release candidate was built from
+source commit `c9b181aa24d5f2136a6e11fca56179b5204555be` (tree
+`c4ecab88bd6270ad1884f6629e3f2dbe6a15983e`). The 8,043,736-byte core has
+SHA-256
+`14978106a3978ab4ef6ec025add82e0e9a38decda72404e3dc8c02b3373f179d`.
 Its embedded version and commit strings were verified after installation on
-both physical Android devices. The exact-core smoke sustained 60 FPS with
-matching P0/P1 traces, normal audio delivery, and zero serial errors or
-timeouts. The same binary also passed Mario Kart peer-stop and explicit
-RetroArch disconnect checks with bounded teardown and verified local-state
-restoration. Detailed hashes and observations are in
-`docs/netplay-validation-matrix.md`.
+both physical Android devices. The exact-head continuous smoke sustained 60
+FPS with matching P0/P1 traces, normal audio delivery, zero serial errors or
+timeouts, and atomic verified-checkpoint restoration after forced peer stop.
+The same binary passed a 15,600-frame Mario Kart Multi-Pak gameplay smoke with
+13,100 local cable words and no audiovisual or protocol fault. Detailed hashes
+and observations are in `docs/netplay-validation-matrix.md`.
+
+The earlier 8,029,120-byte production candidate from
+`9c528d38965998b15c8e7325326fd96f74362088` had SHA-256
+`9cbdf6adc49ada15fc670bea3e4c2bad64803fe7d5d749d3143e98773a0a14f8`
+and supplied the terminal-path evidence retained in the validation matrix.
 
 The earlier exact ARM64 candidate from
 `217c231f2b1152b9e7b8484b0245f2210ae709d0`, SHA-256

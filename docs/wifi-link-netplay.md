@@ -222,3 +222,10 @@ game-specific input.
 Exact-head two-device Android and commercial-game qualification is recorded
 separately in `docs/netplay-validation-matrix.md`; older entries in that file
 are explicitly protocol-v1 historical evidence.
+
+The post-review release candidate at `c9b181aa2` also passed a fresh physical
+Android continuous-link smoke and a 15,600-frame Mario Kart Multi-Pak gameplay
+smoke. Both ran at approximately 60.24 FPS with matching sampled state traces,
+normal audio delivery, and no serial, timeout, or divergence fault. Four
+Swords remains the named compatibility investigation for this experimental
+alpha.

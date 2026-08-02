@@ -35,7 +35,7 @@ every completed task.
 | Rank | Outcome | Value | Urgency | Risk / enablement | Size | WSJF | Horizon |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | — | [Remove shipped cable-sync v1](https://github.com/Aelvryx/mgba/issues/6) | 5 | 8 | 8 | 3 | **7.0** | **Completed in PR #14** |
-| 2 | [Publish the current v2 foundation](https://github.com/Aelvryx/mgba/issues/7) | 8 | 8 | 5 | 3 | **7.0** | Now, after #6 and #9 |
+| 2 | [Publish the GBA Wi-Fi Link alpha](https://github.com/Aelvryx/mgba/issues/7) | 8 | 8 | 5 | 3 | **7.0** | Now, after #6 and #9 |
 | 3 | [Test hotspot latency and decide the default](https://github.com/Aelvryx/mgba/issues/9) | 5 | 5 | 8 | 3 | **6.0** | Now |
 | 4 | [Grow the compatibility matrix](https://github.com/Aelvryx/mgba/issues/8) | 5 | 5 | 5 | 3 | **5.0** | Now / continuous |
 | 5 | Produce a one-command sanitized diagnostic bundle | 5 | 3 | 8 | 5 | **3.2** | Next |
@@ -64,13 +64,14 @@ reflect large uncertain jobs whose first useful increment is expensive.
 
 1. **Remove v1 (#6): completed in PR #14.** The frontend selector, distributed
    runtime, obsolete tests, and v1-only analyzer are gone. Historical evidence
-   remains labelled, while generic SIO and supported v2 invariants have active
-   test owners.
+   remains labelled, while generic SIO and the supported versioned-runtime
+   invariants have active test owners.
 2. **Run the direct-hotspot comparison (#9).** This is a short decision test,
    not a new latency architecture. If one frame passes the existing bilateral
    gate, propose the smallest default change. Otherwise retain two frames.
-3. **Publish v0.2.0 alpha (#7).** Release the exact resulting v2-only artifact
-   with hashes, install/upgrade notes, and honest policy/compatibility claims.
+3. **Publish v0.2.0 alpha (#7).** Release the exact integrated GBA Wi-Fi Link
+   artifact with hashes, install/upgrade notes, and honest
+   policy/compatibility claims.
 4. **Grow compatibility evidence (#8).** This proceeds continuously and should
    not hold the release hostage to an arbitrary game count.
 
@@ -131,7 +132,7 @@ The first step is a feasibility/specification change, not production code.
 
 | Decision | Current position | Revisit when |
 | --- | --- | --- |
-| Production runtime | Replicated protocol v2 only; v1 runtime and selector removed | A new reviewed architecture demonstrates a concrete need |
+| Production runtime | GBA Wi-Fi Link façade over the version-2 replicated session and wire contract; v1 runtime and selector removed | A new reviewed architecture demonstrates a concrete need |
 | Default delay | Calibrated, minimum two frames | Exact one-frame candidate passes both-device gate |
 | Network path | Ordinary LAN supported | Direct-hotspot A/B evidence exists |
 | Players | Exactly two | Four-player resource and topology proposal is reviewed |

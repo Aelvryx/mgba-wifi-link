@@ -38,7 +38,7 @@ if(BUILD_SUITE)
 			target_compile_definitions(test-${TEST_NAME} PRIVATE
 				GBA_LINK_TEST_ROM_PATH="${PROJECT_SOURCE_DIR}/tools/gba-link-test-rom/fixtures/gba-link-test.gba")
 		endif()
-		if(TEST_NAME STREQUAL "gba-replicated-pair-spike" OR
+		if(TEST_NAME STREQUAL "gba-replicated-pair-scheduler" OR
 		   TEST_NAME STREQUAL "gba-replicated-pair")
 			target_compile_definitions(test-${TEST_NAME} PRIVATE
 				GBA_LINK_CONTINUOUS_ROM_PATH="${PROJECT_SOURCE_DIR}/tools/gba-link-test-rom/fixtures/gba-link-continuous.gba")
@@ -47,47 +47,47 @@ if(BUILD_SUITE)
 	endforeach()
 
 	if(BUILD_LIBRETRO AND M_CORE_GBA)
-		add_executable(test-libretro-replicated-pair-spike
-			${CMAKE_CURRENT_SOURCE_DIR}/libretro-replicated-pair-spike.c
-			${PROJECT_SOURCE_DIR}/src/platform/libretro/replicated-pair-spike.c)
-		target_include_directories(test-libretro-replicated-pair-spike PRIVATE
+		add_executable(test-libretro-replicated-pair-frontend
+			${CMAKE_CURRENT_SOURCE_DIR}/libretro-replicated-pair-frontend.c
+			${PROJECT_SOURCE_DIR}/src/platform/libretro/replicated-pair-frontend.c)
+		target_include_directories(test-libretro-replicated-pair-frontend PRIVATE
 			${PROJECT_SOURCE_DIR}/src/platform/libretro)
-		target_link_libraries(test-libretro-replicated-pair-spike
+		target_link_libraries(test-libretro-replicated-pair-frontend
 			${BINARY_NAME} ${PLATFORM_LIBRARY} cmocka)
-		set_target_properties(test-libretro-replicated-pair-spike PROPERTIES
+		set_target_properties(test-libretro-replicated-pair-frontend PROPERTIES
 			COMPILE_DEFINITIONS "${OS_DEFINES};${FEATURE_DEFINES};${FUNCTION_DEFINES};GBA_LINK_CONTINUOUS_ROM_PATH=\"${PROJECT_SOURCE_DIR}/tools/gba-link-test-rom/fixtures/gba-link-continuous.gba\"")
-		add_test(libretro-replicated-pair-spike test-libretro-replicated-pair-spike)
+		add_test(libretro-replicated-pair-frontend test-libretro-replicated-pair-frontend)
 
-		add_executable(test-libretro-netpacket-v2
-			${CMAKE_CURRENT_SOURCE_DIR}/libretro-netpacket-v2.c
-			${PROJECT_SOURCE_DIR}/src/platform/libretro/netpacket-v2.c)
-		target_include_directories(test-libretro-netpacket-v2 PRIVATE
+		add_executable(test-libretro-gba-wifi-link
+			${CMAKE_CURRENT_SOURCE_DIR}/libretro-gba-wifi-link.c
+			${PROJECT_SOURCE_DIR}/src/platform/libretro/gba-wifi-link.c)
+		target_include_directories(test-libretro-gba-wifi-link PRIVATE
 			${PROJECT_SOURCE_DIR}/src/platform/libretro)
-		target_link_libraries(test-libretro-netpacket-v2
+		target_link_libraries(test-libretro-gba-wifi-link
 			${BINARY_NAME} ${PLATFORM_LIBRARY} cmocka)
-		set_target_properties(test-libretro-netpacket-v2 PROPERTIES
-			COMPILE_DEFINITIONS "${OS_DEFINES};${FEATURE_DEFINES};${FUNCTION_DEFINES};M_LIBRETRO_NETPACKET_V2_TEST")
-		add_test(libretro-netpacket-v2 test-libretro-netpacket-v2)
+		set_target_properties(test-libretro-gba-wifi-link PROPERTIES
+			COMPILE_DEFINITIONS "${OS_DEFINES};${FEATURE_DEFINES};${FUNCTION_DEFINES};M_LIBRETRO_GBA_WIFI_LINK_TEST")
+		add_test(libretro-gba-wifi-link test-libretro-gba-wifi-link)
 
 		foreach(REPLAY_ROLE IN ITEMS Host Client)
-			add_library(test-libretro-netpacket-v2-replay-${REPLAY_ROLE} OBJECT
-				${PROJECT_SOURCE_DIR}/src/platform/libretro/netpacket-v2.c)
-			target_include_directories(test-libretro-netpacket-v2-replay-${REPLAY_ROLE} PRIVATE
+			add_library(test-libretro-gba-wifi-link-replay-${REPLAY_ROLE} OBJECT
+				${PROJECT_SOURCE_DIR}/src/platform/libretro/gba-wifi-link.c)
+			target_include_directories(test-libretro-gba-wifi-link-replay-${REPLAY_ROLE} PRIVATE
 				${PROJECT_SOURCE_DIR}/src/platform/libretro)
-			set_target_properties(test-libretro-netpacket-v2-replay-${REPLAY_ROLE} PROPERTIES
-				COMPILE_DEFINITIONS "${OS_DEFINES};${FEATURE_DEFINES};${FUNCTION_DEFINES};M_LIBRETRO_NETPACKET_V2_TEST;M_LIBRETRO_NETPACKET_V2_INSTANCE_PREFIX=mLibretroNetpacketV2Replay${REPLAY_ROLE}")
+			set_target_properties(test-libretro-gba-wifi-link-replay-${REPLAY_ROLE} PROPERTIES
+				COMPILE_DEFINITIONS "${OS_DEFINES};${FEATURE_DEFINES};${FUNCTION_DEFINES};M_LIBRETRO_GBA_WIFI_LINK_TEST;M_LIBRETRO_GBA_WIFI_LINK_INSTANCE_PREFIX=mLibretroGBAWifiLinkReplay${REPLAY_ROLE}")
 		endforeach()
-		add_executable(test-libretro-netpacket-v2-replay
-			${CMAKE_CURRENT_SOURCE_DIR}/libretro-netpacket-v2-replay.c
-			$<TARGET_OBJECTS:test-libretro-netpacket-v2-replay-Host>
-			$<TARGET_OBJECTS:test-libretro-netpacket-v2-replay-Client>)
-		target_include_directories(test-libretro-netpacket-v2-replay PRIVATE
+		add_executable(test-libretro-gba-wifi-link-replay
+			${CMAKE_CURRENT_SOURCE_DIR}/libretro-gba-wifi-link-replay.c
+			$<TARGET_OBJECTS:test-libretro-gba-wifi-link-replay-Host>
+			$<TARGET_OBJECTS:test-libretro-gba-wifi-link-replay-Client>)
+		target_include_directories(test-libretro-gba-wifi-link-replay PRIVATE
 			${PROJECT_SOURCE_DIR}/src/platform/libretro)
-		target_link_libraries(test-libretro-netpacket-v2-replay
+		target_link_libraries(test-libretro-gba-wifi-link-replay
 			${BINARY_NAME} ${PLATFORM_LIBRARY} cmocka)
-		set_target_properties(test-libretro-netpacket-v2-replay PROPERTIES
+		set_target_properties(test-libretro-gba-wifi-link-replay PROPERTIES
 			COMPILE_DEFINITIONS "${OS_DEFINES};${FEATURE_DEFINES};${FUNCTION_DEFINES};GBA_LINK_CONTINUOUS_ROM_PATH=\"${PROJECT_SOURCE_DIR}/tools/gba-link-test-rom/fixtures/gba-link-continuous.gba\"")
-		add_test(libretro-netpacket-v2-replay test-libretro-netpacket-v2-replay)
+		add_test(libretro-gba-wifi-link-replay test-libretro-gba-wifi-link-replay)
 	endif()
 endif()
 

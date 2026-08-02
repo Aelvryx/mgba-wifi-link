@@ -2,10 +2,10 @@
 
 set -euo pipefail
 
-readonly EXPECTED_RELEASE_COMMIT="${EXPECTED_RELEASE_COMMIT:-c9b181aa24d5f2136a6e11fca56179b5204555be}"
-readonly EXPECTED_RELEASE_TAG="${EXPECTED_RELEASE_TAG:-v0.1.0-alpha.2}"
-readonly EXPECTED_CORE_SHA256="${EXPECTED_CORE_SHA256:-14978106a3978ab4ef6ec025add82e0e9a38decda72404e3dc8c02b3373f179d}"
-readonly EXPECTED_CORE_VERSION="${EXPECTED_CORE_VERSION:-0.11-feature/wifi-link-netplay-v2-9146-c9b181aa2}"
+readonly EXPECTED_RELEASE_COMMIT="${EXPECTED_RELEASE_COMMIT:-}"
+readonly EXPECTED_RELEASE_TAG="${EXPECTED_RELEASE_TAG:-}"
+readonly EXPECTED_CORE_SHA256="${EXPECTED_CORE_SHA256:-}"
+readonly EXPECTED_CORE_VERSION="${EXPECTED_CORE_VERSION:-}"
 readonly EXPECTED_FRONTEND_VERSION="${EXPECTED_FRONTEND_VERSION:-1.22.2}"
 readonly EXPECTED_FRONTEND_GIT="${EXPECTED_FRONTEND_GIT:-69a4f0e}"
 readonly EXPECTED_FRONTEND_PACKAGE_VERSION="${EXPECTED_FRONTEND_PACKAGE_VERSION:-1.22.2_GIT}"
@@ -33,7 +33,7 @@ fi
 readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly QUALIFICATION_BASE="${QUALIFICATION_BASE:-${REPO_ROOT}/.qualification/four-swords-discovery}"
 readonly REMOTE_BASE="${REMOTE_BASE:-/sdcard/Android/data/${PACKAGE}/files/mgba-four-swords-discovery}"
-readonly CORE_PATH="${CORE_PATH:-${REPO_ROOT}/build-android-v2-reviewed-arm64/mgba_libretro.so}"
+readonly CORE_PATH="${CORE_PATH:-${REPO_ROOT}/build-gba-wifi-link-android-arm64/mgba_libretro.so}"
 readonly VALIDATOR="${VALIDATOR:-${REPO_ROOT}/tools/four-swords-discovery/qualification-validate.py}"
 
 usage() {
@@ -49,6 +49,25 @@ does not permit ADB to hash the resulting app-private file.
 Never use `adb shell input` during this workflow. Android's synthetic Virtual
 controller can claim RetroArch port 1 and displace the handheld controls.
 EOF
+}
+
+require_candidate_identity() {
+  [[ -n "$EXPECTED_RELEASE_COMMIT" ]] || {
+    echo "set EXPECTED_RELEASE_COMMIT to the exact candidate commit" >&2
+    exit 2
+  }
+  [[ -n "$EXPECTED_RELEASE_TAG" ]] || {
+    echo "set EXPECTED_RELEASE_TAG to the candidate tag or prerelease identity" >&2
+    exit 2
+  }
+  [[ -n "$EXPECTED_CORE_SHA256" ]] || {
+    echo "set EXPECTED_CORE_SHA256 to the staged candidate digest" >&2
+    exit 2
+  }
+  [[ -n "$EXPECTED_CORE_VERSION" ]] || {
+    echo "set EXPECTED_CORE_VERSION to the embedded candidate identity" >&2
+    exit 2
+  }
 }
 
 require_run_id() {
@@ -263,7 +282,7 @@ check_control_device() {
   log="$(latest_log "$serial")"
   [[ -n "$log" ]] || { echo "$name has no qualification log" >&2; exit 1; }
   echo "===== $name"
-  $ADB_BIN -s "$serial" shell "grep -E '\[Autoconf\]|Found joypad|registered replicated-pair|CRC32|Loading dynamic libretro core|^RetroArch |attach P[01] policy=|calibration P[01]|cal-(rtt|select|digest-[ab]) P[01]' '$log'" | tr -d '\r'
+  $ADB_BIN -s "$serial" shell "grep -E '\[Autoconf\]|Found joypad|product schema=|failure schema=|registered mgba-gba-wifi-link|CRC32|Loading dynamic libretro core|^RetroArch |attach P[01] policy=|calibration P[01]|cal-(rtt|select|digest-[ab]) P[01]' '$log'" | tr -d '\r'
   if ! $ADB_BIN -s "$serial" shell "cat '$log'" | tr -d '\r' | \
       python3 "$VALIDATOR" runtime-log \
         --frontend-version "$EXPECTED_FRONTEND_VERSION" \
@@ -320,14 +339,22 @@ cleanup_device() {
 
 main() {
   local command=${1:-}
+  case "$command" in
+    help|-h|--help)
+      usage
+      return
+      ;;
+  esac
   require_run_id
   assert_path_contract
   case "$command" in
     preflight)
+      require_candidate_identity
       validate_local_inputs
       for_each_device preflight_device
       ;;
     stage)
+      require_candidate_identity
       validate_local_inputs
       for_each_device assert_device
       for_each_device assert_frontend_stopped
@@ -336,12 +363,14 @@ main() {
       for_each_device assert_remote_staging
       ;;
     launch)
+      require_candidate_identity
       validate_local_inputs
       for_each_device assert_remote_staging
       for_each_device launch_device
       echo "Do not inject ADB input. Press one physical button on each device, then run check-controls."
       ;;
     check-controls)
+      require_candidate_identity
       validate_local_inputs
       for_each_device check_control_device
       ;;

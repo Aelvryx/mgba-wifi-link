@@ -1,18 +1,16 @@
-name: GBA Wi-Fi link netplay
+name: GBA Wi-Fi Link
 
 on:
   push:
     branches:
-      - feature/wifi-link-netplay
-      - feature/wifi-link-netplay-upstream
-      - feature/wifi-link-netplay-v2
+      - master
   pull_request:
 
 permissions:
   contents: read
 
 concurrency:
-  group: netplay-ci-${{ github.workflow }}-${{ github.ref }}
+  group: gba-wifi-link-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -128,11 +126,11 @@ jobs:
             test-gba-netplay-transport \
             test-gba-replica \
             test-gba-replicated-pair \
-            test-gba-replicated-pair-spike \
+            test-gba-replicated-pair-scheduler \
             test-gba-sio \
-            test-libretro-replicated-pair-spike \
-            test-libretro-netpacket-v2 \
-            test-libretro-netpacket-v2-replay
+            test-libretro-replicated-pair-frontend \
+            test-libretro-gba-wifi-link \
+            test-libretro-gba-wifi-link-replay
 
       - name: Run focused suite
         env:
@@ -143,13 +141,8 @@ jobs:
         run: |
           ctest --test-dir "${{ matrix.build_dir }}" \
             --output-on-failure \
-            --tests-regex 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' \
+            --tests-regex 'gba-netplay|gba-replica|gba-sio|libretro-gba-wifi-link|libretro-replicated-pair-frontend' \
             --parallel 2
-
-      - name: Audit retired protocol-v1 surfaces
-        run: |
-          python3 tools/audit-protocol-v1-absence.py \
-            --build-dir "${{ matrix.build_dir }}"
 
   fixture:
     name: Fixture reproducibility
@@ -161,6 +154,11 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v6
+
+      - name: Install boundary-audit build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes cmake ninja-build pkg-config libcmocka-dev
 
       - name: Download pinned GNU Arm toolchain
         run: |
@@ -180,8 +178,19 @@ jobs:
 
       - name: Validate structured-log analyzers
         run: |
-          python3 tools/test-analyze-replicated-netplay.py
-          python3 tools/audit-protocol-v1-absence.py
+          python3 tools/test-analyze-gba-wifi-link.py
+
+      - name: Validate GBA Wi-Fi Link product boundary
+        run: |
+          python3 tools/test-audit-gba-wifi-link-boundary.py
+          cmake -S . -B build-ci-boundary -G Ninja \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DBUILD_QT=OFF -DBUILD_SDL=OFF -DBUILD_LIBRETRO=ON \
+            -DBUILD_TEST=ON -DBUILD_SUITE=ON -DBUILD_CINEMA=OFF \
+            -DBUILD_HEADLESS=OFF -DBUILD_EXAMPLE=OFF
+          python3 tools/audit-gba-wifi-link-boundary.py \
+            --build-dir build-ci-boundary
 
       - name: Validate Android qualification helper
         run: |
@@ -230,6 +239,6 @@ jobs:
           test -s build-ci-android-arm64/mgba_libretro.so
           file build-ci-android-arm64/mgba_libretro.so \
             | grep --fixed-strings 'ARM aarch64'
-          python3 tools/audit-protocol-v1-absence.py \
-            --build-dir build-ci-android-arm64 \
+          python3 tools/audit-gba-wifi-link-boundary.py \
+            --binary-only \
             --binary build-ci-android-arm64/mgba_libretro.so

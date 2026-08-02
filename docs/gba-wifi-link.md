@@ -1,4 +1,4 @@
-# Wi-Fi GBA Link Netplay
+# GBA Wi-Fi Link
 
 This fork adds two-device GBA Multi-Pak cable emulation to the mGBA libretro
 core through RetroArch's Netpacket interface. RetroArch owns LAN discovery,
@@ -70,9 +70,9 @@ to only one replica.
 Desktop builds use the ordinary libretro target:
 
 ```sh
-cmake -S . -B build-netplay \
+cmake -S . -B build-gba-wifi-link \
   -DBUILD_QT=OFF -DBUILD_SDL=OFF -DBUILD_LIBRETRO=ON
-cmake --build build-netplay --target mgba_libretro --parallel
+cmake --build build-gba-wifi-link --target mgba_libretro --parallel
 ```
 
 For Android arm64:
@@ -96,11 +96,11 @@ content with that installed core.
 2. On player one, open **Netplay** and choose **Host**.
 3. On player two, use LAN discovery or enter the host address, then choose
    **Connect to Netplay Host**.
-4. Wait for `GBA replicated link ready: player 1` on the host and
-   `GBA replicated link ready: player 2` on the client.
+4. Wait for `GBA Wi-Fi Link ready: player 1` on the host and
+   `GBA Wi-Fi Link ready: player 2` on the client.
 5. Enter the game's ordinary Multi-Pak multiplayer flow.
 
-The core option **GBA Link Netplay Latency** controls the immutable product
+The core option **GBA Wi-Fi Link Latency** controls the immutable product
 floor negotiated at connection:
 
 - **Auto (Stable)** is the default and requires at least two GBA frames of
@@ -114,10 +114,10 @@ The measured network target can still select a larger delay. If either peer
 uses Stable, the negotiated floor is two frames. Changing the option while a
 session is live cannot alter that session; disconnect first.
 
-Protocol v2 is the only shipped GBA Netpacket runtime. Older configurations
-may still contain an `mgba_gba_link_netplay_runtime` line with any value; the
-core no longer declares or queries that key, so the line is inert and may be
-removed.
+GBA Wi-Fi Link uses the versioned `mgba-gba-link-replicated-v2` Netpacket
+contract. Older configurations may still contain an
+`mgba_gba_link_netplay_runtime` line with any value; the core no longer
+declares or queries that key, so the line is inert and may be removed.
 
 The recorded Thor/Odin mesh-Wi-Fi run selected two frames under both policies.
 That is the current qualified outcome: Low Latency was active, but its clean
@@ -314,10 +314,10 @@ the next clean launch. The Four Swords change provides the checked helper at
 
 ## Current validation
 
-All 17 focused Linux SIO, protocol-v2, replica, pair, input, save-routing, and
-libretro-adapter tests pass normally, under ASan/UBSan with leak detection, and
-under TSan. This includes a paired replay of two actual adapter instances with
-deterministic latency/jitter and faults at every attachment, input,
+All 13 focused Linux SIO, protocol-v2, replica, pair, input, save-routing, and
+GBA Wi-Fi Link façade tests pass normally, under ASan/UBSan with leak
+detection, and under TSan. This includes a paired replay of two actual adapter
+instances with deterministic latency/jitter and faults at every attachment, input,
 verification, detach, reset, stop, and unload boundary.
 
 A stock-RetroArch localhost soak completed 134,400 replicated frames (37
@@ -330,7 +330,7 @@ qualification profiles are under `tools/` so the run can be repeated without
 game-specific input.
 
 Exact-head two-device Android and commercial-game qualification is recorded
-separately in `docs/netplay-validation-matrix.md`; older entries in that file
+separately in `docs/gba-wifi-link-validation-matrix.md`; older entries in that file
 are explicitly protocol-v1 historical evidence.
 
 The post-review release candidate at `c9b181aa2` also passed a fresh physical

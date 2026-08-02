@@ -1,0 +1,77 @@
+{
+  "retired_paths": [
+    "include/mgba/internal/gba/sio/netplay/driver.h",
+    "include/mgba/internal/gba/sio/netplay/identity-v1.h",
+    "include/mgba/internal/gba/sio/netplay/protocol.h",
+    "include/mgba/internal/gba/sio/netplay/session.h",
+    "include/mgba/internal/gba/sio/netplay/timeline.h",
+    "src/gba/sio/netplay/driver.c",
+    "src/gba/sio/netplay/protocol.c",
+    "src/gba/sio/netplay/session.c",
+    "src/gba/sio/netplay/timeline.c",
+    "src/platform/libretro/netpacket.c",
+    "src/platform/libretro/netpacket.h",
+    "src/gba/test/netplay-driver.c",
+    "src/gba/test/netplay-integration.c",
+    "src/gba/test/netplay-protocol.c",
+    "src/gba/test/netplay-session.c",
+    "src/platform/test/libretro-netpacket.c",
+    "tools/analyze-link-netplay-log.py",
+    "tools/test-analyze-link-netplay-log.py"
+  ],
+  "retired_symbol_families": [
+    "GBALinkPacket",
+    "GBALinkSession",
+    "GBA_LINK_SESSION_",
+    "GBALinkTimeline",
+    "GBALinkClock",
+    "GBALinkTiming",
+    "GBASIONetplayDriver",
+    "mLibretroNetpacket"
+  ],
+  "retired_targets": [
+    "test-gba-netplay-driver",
+    "test-gba-netplay-integration",
+    "test-gba-netplay-protocol",
+    "test-gba-netplay-session",
+    "test-libretro-netpacket"
+  ],
+  "retired_configuration_identities": [
+    "mgba_gba_link_netplay_runtime",
+    "cable-v1",
+    "netplayV1Diagnostic"
+  ],
+  "retired_compatibility_strings": [
+    "mgba-gba-link-netplay-v1",
+    "GBA_LINK_PROTOCOL_NAME",
+    "GBA_LINK_PROTOCOL_VERSION",
+    "0x4E4C474D"
+  ],
+  "obsolete_product_paths": [
+    "src/platform/libretro/netpacket-v2.h",
+    "src/platform/libretro/netpacket-v2.c",
+    "src/platform/test/libretro-netpacket-v2.c",
+    "src/platform/test/libretro-netpacket-v2-replay.c",
+    "src/gba/test/replicated-pair-spike.c",
+    "src/platform/libretro/replicated-pair-spike.h",
+    "src/platform/libretro/replicated-pair-spike.c",
+    "src/platform/test/libretro-replicated-pair-spike.c",
+    "tools/netpacket-spike"
+  ],
+  "obsolete_product_text": [
+    "mLibretroNetpacketV2",
+    "M_LIBRETRO_NETPACKET_V2",
+    "netpacket-v2",
+    "libretro-netpacket-v2",
+    "replicated-pair-spike",
+    "netpacket-spike",
+    "GBA replicated link",
+    "GBA Link Netplay Latency"
+  ],
+  "obsolete_targets": [
+    "test-libretro-netpacket-v2",
+    "test-libretro-netpacket-v2-replay",
+    "test-gba-replicated-pair-spike",
+    "test-libretro-replicated-pair-spike"
+  ]
+}

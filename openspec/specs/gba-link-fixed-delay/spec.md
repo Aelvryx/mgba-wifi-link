@@ -7,7 +7,7 @@ Define bounded bilateral latency calibration, deterministic fixed input-delay se
 ## Requirements
 
 ### Requirement: Latency calibration excludes replica work
-After compatible bilateral `HELLO` and before `ACCEPT` or replica capture, protocol v2 SHALL perform a dedicated bounded latency-calibration phase. For every probe, `T0` SHALL be sampled after complete encoding and immediately before invoking the reliable flushed send callback. `T1` SHALL be sampled after the matching ACK has been received, copied, popped, decoded, and validated but before logging, formatting, the next probe, or optional work. The receiver SHALL copy, pop, decode, and validate identity/ordinal, then encode and send the ACK before diagnostics or optional work. Replica capture, serialization, compression, manifest exchange, installation, and optional logging SHALL occur outside the measured interval.
+After compatible bilateral `HELLO` and before `ACCEPT` or replica capture, the GBA Wi-Fi Link session SHALL perform a dedicated bounded latency-calibration phase. For every probe, `T0` SHALL be sampled after complete encoding and immediately before invoking the reliable flushed send callback. `T1` SHALL be sampled after the matching ACK has been received, copied, popped, decoded, and validated but before logging, formatting, the next probe, or optional work. The receiver SHALL copy, pop, decode, and validate identity/ordinal, then encode and send the ACK before diagnostics or optional work. Replica capture, serialization, compression, manifest exchange, installation, and optional logging SHALL occur outside the measured interval.
 
 #### Scenario: Snapshot work cannot inflate RTT
 - **WHEN** replica capture is artificially delayed while transport timing remains unchanged
@@ -135,7 +135,7 @@ After validating the client report, the host SHALL establish a separate absolute
 - **THEN** the provisional session fails with the phase-appropriate clock reason and does not substitute zero or refresh the deadline
 
 ### Requirement: Monotonic timestamp acquisition is fallible and portable
-Calibration SHALL obtain timestamps through `bool monotonicTimeUs(void* context, uint64_t* timestamp)` or an equivalent interface with separate success and value. The initiator SHALL fully encode the probe, commit expected ordinal and outstanding-probe state, successfully read `T0`, and only then invoke the send callback. It SHALL successfully read `T1` after ACK validation. A failed read SHALL produce `CALIBRATION_CLOCK_FAILURE`; two successful equal readings SHALL produce a valid zero-duration sample; `T1 < T0`, subtraction overflow, or elapsed time above 1,000,000 microseconds SHALL fail calibration. Protocol-v2 builds SHALL provide conforming POSIX/Android and Windows implementations or decline to register protocol v2 on the unsupported platform.
+Calibration SHALL obtain timestamps through `bool monotonicTimeUs(void* context, uint64_t* timestamp)` or an equivalent interface with separate success and value. The initiator SHALL fully encode the probe, commit expected ordinal and outstanding-probe state, successfully read `T0`, and only then invoke the send callback. It SHALL successfully read `T1` after ACK validation. A failed read SHALL produce `CALIBRATION_CLOCK_FAILURE`; two successful equal readings SHALL produce a valid zero-duration sample; `T1 < T0`, subtraction overflow, or elapsed time above 1,000,000 microseconds SHALL fail calibration. GBA Wi-Fi Link builds SHALL provide conforming POSIX/Android and Windows implementations or decline to register the runtime on the unsupported platform.
 
 #### Scenario: Clock failure differs from zero duration
 - **WHEN** either timestamp acquisition returns failure
@@ -155,7 +155,7 @@ Calibration SHALL obtain timestamps through `bool monotonicTimeUs(void* context,
 
 #### Scenario: Supported platform lacks a conforming clock
 - **WHEN** protocol v2 is built on POSIX/Android, Windows, or another target without a fallible monotonic microsecond implementation
-- **THEN** the runtime does not advertise or register protocol-v2 support on that target
+- **THEN** the runtime does not advertise or register on that target
 
 ### Requirement: Both peers authenticate the complete calibration vector
 Each endpoint SHALL calculate SHA-256 over exactly: ASCII `mgba-gba-link-replicated-v2`, zero; ASCII `latency-calibration-vector-v1`, zero; little-endian `uint64 host_connection_nonce`; little-endian `uint64 client_connection_nonce`; little-endian `uint64 provisional_session_id`; little-endian `uint64 calibration_generation`; little-endian `uint32 calibration_policy_version`; little-endian `uint32 selector_policy_version`; little-endian `uint16 sample_count = 24`; little-endian `uint16 unit_identifier = 1`, where 1 means integer microseconds; then twenty-four little-endian `uint32 duration_microseconds` values ordered as host ordinals `0…11` followed by client ordinals `0…11`. `ACCEPT` and `SESSION_READY` SHALL carry the generation, vector digest, selector-policy version, calculated statistics, negotiated range, production floor, selected delay, and selection reason. The client SHALL recompute every value from its locally held complete vector.

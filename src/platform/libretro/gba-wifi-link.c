@@ -3,58 +3,58 @@
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-#ifdef M_LIBRETRO_NETPACKET_V2_INSTANCE_PREFIX
-#define M_NETPACKET_V2_JOIN_(A, B) A ## B
-#define M_NETPACKET_V2_JOIN(A, B) M_NETPACKET_V2_JOIN_(A, B)
-#define M_NETPACKET_V2_SYMBOL(NAME) \
-	M_NETPACKET_V2_JOIN(M_LIBRETRO_NETPACKET_V2_INSTANCE_PREFIX, NAME)
-#define mLibretroNetpacketV2Register M_NETPACKET_V2_SYMBOL(Register)
-#define mLibretroNetpacketV2RunBegin M_NETPACKET_V2_SYMBOL(RunBegin)
-#define mLibretroNetpacketV2RunFrame M_NETPACKET_V2_SYMBOL(RunFrame)
-#define mLibretroNetpacketV2ExecutionBlocked \
-	M_NETPACKET_V2_SYMBOL(ExecutionBlocked)
-#define mLibretroNetpacketV2OwnsExecution \
-	M_NETPACKET_V2_SYMBOL(OwnsExecution)
-#define mLibretroNetpacketV2PresentedCore \
-	M_NETPACKET_V2_SYMBOL(PresentedCore)
-#define mLibretroNetpacketV2PresentedVideo \
-	M_NETPACKET_V2_SYMBOL(PresentedVideo)
-#define mLibretroNetpacketV2ReportAudio \
-	M_NETPACKET_V2_SYMBOL(ReportAudio)
-#define mLibretroNetpacketV2Reset M_NETPACKET_V2_SYMBOL(Reset)
-#define mLibretroNetpacketV2Unload M_NETPACKET_V2_SYMBOL(Unload)
-#define mLibretroNetpacketV2SessionActive \
-	M_NETPACKET_V2_SYMBOL(SessionActive)
-#define mLibretroNetpacketV2RejectOperation \
-	M_NETPACKET_V2_SYMBOL(RejectOperation)
-#define mLibretroNetpacketV2RejectLatencyPolicyChange \
-	M_NETPACKET_V2_SYMBOL(RejectLatencyPolicyChange)
-#define mLibretroNetpacketV2TestPollReceive \
-	M_NETPACKET_V2_SYMBOL(TestPollReceive)
-#define mLibretroNetpacketV2TestSetTimeMs \
-	M_NETPACKET_V2_SYMBOL(TestSetTimeMs)
-#define mLibretroNetpacketV2TestCallbackGeneration \
-	M_NETPACKET_V2_SYMBOL(TestCallbackGeneration)
-#define mLibretroNetpacketV2TestPendingPacketCount \
-	M_NETPACKET_V2_SYMBOL(TestPendingPacketCount)
-#define mLibretroNetpacketV2TestInjectInbound \
-	M_NETPACKET_V2_SYMBOL(TestInjectInbound)
-#define mLibretroNetpacketV2TestPlayerForRole \
-	M_NETPACKET_V2_SYMBOL(TestPlayerForRole)
-#define mLibretroNetpacketV2TestInstallPair \
-	M_NETPACKET_V2_SYMBOL(TestInstallPair)
-#define mLibretroNetpacketV2TestPairCore \
-	M_NETPACKET_V2_SYMBOL(TestPairCore)
-#define mLibretroNetpacketV2TestCaptureCheckpoint \
-	M_NETPACKET_V2_SYMBOL(TestCaptureCheckpoint)
-#define mLibretroNetpacketV2TestFailNextCheckpointAllocation \
-	M_NETPACKET_V2_SYMBOL(TestFailNextCheckpointAllocation)
-#define mLibretroNetpacketV2TestFail M_NETPACKET_V2_SYMBOL(TestFail)
-#define mLibretroNetpacketV2TestGetMetrics \
-	M_NETPACKET_V2_SYMBOL(TestGetMetrics)
+#ifdef M_LIBRETRO_GBA_WIFI_LINK_INSTANCE_PREFIX
+#define M_GBA_WIFI_LINK_JOIN_(A, B) A ## B
+#define M_GBA_WIFI_LINK_JOIN(A, B) M_GBA_WIFI_LINK_JOIN_(A, B)
+#define M_GBA_WIFI_LINK_SYMBOL(NAME) \
+	M_GBA_WIFI_LINK_JOIN(M_LIBRETRO_GBA_WIFI_LINK_INSTANCE_PREFIX, NAME)
+#define mLibretroGBAWifiLinkRegister M_GBA_WIFI_LINK_SYMBOL(Register)
+#define mLibretroGBAWifiLinkRunBegin M_GBA_WIFI_LINK_SYMBOL(RunBegin)
+#define mLibretroGBAWifiLinkRunFrame M_GBA_WIFI_LINK_SYMBOL(RunFrame)
+#define mLibretroGBAWifiLinkExecutionBlocked \
+	M_GBA_WIFI_LINK_SYMBOL(ExecutionBlocked)
+#define mLibretroGBAWifiLinkOwnsExecution \
+	M_GBA_WIFI_LINK_SYMBOL(OwnsExecution)
+#define mLibretroGBAWifiLinkPresentedCore \
+	M_GBA_WIFI_LINK_SYMBOL(PresentedCore)
+#define mLibretroGBAWifiLinkPresentedVideo \
+	M_GBA_WIFI_LINK_SYMBOL(PresentedVideo)
+#define mLibretroGBAWifiLinkReportAudio \
+	M_GBA_WIFI_LINK_SYMBOL(ReportAudio)
+#define mLibretroGBAWifiLinkReset M_GBA_WIFI_LINK_SYMBOL(Reset)
+#define mLibretroGBAWifiLinkUnload M_GBA_WIFI_LINK_SYMBOL(Unload)
+#define mLibretroGBAWifiLinkSessionActive \
+	M_GBA_WIFI_LINK_SYMBOL(SessionActive)
+#define mLibretroGBAWifiLinkRejectOperation \
+	M_GBA_WIFI_LINK_SYMBOL(RejectOperation)
+#define mLibretroGBAWifiLinkRejectLatencyPolicyChange \
+	M_GBA_WIFI_LINK_SYMBOL(RejectLatencyPolicyChange)
+#define mLibretroGBAWifiLinkTestPollReceive \
+	M_GBA_WIFI_LINK_SYMBOL(TestPollReceive)
+#define mLibretroGBAWifiLinkTestSetTimeMs \
+	M_GBA_WIFI_LINK_SYMBOL(TestSetTimeMs)
+#define mLibretroGBAWifiLinkTestCallbackGeneration \
+	M_GBA_WIFI_LINK_SYMBOL(TestCallbackGeneration)
+#define mLibretroGBAWifiLinkTestPendingPacketCount \
+	M_GBA_WIFI_LINK_SYMBOL(TestPendingPacketCount)
+#define mLibretroGBAWifiLinkTestInjectInbound \
+	M_GBA_WIFI_LINK_SYMBOL(TestInjectInbound)
+#define mLibretroGBAWifiLinkTestPlayerForRole \
+	M_GBA_WIFI_LINK_SYMBOL(TestPlayerForRole)
+#define mLibretroGBAWifiLinkTestInstallPair \
+	M_GBA_WIFI_LINK_SYMBOL(TestInstallPair)
+#define mLibretroGBAWifiLinkTestPairCore \
+	M_GBA_WIFI_LINK_SYMBOL(TestPairCore)
+#define mLibretroGBAWifiLinkTestCaptureCheckpoint \
+	M_GBA_WIFI_LINK_SYMBOL(TestCaptureCheckpoint)
+#define mLibretroGBAWifiLinkTestFailNextCheckpointAllocation \
+	M_GBA_WIFI_LINK_SYMBOL(TestFailNextCheckpointAllocation)
+#define mLibretroGBAWifiLinkTestFail M_GBA_WIFI_LINK_SYMBOL(TestFail)
+#define mLibretroGBAWifiLinkTestGetMetrics \
+	M_GBA_WIFI_LINK_SYMBOL(TestGetMetrics)
 #endif
 
-#include "netpacket-v2.h"
+#include "gba-wifi-link.h"
 
 #include <inttypes.h>
 #include <time.h>
@@ -79,16 +79,16 @@
 #include <mgba/internal/gba/sio/netplay/transport.h>
 #include <mgba-util/audio-buffer.h>
 
-#define NETPACKET_V2_NO_CLIENT UINT16_MAX
+#define GBA_WIFI_LINK_NO_CLIENT UINT16_MAX
 
 enum {
-	NETPACKET_V2_VERIFICATION_INTERVAL = 60,
-	NETPACKET_V2_RENDEZVOUS_HISTOGRAM_MAX_MS = 3000,
-	NETPACKET_V2_INPUT_WAIT_HISTOGRAM_MAX_US = 30000,
-	NETPACKET_V2_LINK_TEST_MAGIC = 0x31544B4C,
+	GBA_WIFI_LINK_VERIFICATION_INTERVAL = 60,
+	GBA_WIFI_LINK_RENDEZVOUS_HISTOGRAM_MAX_MS = 3000,
+	GBA_WIFI_LINK_INPUT_WAIT_HISTOGRAM_MAX_US = 30000,
+	GBA_WIFI_LINK_LINK_TEST_MAGIC = 0x31544B4C,
 };
 
-struct mLibretroNetpacketV2Metrics {
+struct mLibretroGBAWifiLinkMetrics {
 	uint64_t startedAtMs;
 	uint64_t readyAtMs;
 	uint64_t sentPackets;
@@ -104,7 +104,7 @@ struct mLibretroNetpacketV2Metrics {
 	uint64_t rendezvousTotalMs;
 	uint64_t rendezvousMaxMs;
 	uint32_t rendezvousHistogram[
-	    NETPACKET_V2_RENDEZVOUS_HISTOGRAM_MAX_MS + 1];
+	    GBA_WIFI_LINK_RENDEZVOUS_HISTOGRAM_MAX_MS + 1];
 	uint64_t releasedFrames;
 	uint64_t inputWaitedFrames;
 	uint64_t inputWaitTotalUs;
@@ -112,7 +112,7 @@ struct mLibretroNetpacketV2Metrics {
 	uint64_t inputDeadlineMisses;
 	uint64_t telemetryClockFailures;
 	uint32_t inputWaitHistogram[
-	    NETPACKET_V2_INPUT_WAIT_HISTOGRAM_MAX_US + 2];
+	    GBA_WIFI_LINK_INPUT_WAIT_HISTOGRAM_MAX_US + 2];
 	uint64_t inputPollSendCount;
 	uint64_t inputPollSendTotalUs;
 	uint64_t inputPollSendMaxUs;
@@ -130,7 +130,7 @@ struct mLibretroNetpacketV2Metrics {
 	size_t queueHighWater;
 };
 
-struct mLibretroNetpacketV2Checkpoint {
+struct mLibretroGBAWifiLinkCheckpoint {
 	struct GBASerializedState* state;
 	uint8_t* saveData;
 	size_t saveSize;
@@ -147,7 +147,7 @@ struct mLibretroNetpacketV2Checkpoint {
 	bool valid;
 };
 
-struct mLibretroNetpacketV2Adapter {
+struct mLibretroGBAWifiLinkAdapter {
 	retro_environment_t environment;
 	struct mCore* core;
 	struct GBA* gba;
@@ -180,21 +180,21 @@ struct mLibretroNetpacketV2Adapter {
 	uint8_t remoteVerificationDigests[2][MGBA_SHA256_DIGEST_SIZE];
 	bool verificationPending;
 	bool remoteVerificationReceived;
-	struct mLibretroNetpacketV2Checkpoint verifiedCheckpoint;
+	struct mLibretroGBAWifiLinkCheckpoint verifiedCheckpoint;
 	struct GBALinkV2RTCNormalization rtcNormalization;
 	bool rtcNormalizationValid;
 	uint64_t localSaveGeneration;
-	struct mLibretroNetpacketV2Metrics metrics;
-#ifdef M_LIBRETRO_NETPACKET_V2_TEST
+	struct mLibretroGBAWifiLinkMetrics metrics;
+#ifdef M_LIBRETRO_GBA_WIFI_LINK_TEST
 	bool testClockEnabled;
 	uint64_t testNowMs;
 	bool testFailCheckpointAllocation;
 #endif
 };
 
-static struct mLibretroNetpacketV2Adapter _adapter = {
-	.localId = NETPACKET_V2_NO_CLIENT,
-	.remoteId = NETPACKET_V2_NO_CLIENT,
+static struct mLibretroGBAWifiLinkAdapter _adapter = {
+	.localId = GBA_WIFI_LINK_NO_CLIENT,
+	.remoteId = GBA_WIFI_LINK_NO_CLIENT,
 };
 
 static uint64_t _monotonicTimeMs(void* context);
@@ -204,20 +204,20 @@ static void _digestText(
 	char text[MGBA_SHA256_DIGEST_SIZE * 2 + 1]);
 
 static void _recordRendezvous(
-		struct mLibretroNetpacketV2Adapter* adapter,
+		struct mLibretroGBAWifiLinkAdapter* adapter,
 		uint64_t duration) {
 	++adapter->metrics.rendezvousCount;
 	adapter->metrics.rendezvousTotalMs += duration;
 	if (duration > adapter->metrics.rendezvousMaxMs) {
 		adapter->metrics.rendezvousMaxMs = duration;
 	}
-	size_t bucket = duration > NETPACKET_V2_RENDEZVOUS_HISTOGRAM_MAX_MS
-	    ? NETPACKET_V2_RENDEZVOUS_HISTOGRAM_MAX_MS : (size_t) duration;
+	size_t bucket = duration > GBA_WIFI_LINK_RENDEZVOUS_HISTOGRAM_MAX_MS
+	    ? GBA_WIFI_LINK_RENDEZVOUS_HISTOGRAM_MAX_MS : (size_t) duration;
 	++adapter->metrics.rendezvousHistogram[bucket];
 }
 
 static uint64_t _rendezvousPercentile(
-		const struct mLibretroNetpacketV2Adapter* adapter,
+		const struct mLibretroGBAWifiLinkAdapter* adapter,
 		unsigned percentile) {
 	if (!adapter->metrics.rendezvousCount) {
 		return 0;
@@ -226,31 +226,31 @@ static uint64_t _rendezvousPercentile(
 	    (adapter->metrics.rendezvousCount * percentile + 99) / 100;
 	uint64_t seen = 0;
 	for (size_t i = 0;
-	     i <= NETPACKET_V2_RENDEZVOUS_HISTOGRAM_MAX_MS; ++i) {
+	     i <= GBA_WIFI_LINK_RENDEZVOUS_HISTOGRAM_MAX_MS; ++i) {
 		seen += adapter->metrics.rendezvousHistogram[i];
 		if (seen >= target) {
 			return i;
 		}
 	}
-	return NETPACKET_V2_RENDEZVOUS_HISTOGRAM_MAX_MS;
+	return GBA_WIFI_LINK_RENDEZVOUS_HISTOGRAM_MAX_MS;
 }
 
 static void _recordInputWait(
-		struct mLibretroNetpacketV2Adapter* adapter,
+		struct mLibretroGBAWifiLinkAdapter* adapter,
 		uint64_t durationUs) {
 	++adapter->metrics.inputWaitedFrames;
 	adapter->metrics.inputWaitTotalUs += durationUs;
 	if (durationUs > adapter->metrics.inputWaitMaxUs) {
 		adapter->metrics.inputWaitMaxUs = durationUs;
 	}
-	size_t bucket = durationUs > NETPACKET_V2_INPUT_WAIT_HISTOGRAM_MAX_US
-	    ? NETPACKET_V2_INPUT_WAIT_HISTOGRAM_MAX_US + 1
+	size_t bucket = durationUs > GBA_WIFI_LINK_INPUT_WAIT_HISTOGRAM_MAX_US
+	    ? GBA_WIFI_LINK_INPUT_WAIT_HISTOGRAM_MAX_US + 1
 	    : (size_t) durationUs;
 	++adapter->metrics.inputWaitHistogram[bucket];
 }
 
 static uint64_t _inputWaitPercentile(
-		const struct mLibretroNetpacketV2Adapter* adapter,
+		const struct mLibretroGBAWifiLinkAdapter* adapter,
 		unsigned percentile) {
 	if (!adapter->metrics.inputWaitedFrames) {
 		return 0;
@@ -259,13 +259,13 @@ static uint64_t _inputWaitPercentile(
 	    (adapter->metrics.inputWaitedFrames * percentile + 99) / 100;
 	uint64_t seen = 0;
 	for (size_t i = 0;
-	     i <= NETPACKET_V2_INPUT_WAIT_HISTOGRAM_MAX_US + 1; ++i) {
+	     i <= GBA_WIFI_LINK_INPUT_WAIT_HISTOGRAM_MAX_US + 1; ++i) {
 		seen += adapter->metrics.inputWaitHistogram[i];
 		if (seen >= target) {
 			return i;
 		}
 	}
-	return NETPACKET_V2_INPUT_WAIT_HISTOGRAM_MAX_US + 1;
+	return GBA_WIFI_LINK_INPUT_WAIT_HISTOGRAM_MAX_US + 1;
 }
 
 static uint64_t _leadMicroseconds(uint64_t frames) {
@@ -287,7 +287,7 @@ static uint64_t _leadMicroseconds(uint64_t frames) {
 }
 
 static void _recordInputInsertions(
-		struct mLibretroNetpacketV2Adapter* adapter,
+		struct mLibretroGBAWifiLinkAdapter* adapter,
 		const struct GBALinkV2InputBatch* batch) {
 	if (!adapter || !batch || batch->player > 1 ||
 	    !adapter->runtimeInitialized) {
@@ -338,7 +338,7 @@ static void _log(enum retro_log_level level, const char* message) {
 	} else if (level == RETRO_LOG_WARN) {
 		mapped = mLOG_WARN;
 	}
-	mLog(_mLOG_CAT_STATUS, mapped, "GBA replicated link: %s", message);
+	mLog(_mLOG_CAT_STATUS, mapped, "GBA Wi-Fi Link: %s", message);
 }
 
 static void _frontendMessage(
@@ -368,7 +368,7 @@ static void _frontendMessage(
 
 static uint64_t _monotonicTimeMs(void* context) {
 	UNUSED(context);
-#ifdef M_LIBRETRO_NETPACKET_V2_TEST
+#ifdef M_LIBRETRO_GBA_WIFI_LINK_TEST
 	if (_adapter.testClockEnabled) {
 		return _adapter.testNowMs;
 	}
@@ -390,7 +390,7 @@ static bool _monotonicTimeUs(void* context, uint64_t* timestamp) {
 	if (!timestamp) {
 		return false;
 	}
-#ifdef M_LIBRETRO_NETPACKET_V2_TEST
+#ifdef M_LIBRETRO_GBA_WIFI_LINK_TEST
 	if (_adapter.testClockEnabled) {
 		if (_adapter.testNowMs > UINT64_MAX / 1000) {
 			return false;
@@ -431,9 +431,9 @@ static bool _monotonicTimeUs(void* context, uint64_t* timestamp) {
 
 static bool _sendReliable(
 	void* context, const void* data, size_t size, bool flush) {
-	struct mLibretroNetpacketV2Adapter* adapter = context;
+	struct mLibretroGBAWifiLinkAdapter* adapter = context;
 	if (!adapter || !adapter->frontendStarted || !adapter->send ||
-	    adapter->remoteId == NETPACKET_V2_NO_CLIENT ||
+	    adapter->remoteId == GBA_WIFI_LINK_NO_CLIENT ||
 	    !data || !size) {
 		return false;
 	}
@@ -459,7 +459,7 @@ static bool _sendReliable(
 }
 
 static bool _pollReceive(void* context) {
-	struct mLibretroNetpacketV2Adapter* adapter = context;
+	struct mLibretroGBAWifiLinkAdapter* adapter = context;
 	if (!adapter || !adapter->frontendStarted || !adapter->pollReceive) {
 		return false;
 	}
@@ -498,10 +498,46 @@ static const char* _reasonName(enum GBALinkReason reason) {
 	}
 }
 
+static void _logStructuredFailure(
+		struct mLibretroGBAWifiLinkAdapter* adapter,
+		unsigned reason, const char* state) {
+	if (!adapter) {
+		return;
+	}
+	unsigned role = adapter->localId;
+	if (role > 1 && adapter->sessionPrepared &&
+	    (adapter->session.localRole == GBA_LINK_ROLE_HOST ||
+	     adapter->session.localRole == GBA_LINK_ROLE_CLIENT)) {
+		role = adapter->session.localRole == GBA_LINK_ROLE_HOST ? 0 : 1;
+	}
+	if (role > 1) {
+		return;
+	}
+	char record[224];
+	snprintf(record, sizeof(record),
+	    "failure schema=%u P%u s=%" PRIu64
+	    " generation=%" PRIu64 " reason=%u state=%s frame=%" PRIu64,
+	    M_LIBRETRO_GBA_WIFI_LINK_DIAGNOSTIC_SCHEMA, role,
+	    adapter->sessionPrepared ? adapter->session.sessionId : 0,
+	    adapter->sessionPrepared
+	        ? adapter->session.calibration.generation : 0,
+	    reason, state ? state : "transport",
+	    adapter->runtimeInitialized ? adapter->runtime.input.nextFrame : 0);
+	_log(RETRO_LOG_ERROR, record);
+}
+
 static void _diagnostic(
 	void* context, enum GBALinkDiagnosticLevel level,
 	enum GBALinkReason reason, const char* detail) {
-	UNUSED(context);
+	struct mLibretroGBAWifiLinkAdapter* adapter = context;
+	if (!adapter || !adapter->sessionPrepared ||
+	    adapter->session.state != GBA_LINK_V2_SESSION_FAILED) {
+		_logStructuredFailure(
+		    adapter, reason,
+		    adapter && adapter->sessionPrepared
+		        ? GBALinkV2SessionStateName(adapter->session.state)
+		        : "transport");
+	}
 	char message[384];
 	snprintf(message, sizeof(message), "Link failed: %s%s%s",
 	    _reasonName(reason), detail && detail[0] ? " (" : "",
@@ -524,17 +560,17 @@ static void _diagnostic(
 }
 
 static void _clearPreAdmission(
-	struct mLibretroNetpacketV2Adapter* adapter) {
+	struct mLibretroGBAWifiLinkAdapter* adapter) {
 	GBALinkCopiedQueueDeinit(&adapter->preAdmission);
 }
 
 static void _invalidateFrontend(
-	struct mLibretroNetpacketV2Adapter* adapter) {
+	struct mLibretroGBAWifiLinkAdapter* adapter) {
 	adapter->send = NULL;
 	adapter->pollReceive = NULL;
 	adapter->frontendStarted = false;
-	adapter->localId = NETPACKET_V2_NO_CLIENT;
-	adapter->remoteId = NETPACKET_V2_NO_CLIENT;
+	adapter->localId = GBA_WIFI_LINK_NO_CLIENT;
+	adapter->remoteId = GBA_WIFI_LINK_NO_CLIENT;
 	adapter->protocolPending = false;
 	adapter->deferHostHello = false;
 	_clearPreAdmission(adapter);
@@ -545,7 +581,7 @@ static void _invalidateFrontend(
 }
 
 static void _transportStop(void* context) {
-	struct mLibretroNetpacketV2Adapter* adapter = context;
+	struct mLibretroGBAWifiLinkAdapter* adapter = context;
 	if (adapter) {
 		_invalidateFrontend(adapter);
 	}
@@ -562,7 +598,7 @@ static const struct GBALinkTransportVTable _transportVTable = {
 };
 
 static bool _quiescentBoundary(void* context) {
-	struct mLibretroNetpacketV2Adapter* adapter = context;
+	struct mLibretroGBAWifiLinkAdapter* adapter = context;
 	if (!adapter || !adapter->gba || adapter->gba->sio.driver ||
 	    adapter->deferHostHello) {
 		return false;
@@ -574,14 +610,14 @@ static bool _quiescentBoundary(void* context) {
 }
 
 static void _setPaused(void* context, bool paused) {
-	((struct mLibretroNetpacketV2Adapter*) context)->paused = paused;
+	((struct mLibretroGBAWifiLinkAdapter*) context)->paused = paused;
 }
 
 static enum GBAReplicaResult _captureReplica(
 	void* context, uint8_t player, uint64_t generation,
 	enum GBAReplicaEncoding encoding, uint32_t chunkSize,
 	struct GBAReplicaBundle* bundle) {
-	struct mLibretroNetpacketV2Adapter* adapter = context;
+	struct mLibretroGBAWifiLinkAdapter* adapter = context;
 	if (!adapter->sessionConfig.deterministicCapabilities.contentRequiresRtc) {
 		return GBAReplicaCapture(
 		    adapter->core, player, generation, encoding, chunkSize, bundle);
@@ -611,7 +647,7 @@ static enum GBAReplicaResult _captureReplica(
 }
 
 static void _checkpointDeinit(
-		struct mLibretroNetpacketV2Checkpoint* checkpoint) {
+		struct mLibretroGBAWifiLinkCheckpoint* checkpoint) {
 	if (!checkpoint) {
 		return;
 	}
@@ -621,14 +657,14 @@ static void _checkpointDeinit(
 }
 
 static bool _captureLocalCheckpoint(
-		struct mLibretroNetpacketV2Adapter* adapter,
+		struct mLibretroGBAWifiLinkAdapter* adapter,
 		struct mCore* core, uint64_t frame, uint64_t saveGeneration) {
 	if (!adapter || !core || !core->board || !adapter->saveData ||
 	    !adapter->saveCapacity) {
 		return false;
 	}
 	struct GBA* gba = core->board;
-	struct mLibretroNetpacketV2Checkpoint replacement;
+	struct mLibretroGBAWifiLinkCheckpoint replacement;
 	memset(&replacement, 0, sizeof(replacement));
 	replacement.saveType = gba->memory.savedata.type;
 	replacement.saveSize = GBASavedataSize(&gba->memory.savedata);
@@ -636,7 +672,7 @@ static bool _captureLocalCheckpoint(
 	if (replacement.saveSize > replacement.saveBackingSize) {
 		return false;
 	}
-#ifdef M_LIBRETRO_NETPACKET_V2_TEST
+#ifdef M_LIBRETRO_GBA_WIFI_LINK_TEST
 	if (adapter->testFailCheckpointAllocation) {
 		adapter->testFailCheckpointAllocation = false;
 		return false;
@@ -673,7 +709,7 @@ static bool _captureLocalCheckpoint(
 static bool _installPair(
 	void* context, const struct GBAReplicaManifest manifests[2],
 	const struct GBAReplicaPayload payloads[2]) {
-	struct mLibretroNetpacketV2Adapter* adapter = context;
+	struct mLibretroGBAWifiLinkAdapter* adapter = context;
 	if (adapter->pairInitialized) {
 		return false;
 	}
@@ -707,7 +743,7 @@ static bool _installPair(
 }
 
 static bool _commitPair(void* context) {
-	struct mLibretroNetpacketV2Adapter* adapter = context;
+	struct mLibretroGBAWifiLinkAdapter* adapter = context;
 	if (!adapter->pairInitialized || !adapter->pair.installed ||
 	    adapter->runtimeInitialized) {
 		return false;
@@ -724,7 +760,7 @@ static bool _commitPair(void* context) {
 }
 
 static void _restoreVerifiedLocalState(
-		struct mLibretroNetpacketV2Adapter* adapter) {
+		struct mLibretroGBAWifiLinkAdapter* adapter) {
 	if (!adapter || !adapter->verifiedCheckpoint.valid ||
 	    !adapter->verifiedCheckpoint.state ||
 	    !adapter->verifiedCheckpoint.saveData || !adapter->gba ||
@@ -793,7 +829,7 @@ static void _restoreVerifiedLocalState(
 }
 
 static void _logLinkTestStatus(
-		struct mLibretroNetpacketV2Adapter* adapter,
+		struct mLibretroGBAWifiLinkAdapter* adapter,
 		const char* event) {
 	uint32_t status[2];
 	uint32_t transfers[2];
@@ -804,7 +840,7 @@ static void _logLinkTestStatus(
 		struct mCore* core = GBAReplicatedPairCore(
 		    &adapter->pair, player);
 		if (!core || core->rawRead32(core, 0x02000000, -1) !=
-		        NETPACKET_V2_LINK_TEST_MAGIC) {
+		        GBA_WIFI_LINK_LINK_TEST_MAGIC) {
 			return;
 		}
 		status[player] = core->rawRead32(core, 0x02000008, -1);
@@ -828,7 +864,7 @@ static void _logLinkTestStatus(
 }
 
 static void _logRuntimeSummary(
-	struct mLibretroNetpacketV2Adapter* adapter,
+	struct mLibretroGBAWifiLinkAdapter* adapter,
 	const char* event) {
 	if (!adapter || !adapter->runtimeInitialized) {
 		return;
@@ -1019,7 +1055,7 @@ static void _logRuntimeSummary(
 
 static void _discardPair(void* context, bool committed) {
 	UNUSED(committed);
-	struct mLibretroNetpacketV2Adapter* adapter = context;
+	struct mLibretroGBAWifiLinkAdapter* adapter = context;
 	if (adapter->runtimeInitialized) {
 		_logRuntimeSummary(adapter, "teardown");
 		_restoreVerifiedLocalState(adapter);
@@ -1050,7 +1086,7 @@ static void _digestText(
 }
 
 static void _logDivergence(
-		struct mLibretroNetpacketV2Adapter* adapter,
+		struct mLibretroGBAWifiLinkAdapter* adapter,
 		uint8_t player) {
 	char local[MGBA_SHA256_DIGEST_SIZE * 2 + 1];
 	char remote[MGBA_SHA256_DIGEST_SIZE * 2 + 1];
@@ -1081,12 +1117,12 @@ static void _logDivergence(
 	    "inputs=[%s] session=%" PRIu64 " protocol=%u delay=%u verify=%u",
 	    adapter->verificationFrame, player, local, remote, inputs,
 	    adapter->session.sessionId, GBA_LINK_V2_PROTOCOL_VERSION,
-	    adapter->session.inputDelay, NETPACKET_V2_VERIFICATION_INTERVAL);
+	    adapter->session.inputDelay, GBA_WIFI_LINK_VERIFICATION_INTERVAL);
 	_log(RETRO_LOG_ERROR, message);
 }
 
 static bool _completeVerification(
-		struct mLibretroNetpacketV2Adapter* adapter) {
+		struct mLibretroGBAWifiLinkAdapter* adapter) {
 	if (!adapter->verificationPending ||
 	    !adapter->remoteVerificationReceived) {
 		return true;
@@ -1144,7 +1180,7 @@ static bool _completeVerification(
 
 static bool _runtimePacket(
 	void* context, const struct GBALinkV2Packet* packet) {
-	struct mLibretroNetpacketV2Adapter* adapter = context;
+	struct mLibretroGBAWifiLinkAdapter* adapter = context;
 	if (!adapter->runtimeInitialized) {
 		return false;
 	}
@@ -1153,7 +1189,7 @@ static bool _runtimePacket(
 		    &packet->payload.stateCheck;
 		uint64_t current = adapter->runtime.metrics.framesReleased;
 		if (!check->frame ||
-		    check->frame % NETPACKET_V2_VERIFICATION_INTERVAL ||
+		    check->frame % GBA_WIFI_LINK_VERIFICATION_INTERVAL ||
 		    check->frame < current ||
 		    (check->frame > current &&
 		     check->frame - current >
@@ -1198,10 +1234,10 @@ static bool _runtimePacket(
 }
 
 static bool _beginVerification(
-		struct mLibretroNetpacketV2Adapter* adapter,
+		struct mLibretroGBAWifiLinkAdapter* adapter,
 		uint64_t frame) {
 	if (!adapter || !adapter->runtimeInitialized ||
-	    !frame || frame % NETPACKET_V2_VERIFICATION_INTERVAL ||
+	    !frame || frame % GBA_WIFI_LINK_VERIFICATION_INTERVAL ||
 	    adapter->verificationPending) {
 		return false;
 	}
@@ -1238,16 +1274,19 @@ static bool _beginVerification(
 }
 
 static void _failed(void* context, enum GBALinkV2Reason reason) {
-	struct mLibretroNetpacketV2Adapter* adapter = context;
+	struct mLibretroGBAWifiLinkAdapter* adapter = context;
 	if (reason == GBA_LINK_V2_REASON_INPUT_TIMEOUT) {
 		++adapter->metrics.inputDeadlineMisses;
 	}
+	_logStructuredFailure(
+	    adapter, reason,
+	    GBALinkV2SessionStateName(adapter->session.state));
 	char detail[224];
 	size_t detailLength = GBALinkV2SessionFormatFailureDetail(
 	    &adapter->session, reason, detail, sizeof(detail));
 	char message[480];
 	snprintf(message, sizeof(message),
-	    "protocol-v2 session failed: reason=%u state=%s frame=%" PRIu64
+	    "session failed: reason=%u state=%s frame=%" PRIu64
 	    "%s%s",
 	    reason, GBALinkV2SessionStateName(adapter->session.state),
 	    adapter->runtimeInitialized ? adapter->runtime.input.nextFrame : 0,
@@ -1297,7 +1336,7 @@ static enum GBALinkV2IdlePolicy _idlePolicy(const struct GBA* gba) {
 }
 
 static enum GBALinkV2ProductPolicy _productPolicy(
-	struct mLibretroNetpacketV2Adapter* adapter) {
+	struct mLibretroGBAWifiLinkAdapter* adapter) {
 	struct retro_variable variable = {
 		.key = "mgba_link_netplay_latency",
 	};
@@ -1310,7 +1349,7 @@ static enum GBALinkV2ProductPolicy _productPolicy(
 }
 
 static bool _manualSolarControl(
-		struct mLibretroNetpacketV2Adapter* adapter) {
+		struct mLibretroGBAWifiLinkAdapter* adapter) {
 	if (!adapter || !adapter->gba ||
 	    !(adapter->gba->memory.hw.devices & HW_LIGHT_SENSOR)) {
 		return false;
@@ -1324,11 +1363,11 @@ static bool _manualSolarControl(
 }
 
 static bool _buildConfig(
-	struct mLibretroNetpacketV2Adapter* adapter) {
+	struct mLibretroGBAWifiLinkAdapter* adapter) {
 	memset(&adapter->sessionConfig, 0, sizeof(adapter->sessionConfig));
 	if (adapter->gba->memory.hw.devices & HW_EREADER) {
 		const char* message =
-		    "e-Reader cartridge data is not synchronized by GBA link netplay";
+		    "e-Reader cartridge data is not synchronized by GBA Wi-Fi Link";
 		_log(RETRO_LOG_ERROR, message);
 		_frontendMessage(RETRO_LOG_ERROR, message);
 		return false;
@@ -1406,7 +1445,7 @@ static bool _buildConfig(
 }
 
 static void _deinitSession(
-	struct mLibretroNetpacketV2Adapter* adapter) {
+	struct mLibretroGBAWifiLinkAdapter* adapter) {
 	if (!adapter || !adapter->sessionPrepared) {
 		return;
 	}
@@ -1420,7 +1459,7 @@ static void _deinitSession(
 }
 
 static bool _prepareSession(
-	struct mLibretroNetpacketV2Adapter* adapter) {
+	struct mLibretroGBAWifiLinkAdapter* adapter) {
 	_deinitSession(adapter);
 	GBALinkTransportInit(
 	    &adapter->transport, &_transportVTable, adapter);
@@ -1436,7 +1475,7 @@ static bool _prepareSession(
 }
 
 static bool _drainPreAdmission(
-	struct mLibretroNetpacketV2Adapter* adapter) {
+	struct mLibretroGBAWifiLinkAdapter* adapter) {
 	struct GBALinkCopiedPacket packet;
 	memset(&packet, 0, sizeof(packet));
 	while (GBALinkCopiedQueuePop(&adapter->preAdmission, &packet)) {
@@ -1454,7 +1493,7 @@ static bool _drainPreAdmission(
 }
 
 static bool _beginProtocol(
-	struct mLibretroNetpacketV2Adapter* adapter) {
+	struct mLibretroGBAWifiLinkAdapter* adapter) {
 	enum GBALinkRole role = adapter->localId == 0
 	    ? GBA_LINK_ROLE_HOST
 	    : GBA_LINK_ROLE_CLIENT;
@@ -1471,12 +1510,12 @@ static bool _beginProtocol(
 }
 
 static bool _enterRendezvous(
-	struct mLibretroNetpacketV2Adapter* adapter) {
+	struct mLibretroGBAWifiLinkAdapter* adapter) {
 	if (!adapter || !adapter->frontendStarted) {
 		return false;
 	}
 	if (adapter->localId == 0 &&
-	    adapter->remoteId == NETPACKET_V2_NO_CLIENT &&
+	    adapter->remoteId == GBA_WIFI_LINK_NO_CLIENT &&
 	    !adapter->protocolPending) {
 		return true;
 	}
@@ -1498,13 +1537,13 @@ static void RETRO_CALLCONV _start(
 	    !send || !pollReceive || (clientId != 0 && clientId != 1)) {
 		_frontendMessage(
 		    RETRO_LOG_ERROR,
-		    "GBA replicated link requires two-player Netpacket receive polling");
+		    "GBA Wi-Fi Link requires two-player Netpacket receive polling");
 		return;
 	}
 	_adapter.frontendStarted = true;
 	_adapter.localId = clientId;
 	_adapter.remoteId =
-	    clientId == 0 ? NETPACKET_V2_NO_CLIENT : 0;
+	    clientId == 0 ? GBA_WIFI_LINK_NO_CLIENT : 0;
 	_adapter.send = send;
 	_adapter.pollReceive = pollReceive;
 	memset(&_adapter.metrics, 0, sizeof(_adapter.metrics));
@@ -1533,7 +1572,7 @@ static void RETRO_CALLCONV _receive(
 	}
 	if (!_adapter.sessionPrepared &&
 	    ((_adapter.localId == 0 &&
-	      _adapter.remoteId == NETPACKET_V2_NO_CLIENT &&
+	      _adapter.remoteId == GBA_WIFI_LINK_NO_CLIENT &&
 	      clientId == 1) ||
 	     (_adapter.protocolPending && clientId == _adapter.remoteId))) {
 		if (!GBALinkCopiedQueuePush(
@@ -1581,12 +1620,12 @@ static void RETRO_CALLCONV _stop(void) {
 	if (_adapter.sessionPrepared) {
 		GBALinkTransportInvalidate(
 		    &_adapter.transport, GBA_LINK_REASON_TRANSPORT_STOP,
-		    "frontend stopped protocol-v2 transport");
+		    "frontend stopped GBA Wi-Fi Link transport");
 		if (live) {
 			GBALinkV2SessionFail(
 			    &_adapter.session,
 			    GBA_LINK_V2_REASON_TRANSPORT_STOP,
-			    "frontend stopped protocol-v2 transport");
+			    "frontend stopped GBA Wi-Fi Link transport");
 		}
 	}
 }
@@ -1600,7 +1639,7 @@ static void RETRO_CALLCONV _poll(void) {
 
 static bool RETRO_CALLCONV _connected(uint16_t clientId) {
 	if (!_adapter.frontendStarted || _adapter.localId != 0 ||
-	    _adapter.remoteId != NETPACKET_V2_NO_CLIENT ||
+	    _adapter.remoteId != GBA_WIFI_LINK_NO_CLIENT ||
 	    clientId != 1) {
 		return false;
 	}
@@ -1613,7 +1652,7 @@ static bool RETRO_CALLCONV _connected(uint16_t clientId) {
 	bool entered = _enterRendezvous(&_adapter);
 	_adapter.deferHostHello = false;
 	if (!entered) {
-		_adapter.remoteId = NETPACKET_V2_NO_CLIENT;
+		_adapter.remoteId = GBA_WIFI_LINK_NO_CLIENT;
 		return false;
 	}
 	return true;
@@ -1623,7 +1662,7 @@ static void RETRO_CALLCONV _disconnected(uint16_t clientId) {
 	if (!_adapter.frontendStarted || clientId != _adapter.remoteId) {
 		return;
 	}
-	_adapter.remoteId = NETPACKET_V2_NO_CLIENT;
+	_adapter.remoteId = GBA_WIFI_LINK_NO_CLIENT;
 	if (_adapter.sessionPrepared &&
 	    GBALinkV2SessionIsLive(&_adapter.session)) {
 		GBALinkV2SessionFail(
@@ -1642,10 +1681,10 @@ static const struct retro_netpacket_callback _callbacks = {
 	.protocol_version = GBA_LINK_V2_PROTOCOL_NAME,
 };
 
-bool mLibretroNetpacketV2Register(
+bool mLibretroGBAWifiLinkRegister(
 	retro_environment_t environment, struct mCore* core,
 	void* saveData, size_t saveCapacity) {
-	mLibretroNetpacketV2Unload();
+	mLibretroGBAWifiLinkUnload();
 	uint64_t monotonicProbe;
 	if (!environment || !core || !core->platform ||
 	    core->platform(core) != mPLATFORM_GBA || !core->board ||
@@ -1662,11 +1701,19 @@ bool mLibretroNetpacketV2Register(
 	if (!environment(
 	        RETRO_ENVIRONMENT_SET_NETPACKET_INTERFACE,
 	        (void*) &_callbacks)) {
-		mLibretroNetpacketV2Unload();
+		mLibretroGBAWifiLinkUnload();
 		return false;
 	}
+	char productRecord[160];
+	snprintf(productRecord, sizeof(productRecord),
+	    "product schema=%u id=%s protocol=%s",
+	    M_LIBRETRO_GBA_WIFI_LINK_DIAGNOSTIC_SCHEMA,
+	    M_LIBRETRO_GBA_WIFI_LINK_PRODUCT_ID,
+	    GBA_LINK_V2_PROTOCOL_NAME);
+	_log(RETRO_LOG_INFO, productRecord);
 	_log(RETRO_LOG_INFO,
-	    "registered replicated-pair Netpacket protocol v2");
+	    "registered " M_LIBRETRO_GBA_WIFI_LINK_PRODUCT_ID
+	    " using " GBA_LINK_V2_PROTOCOL_NAME);
 	return true;
 }
 
@@ -1692,7 +1739,7 @@ static bool _profileIdentityText(
 	return true;
 }
 
-void mLibretroNetpacketV2RunBegin(void) {
+void mLibretroGBAWifiLinkRunBegin(void) {
 	_enterRendezvous(&_adapter);
 	if (_adapter.sessionPrepared &&
 	    GBALinkV2SessionIsLive(&_adapter.session)) {
@@ -1704,7 +1751,7 @@ void mLibretroNetpacketV2RunBegin(void) {
 		_adapter.metrics.readyAtMs = _monotonicTimeMs(&_adapter);
 		char message[160];
 		snprintf(message, sizeof(message),
-		    "GBA replicated link ready: player %u, input delay %u frames",
+		    "GBA Wi-Fi Link ready: player %u, input delay %u frames",
 		    _adapter.localId + 1, _adapter.session.inputDelay);
 		_log(RETRO_LOG_INFO, message);
 		_frontendMessage(RETRO_LOG_INFO, message);
@@ -1784,14 +1831,14 @@ void mLibretroNetpacketV2RunBegin(void) {
 	_finishFailed();
 }
 
-bool mLibretroNetpacketV2OwnsExecution(void) {
+bool mLibretroGBAWifiLinkOwnsExecution(void) {
 	return _adapter.sessionPrepared &&
 	       _adapter.session.state == GBA_LINK_V2_SESSION_READY &&
 	       _adapter.runtimeInitialized;
 }
 
-bool mLibretroNetpacketV2RunFrame(uint16_t keys) {
-	if (!mLibretroNetpacketV2OwnsExecution()) {
+bool mLibretroGBAWifiLinkRunFrame(uint16_t keys) {
+	if (!mLibretroGBAWifiLinkOwnsExecution()) {
 		return false;
 	}
 	uint64_t inputSampledAtUs = 0;
@@ -1802,7 +1849,7 @@ bool mLibretroNetpacketV2RunFrame(uint16_t keys) {
 	}
 	bool waited = _adapter.verificationPending;
 	uint64_t waitStarted = waited ? _monotonicTimeMs(&_adapter) : 0;
-	while (mLibretroNetpacketV2OwnsExecution() &&
+	while (mLibretroGBAWifiLinkOwnsExecution() &&
 	       _adapter.verificationPending) {
 		uint64_t generation = _adapter.callbackGeneration;
 		retro_netpacket_poll_receive_t poll = _adapter.pollReceive;
@@ -1817,7 +1864,7 @@ bool mLibretroNetpacketV2RunFrame(uint16_t keys) {
 		}
 		_yield(&_adapter);
 	}
-	if (!mLibretroNetpacketV2OwnsExecution() ||
+	if (!mLibretroGBAWifiLinkOwnsExecution() ||
 	    _adapter.verificationPending) {
 		_finishFailed();
 		return false;
@@ -1872,7 +1919,7 @@ bool mLibretroNetpacketV2RunFrame(uint16_t keys) {
 	if (waited && !inputWaitClockValid) {
 		++_adapter.metrics.telemetryClockFailures;
 	}
-	while (mLibretroNetpacketV2OwnsExecution() &&
+	while (mLibretroGBAWifiLinkOwnsExecution() &&
 	       !GBAReplicatedRuntimeFrameReady(&_adapter.runtime)) {
 		uint64_t generation = _adapter.callbackGeneration;
 		retro_netpacket_poll_receive_t poll = _adapter.pollReceive;
@@ -1887,7 +1934,7 @@ bool mLibretroNetpacketV2RunFrame(uint16_t keys) {
 		}
 		_yield(&_adapter);
 	}
-	if (!mLibretroNetpacketV2OwnsExecution() ||
+	if (!mLibretroGBAWifiLinkOwnsExecution() ||
 	    !GBAReplicatedRuntimeFrameReady(&_adapter.runtime)) {
 		_finishFailed();
 		return false;
@@ -1962,7 +2009,7 @@ bool mLibretroNetpacketV2RunFrame(uint16_t keys) {
 	    &_adapter.pair,
 	    _playerForRole(_adapter.session.localRole));
 	uint64_t frame = _adapter.runtime.metrics.framesReleased;
-	if (frame % NETPACKET_V2_VERIFICATION_INTERVAL == 0 &&
+	if (frame % GBA_WIFI_LINK_VERIFICATION_INTERVAL == 0 &&
 	    !_beginVerification(&_adapter, frame)) {
 		_finishFailed();
 		return false;
@@ -1974,15 +2021,15 @@ bool mLibretroNetpacketV2RunFrame(uint16_t keys) {
 	return true;
 }
 
-bool mLibretroNetpacketV2ExecutionBlocked(void) {
+bool mLibretroGBAWifiLinkExecutionBlocked(void) {
 	return _adapter.frontendStarted && _adapter.sessionPrepared &&
 	       (_adapter.paused ||
 	        (_adapter.session.state == GBA_LINK_V2_SESSION_READY &&
 	         !_adapter.runtimeInitialized));
 }
 
-struct mCore* mLibretroNetpacketV2PresentedCore(void) {
-	if (!mLibretroNetpacketV2OwnsExecution()) {
+struct mCore* mLibretroGBAWifiLinkPresentedCore(void) {
+	if (!mLibretroGBAWifiLinkOwnsExecution()) {
 		return NULL;
 	}
 	uint8_t player = _playerForRole(
@@ -1990,8 +2037,8 @@ struct mCore* mLibretroNetpacketV2PresentedCore(void) {
 	return GBAReplicatedPairCore(&_adapter.pair, player);
 }
 
-mColor* mLibretroNetpacketV2PresentedVideo(void) {
-	if (!mLibretroNetpacketV2OwnsExecution()) {
+mColor* mLibretroGBAWifiLinkPresentedVideo(void) {
+	if (!mLibretroGBAWifiLinkOwnsExecution()) {
 		return NULL;
 	}
 	uint8_t player = _playerForRole(
@@ -1999,8 +2046,8 @@ mColor* mLibretroNetpacketV2PresentedVideo(void) {
 	return GBAReplicatedPairVideoBuffer(&_adapter.pair, player);
 }
 
-void mLibretroNetpacketV2ReportAudio(size_t samples) {
-	if (!mLibretroNetpacketV2OwnsExecution()) {
+void mLibretroGBAWifiLinkReportAudio(size_t samples) {
+	if (!mLibretroGBAWifiLinkOwnsExecution()) {
 		return;
 	}
 	++_adapter.metrics.audioFrames;
@@ -2010,7 +2057,7 @@ void mLibretroNetpacketV2ReportAudio(size_t samples) {
 	}
 }
 
-void mLibretroNetpacketV2Reset(void) {
+void mLibretroGBAWifiLinkReset(void) {
 	if (_adapter.sessionPrepared &&
 	    GBALinkV2SessionIsLive(&_adapter.session)) {
 		GBALinkV2SessionFail(
@@ -2021,7 +2068,7 @@ void mLibretroNetpacketV2Reset(void) {
 	_deinitSession(&_adapter);
 }
 
-void mLibretroNetpacketV2Unload(void) {
+void mLibretroGBAWifiLinkUnload(void) {
 	if (_adapter.sessionPrepared &&
 	    GBALinkV2SessionIsLive(&_adapter.session)) {
 		GBALinkV2SessionFail(
@@ -2032,32 +2079,32 @@ void mLibretroNetpacketV2Unload(void) {
 	_deinitSession(&_adapter);
 	_checkpointDeinit(&_adapter.verifiedCheckpoint);
 	memset(&_adapter, 0, sizeof(_adapter));
-	_adapter.localId = NETPACKET_V2_NO_CLIENT;
-	_adapter.remoteId = NETPACKET_V2_NO_CLIENT;
+	_adapter.localId = GBA_WIFI_LINK_NO_CLIENT;
+	_adapter.remoteId = GBA_WIFI_LINK_NO_CLIENT;
 }
 
-bool mLibretroNetpacketV2SessionActive(void) {
+bool mLibretroGBAWifiLinkSessionActive(void) {
 	return _adapter.frontendStarted ||
 	       (_adapter.sessionPrepared &&
 	        _adapter.session.state !=
 	            GBA_LINK_V2_SESSION_DISCONNECTED);
 }
 
-bool mLibretroNetpacketV2RejectOperation(const char* operation) {
-	if (!mLibretroNetpacketV2SessionActive()) {
+bool mLibretroGBAWifiLinkRejectOperation(const char* operation) {
+	if (!mLibretroGBAWifiLinkSessionActive()) {
 		return false;
 	}
 	char message[192];
 	snprintf(message, sizeof(message),
-	    "%s is unavailable during GBA replicated link",
+	    "%s is unavailable during GBA Wi-Fi Link",
 	    operation ? operation : "This operation");
 	_log(RETRO_LOG_WARN, message);
 	_frontendMessage(RETRO_LOG_WARN, message);
 	return true;
 }
 
-bool mLibretroNetpacketV2RejectLatencyPolicyChange(const char* value) {
-	if (!mLibretroNetpacketV2SessionActive() || !value ||
+bool mLibretroGBAWifiLinkRejectLatencyPolicyChange(const char* value) {
+	if (!mLibretroGBAWifiLinkSessionActive() || !value ||
 	    !_adapter.sessionPrepared) {
 		return false;
 	}
@@ -2068,26 +2115,26 @@ bool mLibretroNetpacketV2RejectLatencyPolicyChange(const char* value) {
 	if (requested == _adapter.sessionConfig.productPolicy) {
 		return false;
 	}
-	return mLibretroNetpacketV2RejectOperation(
+	return mLibretroGBAWifiLinkRejectOperation(
 	    "Changing latency policy");
 }
 
-#ifdef M_LIBRETRO_NETPACKET_V2_TEST
-bool mLibretroNetpacketV2TestPollReceive(void) {
+#ifdef M_LIBRETRO_GBA_WIFI_LINK_TEST
+bool mLibretroGBAWifiLinkTestPollReceive(void) {
 	return _adapter.sessionPrepared &&
 	       GBALinkTransportPoll(&_adapter.transport);
 }
 
-void mLibretroNetpacketV2TestSetTimeMs(uint64_t nowMs) {
+void mLibretroGBAWifiLinkTestSetTimeMs(uint64_t nowMs) {
 	_adapter.testClockEnabled = true;
 	_adapter.testNowMs = nowMs;
 }
 
-uint64_t mLibretroNetpacketV2TestCallbackGeneration(void) {
+uint64_t mLibretroGBAWifiLinkTestCallbackGeneration(void) {
 	return _adapter.callbackGeneration;
 }
 
-size_t mLibretroNetpacketV2TestPendingPacketCount(void) {
+size_t mLibretroGBAWifiLinkTestPendingPacketCount(void) {
 	size_t count = _adapter.preAdmission.size;
 	if (_adapter.sessionPrepared) {
 		count += _adapter.transport.inbound.size;
@@ -2096,7 +2143,7 @@ size_t mLibretroNetpacketV2TestPendingPacketCount(void) {
 	return count;
 }
 
-bool mLibretroNetpacketV2TestInjectInbound(
+bool mLibretroGBAWifiLinkTestInjectInbound(
 		const void* data, size_t size) {
 	if (!_adapter.sessionPrepared || !data || !size ||
 	    !GBALinkTransportQueueInbound(
@@ -2109,11 +2156,11 @@ bool mLibretroNetpacketV2TestInjectInbound(
 	return result;
 }
 
-uint8_t mLibretroNetpacketV2TestPlayerForRole(enum GBALinkRole role) {
+uint8_t mLibretroGBAWifiLinkTestPlayerForRole(enum GBALinkRole role) {
 	return _playerForRole(role);
 }
 
-bool mLibretroNetpacketV2TestInstallPair(
+bool mLibretroGBAWifiLinkTestInstallPair(
 		const struct GBAReplicaManifest manifests[2],
 		const struct GBAReplicaPayload payloads[2],
 		enum GBALinkRole role, uint64_t generation) {
@@ -2154,12 +2201,12 @@ bool mLibretroNetpacketV2TestInstallPair(
 	return true;
 }
 
-struct mCore* mLibretroNetpacketV2TestPairCore(uint8_t player) {
+struct mCore* mLibretroGBAWifiLinkTestPairCore(uint8_t player) {
 	return _adapter.pairInitialized
 	    ? GBAReplicatedPairCore(&_adapter.pair, player) : NULL;
 }
 
-bool mLibretroNetpacketV2TestCaptureCheckpoint(uint64_t frame) {
+bool mLibretroGBAWifiLinkTestCaptureCheckpoint(uint64_t frame) {
 	if (!_adapter.runtimeInitialized || !_adapter.pairInitialized) {
 		return false;
 	}
@@ -2174,11 +2221,11 @@ bool mLibretroNetpacketV2TestCaptureCheckpoint(uint64_t frame) {
 	    frame, _adapter.localSaveGeneration);
 }
 
-void mLibretroNetpacketV2TestFailNextCheckpointAllocation(void) {
+void mLibretroGBAWifiLinkTestFailNextCheckpointAllocation(void) {
 	_adapter.testFailCheckpointAllocation = true;
 }
 
-void mLibretroNetpacketV2TestFail(enum GBALinkV2Reason reason) {
+void mLibretroGBAWifiLinkTestFail(enum GBALinkV2Reason reason) {
 	if (_adapter.sessionPrepared &&
 	    GBALinkV2SessionIsLive(&_adapter.session)) {
 		GBALinkV2SessionFail(
@@ -2187,8 +2234,8 @@ void mLibretroNetpacketV2TestFail(enum GBALinkV2Reason reason) {
 	}
 }
 
-bool mLibretroNetpacketV2TestGetMetrics(
-		struct mLibretroNetpacketV2TestMetrics* metrics) {
+bool mLibretroGBAWifiLinkTestGetMetrics(
+		struct mLibretroGBAWifiLinkTestMetrics* metrics) {
 	if (!metrics) {
 		return false;
 	}
@@ -2197,7 +2244,7 @@ bool mLibretroNetpacketV2TestGetMetrics(
 	if (_adapter.pairInitialized) {
 		GBAReplicatedPairGetMetrics(&_adapter.pair, &pairMetrics);
 	}
-	*metrics = (struct mLibretroNetpacketV2TestMetrics) {
+	*metrics = (struct mLibretroGBAWifiLinkTestMetrics) {
 		.selectedDelay = _adapter.session.inputDelay,
 		.productPolicy = _adapter.session.productPolicy,
 		.releasedFrames = _adapter.metrics.releasedFrames,

@@ -23,8 +23,8 @@
 #define LINK_RESULT_ADDRESS 0x02000000
 #define LINK_RESULT_RUNNING 3
 #define LINK_RESULT_FAIL 0x80000000U
-#define SPIKE_TARGET_FRAMES 600
-#define SPIKE_TIMEOUT_MS 10000
+#define SCHEDULER_TARGET_FRAMES 600
+#define SCHEDULER_TIMEOUT_MS 10000
 #define FNV64_OFFSET UINT64_C(14695981039346656037)
 #define FNV64_PRIME UINT64_C(1099511628211)
 
@@ -49,7 +49,7 @@ struct LinkTestResult {
 	uint32_t completionSpins[4];
 };
 
-struct ReplicatedPairSpike;
+struct ReplicatedPairScheduler;
 
 struct CooperativeUser {
 	struct mLockstepUser d;
@@ -63,13 +63,13 @@ struct CooperativeUser {
 struct ThreadUser {
 	struct mLockstepThreadUser d;
 	int requestedId;
-	struct ReplicatedPairSpike* pair;
+	struct ReplicatedPairScheduler* pair;
 	unsigned index;
 };
 #endif
 
 struct PairPlayer {
-	struct ReplicatedPairSpike* pair;
+	struct ReplicatedPairScheduler* pair;
 	unsigned index;
 	struct mCore* core;
 	struct GBA* gba;
@@ -82,7 +82,7 @@ struct PairPlayer {
 #endif
 };
 
-struct ReplicatedPairSpike {
+struct ReplicatedPairScheduler {
 	struct GBASIOLockstepCoordinator coordinator;
 	struct PairPlayer players[2];
 #ifndef DISABLE_THREADING
@@ -192,7 +192,7 @@ static void _threadWake(struct mLockstepUser* user) {
 
 static void _workerFrame(struct mCoreThread* thread) {
 	struct PairPlayer* player = thread->userData;
-	struct ReplicatedPairSpike* pair = player->pair;
+	struct ReplicatedPairScheduler* pair = player->pair;
 	MutexLock(&pair->metricsMutex);
 	pair->workerFrames[player->index] =
 	    player->core->frameCounter(player->core);
@@ -205,7 +205,7 @@ static void _workerFrame(struct mCoreThread* thread) {
 #endif
 
 static void _initPlayer(
-	struct ReplicatedPairSpike* pair, unsigned index,
+	struct ReplicatedPairScheduler* pair, unsigned index,
 	bool threaded) {
 	struct PairPlayer* player = &pair->players[index];
 	memset(player, 0, sizeof(*player));
@@ -266,7 +266,7 @@ static void _initPlayer(
 }
 
 static void _initPair(
-	struct ReplicatedPairSpike* pair, bool threaded) {
+	struct ReplicatedPairScheduler* pair, bool threaded) {
 	memset(pair, 0, sizeof(*pair));
 	GBASIOLockstepCoordinatorInit(&pair->coordinator);
 #ifndef DISABLE_THREADING
@@ -328,7 +328,7 @@ static void _assertHealthyResult(
 }
 
 static void _detachPlayers(
-	struct ReplicatedPairSpike* pair, bool threaded) {
+	struct ReplicatedPairScheduler* pair, bool threaded) {
 #ifndef DISABLE_THREADING
 	if (threaded) {
 		for (unsigned i = 0; i < 2; ++i) {
@@ -355,7 +355,7 @@ static void _detachPlayers(
 }
 
 static void _deinitPair(
-	struct ReplicatedPairSpike* pair, bool threaded) {
+	struct ReplicatedPairScheduler* pair, bool threaded) {
 	_detachPlayers(pair, threaded);
 	for (unsigned i = 0; i < 2; ++i) {
 		struct mCore* core = pair->players[i].core;
@@ -378,7 +378,7 @@ enum CooperativeMilestone {
 };
 
 static bool _milestoneReached(
-	struct ReplicatedPairSpike* pair,
+	struct ReplicatedPairScheduler* pair,
 	enum CooperativeMilestone milestone) {
 	bool completion0 = mTimingIsScheduled(
 	    &pair->players[0].gba->timing,
@@ -411,7 +411,7 @@ static bool _milestoneReached(
 }
 
 static void _runCooperativeToMilestone(
-	struct ReplicatedPairSpike* pair,
+	struct ReplicatedPairScheduler* pair,
 	enum CooperativeMilestone milestone) {
 	for (uint64_t iteration = 0; iteration < 2000000;
 	     ++iteration) {
@@ -430,7 +430,7 @@ static void _runCooperativeToMilestone(
 
 M_TEST_DEFINE(cooperativePairTeardownAtCriticalBoundaries) {
 	UNUSED(state);
-	struct ReplicatedPairSpike pair;
+	struct ReplicatedPairScheduler pair;
 
 	_initPair(&pair, false);
 	_runCooperativeToMilestone(&pair, MILESTONE_TRANSFER_IDLE);
@@ -464,7 +464,7 @@ M_TEST_DEFINE(cooperativePairTeardownAtCriticalBoundaries) {
 
 M_TEST_DEFINE(partialPairConstructionTearsDownCleanly) {
 	UNUSED(state);
-	struct ReplicatedPairSpike pair;
+	struct ReplicatedPairScheduler pair;
 	memset(&pair, 0, sizeof(pair));
 	GBASIOLockstepCoordinatorInit(&pair.coordinator);
 #ifndef DISABLE_THREADING
@@ -493,7 +493,7 @@ M_TEST_DEFINE(partialPairConstructionTearsDownCleanly) {
 
 M_TEST_DEFINE(cooperativePairRunsContinuousLinkForTenSeconds) {
 	UNUSED(state);
-	struct ReplicatedPairSpike pair;
+	struct ReplicatedPairScheduler pair;
 	_initPair(&pair, false);
 	uint64_t startedAtMs = _monotonicMs();
 	uint64_t runLoops = 0;
@@ -503,10 +503,10 @@ M_TEST_DEFINE(cooperativePairRunsContinuousLinkForTenSeconds) {
 	};
 	while (pair.players[0].core->frameCounter(
 	           pair.players[0].core) <
-	           SPIKE_TARGET_FRAMES ||
+	           SCHEDULER_TARGET_FRAMES ||
 	       pair.players[1].core->frameCounter(
 	           pair.players[1].core) <
-	           SPIKE_TARGET_FRAMES) {
+	           SCHEDULER_TARGET_FRAMES) {
 		bool ran = false;
 		for (unsigned i = 0; i < 2; ++i) {
 			struct PairPlayer* player = &pair.players[i];
@@ -528,7 +528,7 @@ M_TEST_DEFINE(cooperativePairRunsContinuousLinkForTenSeconds) {
 		assert_true(ran);
 		assert_true(
 		    _monotonicMs() - startedAtMs <
-		    SPIKE_TIMEOUT_MS);
+		    SCHEDULER_TIMEOUT_MS);
 	}
 
 	struct LinkTestResult results[2];
@@ -537,7 +537,7 @@ M_TEST_DEFINE(cooperativePairRunsContinuousLinkForTenSeconds) {
 		_assertHealthyResult(&results[i], i);
 		assert_true(pair.players[i].cooperativeUser.sleeps > 0);
 		assert_true(pair.players[i].cooperativeUser.wakes > 0);
-		assert_int_equal(tracedFrames[i], SPIKE_TARGET_FRAMES);
+		assert_int_equal(tracedFrames[i], SCHEDULER_TARGET_FRAMES);
 		assert_true(traceHashes[i] != FNV64_OFFSET);
 	}
 	assert_true(
@@ -587,18 +587,18 @@ M_TEST_DEFINE(cooperativePairTraceIsRepeatable) {
 #ifndef DISABLE_THREADING
 M_TEST_DEFINE(twoWorkerPairRunsContinuousLinkForTenSeconds) {
 	UNUSED(state);
-	struct ReplicatedPairSpike pair;
+	struct ReplicatedPairScheduler pair;
 	_initPair(&pair, true);
 	uint64_t startedAtMs = _monotonicMs();
 	assert_true(mCoreThreadStart(&pair.players[0].thread));
 	assert_true(mCoreThreadStart(&pair.players[1].thread));
 
 	MutexLock(&pair.metricsMutex);
-	while (pair.workerFrames[0] < SPIKE_TARGET_FRAMES ||
-	       pair.workerFrames[1] < SPIKE_TARGET_FRAMES) {
+	while (pair.workerFrames[0] < SCHEDULER_TARGET_FRAMES ||
+	       pair.workerFrames[1] < SCHEDULER_TARGET_FRAMES) {
 		assert_true(
 		    _monotonicMs() - startedAtMs <
-		    SPIKE_TIMEOUT_MS);
+		    SCHEDULER_TIMEOUT_MS);
 		ConditionWaitTimed(
 		    &pair.metricsChanged, &pair.metricsMutex, 100);
 	}
@@ -627,7 +627,7 @@ M_TEST_DEFINE(twoWorkerPairRunsContinuousLinkForTenSeconds) {
 		_assertHealthyResult(&results[i], i);
 		assert_true(sleeps[i] > 0);
 		assert_true(traces[i] != FNV64_OFFSET);
-		assert_true(traceSamples[i] >= SPIKE_TARGET_FRAMES);
+		assert_true(traceSamples[i] >= SCHEDULER_TARGET_FRAMES);
 	}
 	assert_true(
 	    results[0].transfers == results[1].transfers ||

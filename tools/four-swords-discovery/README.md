@@ -29,8 +29,8 @@ ambiguity, or a staged hash mismatch.
 Each endpoint also needs a run-owned
 `device-snapshots/<name>-mgba-qualification.opt`. It must select the policy
 named by the manifest (`mgba_link_netplay_latency = "stable"` or
-`"low_latency"`). Protocol v2 is the only shipped runtime and requires no
-runtime selector. Invoke
+`"low_latency"`). GBA Wi-Fi Link requires no runtime selector and registers
+the exact versioned `mgba-gba-link-replicated-v2` Netpacket contract. Invoke
 the helper with matching `EXPECTED_LATENCY_POLICY` and
 `EXPECTED_SELECTED_DELAY` values. The helper stages and hashes this file and
 then requires the latest runtime log to prove the same policy, 24-sample
@@ -44,19 +44,19 @@ version from the manifest. Record `installed_core_sha256` as JSON `null` and
 `installed_core_sha256_reason` as `APP_PRIVATE_PATH_UNREADABLE`; never invent a
 hash. The helper verifies the staged artifact's hash and embedded commit,
 verifies that evidence file and its digest, then proves at runtime that
-RetroArch loaded the expected app-private core path and that it registered the
-replicated-pair v2 interface. These are deliberately distinct custody facts.
+RetroArch loaded the expected app-private core path and registered GBA Wi-Fi
+Link with the exact versioned interface. These are deliberately distinct
+custody facts.
 
 Automation owns build verification, hashes, isolated configuration, logging,
 monitoring, evidence extraction, teardown, and cleanup. Human ownership is
 limited to installing/confirming the app-private core, save selection, game
 menus, sustained controller input, gameplay, and audiovisual judgment.
 
-The initial alpha.2 retest is a hard branch point. If Four Swords links, add a
-non-commercial topology regression and finish the baseline-success path. If it
-does not, retain the failure evidence and begin Stage A diagnostics. No
-production behavior may change until task 4.9 has converted trace evidence
-into a focused, reviewed delta requirement.
+The historical alpha.2 retest passed Four Swords discovery and shared
+gameplay, so the conditional Stage A observer was not implemented. The
+non-commercial topology regression and exact evidence remain in the archived
+change and validation matrix.
 
 ## Canonical Android control setup
 
@@ -67,6 +67,15 @@ command. Injecting a key or touch through ADB registers Android's synthetic
 `Virtual` controller; RetroArch can assign it to port 1 and move the handheld's
 real controls to port 2. Changing `input_player1_joypad_index` to compensate is
 not a fix because the synthetic device is transient.
+
+Every candidate-validating command (`preflight`, `stage`, `launch`, and
+`check-controls`) must provide `EXPECTED_RELEASE_COMMIT`,
+`EXPECTED_RELEASE_TAG`, `EXPECTED_CORE_SHA256`, and
+`EXPECTED_CORE_VERSION`; the helper deliberately has no stale candidate
+defaults. Recovery commands (`capture`, `stop`, and `cleanup`) need only the
+validated run ID and device/path contract, so an interrupted run can always be
+collected or removed safely. `CORE_PATH` may override the canonical local build
+path.
 
 Every qualification config must clone that device's current normal config and
 change only the isolated save/state/log paths, autosave/config persistence, and
@@ -89,8 +98,11 @@ assignment is `Ayn Odin` on Thor port 1 and `Ayn Odin (Xbox Mode)` on Odin port
 1, and a private screenshot proves that both touchscreen overlays are visible.
 `Virtual` on port 1, an AYN controller displaced to a later port, or a stale
 historical assignment all fail closed. The same check also verifies the exact
-RetroArch build, content CRC, app-private core path, v2 registration, isolated
-runtime paths, and remote hashes. If it fails, stop and relaunch without ADB
+RetroArch build, content CRC, app-private core path, the schema-1 structured
+GBA Wi-Fi Link product/protocol record, absence of a structured failure record,
+isolated runtime paths, and remote hashes. Friendly registration and failure
+sentences are display-only and are not qualification evidence. If validation
+fails, stop and relaunch without ADB
 input injection. Do not improvise controller indices, hotkeys, menu drivers,
 or tap sequences.
 

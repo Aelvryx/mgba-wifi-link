@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate paired protocol-v2 structured logs from a qualification run."""
+"""Validate paired GBA Wi-Fi Link structured logs from a qualification run."""
 
 from __future__ import annotations
 
@@ -126,6 +126,13 @@ BASELINE = re.compile(
     r"replicated-pair diagnostic: frames=(?P<frame>\d+).*"
     r"transfers=(?P<transfers>\d+)"
 )
+DIAGNOSTIC_SCHEMA = 1
+FAILURE = re.compile(
+    r"failure schema=(?P<schema>\d+) P(?P<role>[01]) "
+    r"s=(?P<session>\d+) generation=(?P<generation>\d+) "
+    r"reason=(?P<reason>\d+) state=(?P<state>[a-z][a-z0-9-]*) "
+    r"frame=(?P<frame>\d+)\s*$"
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -210,13 +217,24 @@ class FixtureStatus:
     timeouts1: int
 
 
+@dataclasses.dataclass(frozen=True)
+class Failure:
+    schema: int
+    role: int
+    session: int
+    generation: int
+    reason: int
+    state: str
+    frame: int
+
+
 @dataclasses.dataclass
 class Log:
     summaries: dict[int, Summary] = dataclasses.field(default_factory=dict)
     traces: dict[tuple[int, int], str] = dataclasses.field(default_factory=dict)
     fixtures: dict[int, FixtureStatus] = dataclasses.field(default_factory=dict)
     divergence_lines: list[str] = dataclasses.field(default_factory=list)
-    failure_lines: list[str] = dataclasses.field(default_factory=list)
+    failures: list[Failure] = dataclasses.field(default_factory=list)
     calibration: Calibration | None = None
 
 
@@ -236,11 +254,22 @@ def parse(path: Path) -> Log:
     for raw in path.read_text(errors="replace").splitlines():
         if "divergence frame=" in raw or "canonical state digest mismatch" in raw:
             result.divergence_lines.append(raw)
-        if (
-            "GBA replicated link: Link failed:" in raw
-            or "GBA replicated link: protocol-v2 session failed:" in raw
-        ):
-            result.failure_lines.append(raw)
+        if "failure schema=" in raw:
+            match = FAILURE.search(raw)
+            if not match:
+                raise ValueError(f"{path}: malformed structured failure record")
+            values = match.groupdict()
+            failure = Failure(
+                **{
+                    key: value if key == "state" else int(value)
+                    for key, value in values.items()
+                }
+            )
+            if failure.schema != DIAGNOSTIC_SCHEMA:
+                raise ValueError(
+                    f"{path}: unsupported failure diagnostic schema {failure.schema}"
+                )
+            result.failures.append(failure)
         match = CALIBRATION_LEGACY.search(raw)
         if match:
             values = match.groupdict()
@@ -421,8 +450,27 @@ def validate(
     errors: list[str] = []
     if host.divergence_lines or client.divergence_lines:
         errors.append("a log contains an explicit replica divergence")
-    if host.failure_lines or client.failure_lines:
+    if host.failures or client.failures:
         errors.append("a log contains an explicit replicated-link failure")
+    for label, log in (("host", host), ("client", client)):
+        expected_role = 0 if label == "host" else 1
+        if log.calibration:
+            expected_role = log.calibration.role
+        for failure in log.failures:
+            if failure.role != expected_role:
+                errors.append(
+                    f"{label} failure role P{failure.role} does not match P{expected_role}"
+                )
+            if log.calibration and failure.session not in (
+                0,
+                log.calibration.provisional,
+            ):
+                errors.append(f"{label} failure belongs to a different session")
+            if log.calibration and failure.generation not in (
+                0,
+                log.calibration.generation,
+            ):
+                errors.append(f"{label} failure belongs to a different generation")
     if expected_policy is not None or expected_delay is not None or one_frame_gate:
         if not host.calibration or not client.calibration:
             errors.append("calibration summary is missing on one or both endpoints")

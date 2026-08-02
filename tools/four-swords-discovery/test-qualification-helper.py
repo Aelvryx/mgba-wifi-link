@@ -123,7 +123,7 @@ if shell.startswith("cat "):
 if shell.startswith("grep -E "):
     path = shlex.split(shell)[-1]
     for line in remote(path).read_text(encoding="utf-8").splitlines():
-        if any(needle in line for needle in ("[Autoconf]", "Found joypad", "registered replicated-pair", "CRC32", "Loading dynamic", "RetroArch ")):
+        if any(needle in line for needle in ("[Autoconf]", "Found joypad", "product schema=", "failure schema=", "registered mgba-gba-wifi-link", "CRC32", "Loading dynamic", "RetroArch ")):
             print(line)
     raise SystemExit(0)
 if shell.startswith("rm -rf "):
@@ -287,10 +287,18 @@ class QualificationHelperTest(unittest.TestCase):
         }
         (self.run_root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
-    def run_helper(self, command: str, *, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    def run_helper(
+        self,
+        command: str,
+        *,
+        extra_env: dict[str, str] | None = None,
+        remove_env: tuple[str, ...] = (),
+    ) -> subprocess.CompletedProcess[str]:
         env = self.env.copy()
         if extra_env:
             env.update(extra_env)
+        for name in remove_env:
+            env.pop(name, None)
         return subprocess.run(
             ["bash", str(HELPER), command], env=env, text=True, capture_output=True, check=False
         )
@@ -331,7 +339,10 @@ class QualificationHelperTest(unittest.TestCase):
                     f"[Content] CRC32: {self.crc32}.",
                     f'[Override] Redirecting save file to "{self.remote_root}/saves/mGBA/game.srm".',
                     f'[Override] Redirecting save state to "{self.remote_root}/states/mGBA/game.state".',
-                    "Status: GBA replicated link: registered replicated-pair Netpacket protocol v2",
+                    "Status: GBA Wi-Fi Link: product schema=1 "
+                    "id=mgba-gba-wifi-link protocol=mgba-gba-link-replicated-v2",
+                    "Status: GBA Wi-Fi Link: registered mgba-gba-wifi-link "
+                    "using mgba-gba-link-replicated-v2",
                     f"attach P{role} policy={policy} delay={delay} calibration=25ms "
                     f"provisional={provisional} generation={generation}",
                     f"calibration P{role} provisional={provisional} generation={generation} "
@@ -387,6 +398,26 @@ class QualificationHelperTest(unittest.TestCase):
         self.assertTrue(all(self.remote_root in line for line in removals))
         self.assertTrue(all(f"rm -rf '{self.remote_base}'" not in line for line in removals))
         self.assertTrue(all("/.." not in line for line in removals))
+
+    def test_recovery_commands_do_not_require_candidate_identity(self) -> None:
+        candidate_variables = (
+            "EXPECTED_RELEASE_COMMIT",
+            "EXPECTED_RELEASE_TAG",
+            "EXPECTED_CORE_SHA256",
+            "EXPECTED_CORE_VERSION",
+        )
+        for serial in (self.thor_serial, self.odin_serial):
+            self.device_path(serial, self.remote_root).mkdir(parents=True)
+        result = self.run_helper("cleanup", remove_env=candidate_variables)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        result = self.run_helper("help", remove_env=("RUN_ID", *candidate_variables))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Commands: preflight", result.stdout)
+
+        result = self.run_helper("preflight", remove_env=candidate_variables)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("EXPECTED_RELEASE_COMMIT", result.stderr)
 
     def test_effective_final_config_value_is_enforced(self) -> None:
         thor_config = self.run_root / "device-snapshots/thor-qualification.cfg"
@@ -571,7 +602,12 @@ class QualificationHelperTest(unittest.TestCase):
         thor_log = self.device_path(self.thor_serial, f"{self.remote_root}/logs/retroarch.log")
         cases = (
             (f"RetroArch {self.frontend_version}", "RetroArch 9.9.9", "frontend identity"),
-            ("registered replicated-pair Netpacket protocol v2", "registered unknown core", "protocol-v2 registration"),
+            (
+                "product schema=1 id=mgba-gba-wifi-link "
+                "protocol=mgba-gba-link-replicated-v2",
+                "product schema=1 id=unknown protocol=unknown",
+                "runtime product identity",
+            ),
             (self.crc32, "0x00000000", "content identity"),
         )
         for old, new, expected_error in cases:
@@ -581,6 +617,87 @@ class QualificationHelperTest(unittest.TestCase):
                 thor_log.write_text(
                     thor_log.read_text(encoding="utf-8").replace(old, new), encoding="utf-8"
                 )
+                result = self.run_helper("check-controls")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(expected_error, result.stderr)
+
+    def test_runtime_registration_uses_structure_not_human_prose(self) -> None:
+        self.stage()
+        self.write_log(self.thor_serial, [("Ayn Odin", 1)])
+        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
+        for serial in (self.thor_serial, self.odin_serial):
+            log = self.device_path(serial, f"{self.remote_root}/logs/retroarch.log")
+            log.write_text(
+                log.read_text(encoding="utf-8").replace(
+                    "registered mgba-gba-wifi-link using "
+                    "mgba-gba-link-replicated-v2",
+                    "friendly registration wording may change",
+                ),
+                encoding="utf-8",
+            )
+        result = self.run_helper("check-controls")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_runtime_missing_or_malformed_structured_registration_fails(self) -> None:
+        self.stage()
+        self.write_log(self.thor_serial, [("Ayn Odin", 1)])
+        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
+        thor_log = self.device_path(
+            self.thor_serial, f"{self.remote_root}/logs/retroarch.log"
+        )
+        structured = (
+            "product schema=1 id=mgba-gba-wifi-link "
+            "protocol=mgba-gba-link-replicated-v2"
+        )
+        for replacement, expected_error in (
+            ("product-record-missing", "structured GBA Wi-Fi Link registration"),
+            ("product schema=1 path=/private", "malformed structured product"),
+        ):
+            with self.subTest(replacement=replacement):
+                self.write_log(self.thor_serial, [("Ayn Odin", 1)])
+                thor_log.write_text(
+                    thor_log.read_text(encoding="utf-8").replace(
+                        structured, replacement
+                    ),
+                    encoding="utf-8",
+                )
+                result = self.run_helper("check-controls")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(expected_error, result.stderr)
+
+    def test_runtime_structured_failure_is_role_and_session_bound(self) -> None:
+        self.stage()
+        self.write_log(self.thor_serial, [("Ayn Odin", 1)])
+        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
+        thor_log = self.device_path(
+            self.thor_serial, f"{self.remote_root}/logs/retroarch.log"
+        )
+        cases = (
+            (
+                "failure schema=1 P0 s=9 generation=10 reason=8 "
+                "state=failed frame=9000",
+                "structured GBA Wi-Fi Link failure",
+            ),
+            (
+                "failure schema=1 P1 s=9 generation=10 reason=8 "
+                "state=failed frame=9000",
+                "failure endpoint role",
+            ),
+            (
+                "failure schema=1 P0 s=11 generation=12 reason=8 "
+                "state=failed frame=9000",
+                "failure/attach session",
+            ),
+            (
+                "failure schema=1 P0 path=/private reason=8",
+                "malformed structured failure",
+            ),
+        )
+        for record, expected_error in cases:
+            with self.subTest(expected_error=expected_error):
+                self.write_log(self.thor_serial, [("Ayn Odin", 1)])
+                with thor_log.open("a", encoding="utf-8") as output:
+                    output.write(record + "\n")
                 result = self.run_helper("check-controls")
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(expected_error, result.stderr)

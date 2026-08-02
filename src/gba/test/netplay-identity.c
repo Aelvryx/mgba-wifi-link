@@ -7,7 +7,7 @@
 
 #include <mgba/core/core.h>
 #include <mgba/gba/core.h>
-#include <mgba/internal/gba/sio/netplay/identity-v1.h>
+#include <mgba/internal/gba/sio/netplay/identity.h>
 #include <mgba-util/sha1.h>
 #include <mgba-util/vfs.h>
 
@@ -128,69 +128,6 @@ M_TEST_DEFINE(frontendPatchedBytesDefineIdentity) {
 	_destroyCore(originalCore);
 	free(patched);
 	free(original);
-}
-
-static struct GBALinkDeterminismProfileInput _profile(void) {
-	return (struct GBALinkDeterminismProfileInput) {
-		.useBios = false,
-		.timingModel = 0,
-		.overclockQ16 = 0x10000,
-		.speedHackFlags = 0,
-		.idleOptimization = GBA_LINK_IDLE_OPTIMIZATION_NONE,
-		.rtcOverrideMode = GBA_LINK_RTC_OVERRIDE_NONE,
-		.cheatsEnabled = false,
-	};
-}
-
-M_TEST_DEFINE(profileCategoriesAreStableAndIndependent) {
-	struct GBALinkDeterminismProfileInput input = _profile();
-	struct GBALinkDeterminismDigest baseline[GBA_LINK_MAX_DETERMINISM_DIGESTS];
-	assert_true(GBALinkDeterminismProfileBuild(&input, baseline));
-	for (unsigned i = 0; i < GBA_LINK_MAX_DETERMINISM_DIGESTS; ++i) {
-		assert_int_equal(baseline[i].category, i + 1);
-	}
-
-	struct GBALinkDeterminismDigest changed[GBA_LINK_MAX_DETERMINISM_DIGESTS];
-	input.useBios = true;
-	memset(input.biosSha1, 0x42, sizeof(input.biosSha1));
-	assert_true(GBALinkDeterminismProfileBuild(&input, changed));
-	assert_memory_not_equal(
-	    baseline[0].digest, changed[0].digest, GBA_LINK_DIGEST_SIZE);
-	for (unsigned i = 1; i < GBA_LINK_MAX_DETERMINISM_DIGESTS; ++i) {
-		assert_memory_equal(
-		    baseline[i].digest, changed[i].digest, GBA_LINK_DIGEST_SIZE);
-	}
-
-	input = _profile();
-	input.overclockQ16 = 0x18000;
-	assert_true(GBALinkDeterminismProfileBuild(&input, changed));
-	assert_memory_not_equal(
-	    baseline[1].digest, changed[1].digest, GBA_LINK_DIGEST_SIZE);
-	assert_memory_equal(
-	    baseline[0].digest, changed[0].digest, GBA_LINK_DIGEST_SIZE);
-	assert_memory_equal(
-	    baseline[2].digest, changed[2].digest, GBA_LINK_DIGEST_SIZE);
-	assert_memory_equal(
-	    baseline[3].digest, changed[3].digest, GBA_LINK_DIGEST_SIZE);
-	assert_memory_equal(
-	    baseline[4].digest, changed[4].digest, GBA_LINK_DIGEST_SIZE);
-
-	input = _profile();
-	input.cheatsEnabled = true;
-	assert_true(GBALinkDeterminismProfileBuild(&input, changed));
-	assert_memory_not_equal(
-	    baseline[4].digest, changed[4].digest, GBA_LINK_DIGEST_SIZE);
-}
-
-M_TEST_DEFINE(invalidProfileEnumsAreRejectedWithoutOutput) {
-	struct GBALinkDeterminismProfileInput input = _profile();
-	input.rtcOverrideMode = 99;
-	struct GBALinkDeterminismDigest output[GBA_LINK_MAX_DETERMINISM_DIGESTS];
-	memset(output, 0xA5, sizeof(output));
-	struct GBALinkDeterminismDigest sentinel[GBA_LINK_MAX_DETERMINISM_DIGESTS];
-	memcpy(sentinel, output, sizeof(output));
-	assert_false(GBALinkDeterminismProfileBuild(&input, output));
-	assert_memory_equal(output, sentinel, sizeof(output));
 }
 
 static struct GBALinkV2DeterminismProfileInput _v2Profile(void) {
@@ -382,8 +319,6 @@ M_TEST_SUITE_DEFINE(GBALinkIdentity,
 	cmocka_unit_test(fileBackedContentIdentity),
 	cmocka_unit_test(extractedMemoryMatchesFileBackedIdentity),
 	cmocka_unit_test(frontendPatchedBytesDefineIdentity),
-	cmocka_unit_test(profileCategoriesAreStableAndIndependent),
-	cmocka_unit_test(invalidProfileEnumsAreRejectedWithoutOutput),
 	cmocka_unit_test(v2ProfileHasCanonicalGoldenDigests),
 	cmocka_unit_test(v2ProfileValidationAndCompatibilityAreBounded),
 	cmocka_unit_test(v2ProfileRejectsNoncanonicalInputs),

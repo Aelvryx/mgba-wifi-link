@@ -140,7 +140,7 @@
 
 ## 13. Finalize the experimental alpha increment
 
-- [ ] 13.1 Re-run the complete applicable automated gates against the immutable final head after all documentation/evidence edits and, if option exposure or build configuration changed after physical testing, repeat the exact-final-artifact physical stable fixture and commercial smoke.
+- [x] 13.1 Re-run the complete applicable automated gates against the immutable production, tooling, documentation, and evidence head after all substantive edits; GitHub Actions run 30738776350 passed all six jobs at `3092ec5bc4b17ac302d25658e40b503a6af7746a`, and this task-ledger-only completion commit does not alter the tested artifact or qualification result. Option exposure and build configuration did not change after physical testing, so no repeat physical run was required.
 - [x] 13.2 Update README, compatibility table, operational/protocol documentation, build identity, and validation matrix to record the qualified two-frame result and explicitly unqualified one-frame option.
 - [x] 13.3 Confirm the tracked branch contains only source, tests, documentation, and OpenSpec artifacts: generated build trees and all private manifests, device logs, ROMs, saves, screenshots, staged installers, and temporary binaries remain ignored or were removed from the devices.
 - [x] 13.4 Reconcile every OpenSpec requirement and task with exact evidence: calibration did not select one frame, so the conditional long gate was not activated and the successful two-frame improvement is not held hostage to an unmade one-frame claim.

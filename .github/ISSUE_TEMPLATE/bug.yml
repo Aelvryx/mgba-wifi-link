@@ -1,0 +1,71 @@
+name: Bug report
+description: Report a reproducible defect in the Wi-Fi link fork
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not upload commercial ROMs, BIOS files, private saves, IP addresses, or raw controller histories.
+  - type: input
+    id: build
+    attributes:
+      label: Fork build
+      description: Release tag or full commit, plus core SHA-256 for an unpublished build.
+    validations:
+      required: true
+  - type: input
+    id: frontend
+    attributes:
+      label: Frontend and devices
+      description: RetroArch version, OS, and both device models.
+    validations:
+      required: true
+  - type: input
+    id: content
+    attributes:
+      label: Game identity
+      description: Title and region/revision or a redistributable fixture. Do not attach the ROM.
+    validations:
+      required: true
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Failure phase
+      options:
+        - Installation or core loading
+        - Host/join or attachment
+        - Game cable discovery
+        - Active gameplay
+        - Disconnect or teardown
+        - Saving or persistence
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized evidence
+      description: Paste relevant host/client excerpts or link to sanitized logs.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I used identical ROM bytes on both endpoints.
+          required: true
+        - label: I removed commercial content, saves, addresses, paths, and input history from the report.
+          required: true

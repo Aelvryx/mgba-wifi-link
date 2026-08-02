@@ -51,7 +51,6 @@ CURRENT_SURFACES = (
     "docs/gba-wifi-link-integration.md",
     "docs/protocol-v1-retirement.md",
     "openspec/specs",
-    "openspec/changes/integrate-replicated-link-runtime",
 )
 
 HISTORICAL_OR_MIGRATION_PATHS = (

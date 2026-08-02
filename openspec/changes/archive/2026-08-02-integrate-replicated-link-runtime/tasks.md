@@ -80,4 +80,4 @@
 - [x] 8.2 Obtain focused review of the canonical-versus-versioned boundary, spike/audit invariant ownership, current/historical documentation split, and unchanged-wire/behavior claim.
 - [x] 8.3 Open the implementation PR with exact baseline/final target mappings and protected validation evidence.
 - [x] 8.4 Require every protected GitHub check to pass on the immutable reviewed head and confirm no physical rerun was skipped after an actual behavior change.
-- [ ] 8.5 Sync approved capability deltas, remove the empty `gba-link-runtime-selection` main-spec directory, archive `integrate-replicated-link-runtime`, merge through protected `master`, update the roadmap/release issue, and leave the workspace clean.
+- [x] 8.5 Sync approved capability deltas, remove the empty `gba-link-runtime-selection` main-spec directory, archive `integrate-replicated-link-runtime`, merge through protected `master`, update the roadmap/release issue, and leave the workspace clean.

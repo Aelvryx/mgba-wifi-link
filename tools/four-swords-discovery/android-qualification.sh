@@ -263,7 +263,7 @@ check_control_device() {
   log="$(latest_log "$serial")"
   [[ -n "$log" ]] || { echo "$name has no qualification log" >&2; exit 1; }
   echo "===== $name"
-  $ADB_BIN -s "$serial" shell "grep -E '\[Autoconf\]|Found joypad|registered replicated-pair|CRC32|Loading dynamic libretro core|^RetroArch |attach P[01] policy=|calibration P[01] provisional=' '$log'" | tr -d '\r'
+  $ADB_BIN -s "$serial" shell "grep -E '\[Autoconf\]|Found joypad|registered replicated-pair|CRC32|Loading dynamic libretro core|^RetroArch |attach P[01] policy=|calibration P[01]|cal-(rtt|select|digest-[ab]) P[01]' '$log'" | tr -d '\r'
   if ! $ADB_BIN -s "$serial" shell "cat '$log'" | tr -d '\r' | \
       python3 "$VALIDATOR" runtime-log \
         --frontend-version "$EXPECTED_FRONTEND_VERSION" \

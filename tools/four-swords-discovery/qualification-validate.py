@@ -25,7 +25,7 @@ ATTACH_RE = re.compile(
     r"delay=(?P<delay>[0-9]+) calibration=(?P<calibration>[0-9]+)ms "
     r"provisional=(?P<provisional>[0-9]+) generation=(?P<generation>[0-9]+)"
 )
-CALIBRATION_RE = re.compile(
+CALIBRATION_LEGACY_RE = re.compile(
     r"calibration P(?P<role>[01]) provisional=(?P<provisional>[0-9]+) "
     r"generation=(?P<generation>[0-9]+) samples=(?P<samples>[0-9]+) "
     r"min=(?P<minimum>[0-9]+)us p50=(?P<p50>[0-9]+)us "
@@ -34,6 +34,31 @@ CALIBRATION_RE = re.compile(
     r"range=(?P<range_min>[0-9]+)-(?P<range_max>[0-9]+) "
     r"delay=(?P<delay>[0-9]+) reason=(?P<reason>[0-9]+) "
     r"digest=(?P<digest>[0-9a-f]{64})"
+)
+CALIBRATION_IDENTITY_RE = re.compile(
+    r"calibration P(?P<role>[01]) provisional=(?P<provisional>[0-9]+) "
+    r"generation=(?P<generation>[0-9]+) samples=(?P<samples>[0-9]+)"
+)
+CALIBRATION_RTT_RE = re.compile(
+    r"cal-rtt P(?P<role>[01]) s=(?P<session>[0-9]+) "
+    r"min=(?P<minimum>[0-9]+)us "
+    r"p50=(?P<p50>[0-9]+)us p95=(?P<p95>[0-9]+)us "
+    r"max=(?P<maximum>[0-9]+)us"
+)
+CALIBRATION_SELECT_RE = re.compile(
+    r"cal-select P(?P<role>[01]) s=(?P<session>[0-9]+) "
+    r"selector=(?P<selector>[0-9]+) "
+    r"floor=(?P<floor>[0-9]+) range=(?P<range_min>[0-9]+)-"
+    r"(?P<range_max>[0-9]+) delay=(?P<delay>[0-9]+) "
+    r"reason=(?P<reason>[0-9]+)"
+)
+CALIBRATION_DIGEST_A_RE = re.compile(
+    r"cal-digest-a P(?P<role>[01]) s=(?P<session>[0-9]+) "
+    r"d=(?P<digest_a>[0-9a-f]{32})"
+)
+CALIBRATION_DIGEST_B_RE = re.compile(
+    r"cal-digest-b P(?P<role>[01]) s=(?P<session>[0-9]+) "
+    r"d=(?P<digest_b>[0-9a-f]{32})"
 )
 
 
@@ -249,6 +274,7 @@ def validate_config(args: argparse.Namespace) -> None:
         "autosave_interval": "0",
         "log_to_file": "true",
         "log_to_file_timestamp": "true",
+        "global_core_options": "true",
         "core_options_path": f"{args.remote_root}/config/mgba-qualification.opt",
     }
     for key, expected_value in expected.items():
@@ -313,11 +339,50 @@ def validate_runtime_log(args: argparse.Namespace) -> None:
 
     expected_policy, expected_floor = LATENCY_POLICIES[args.latency_policy]
     attaches = list(ATTACH_RE.finditer(text))
-    calibrations = list(CALIBRATION_RE.finditer(text))
-    if not attaches or not calibrations:
+    calibrations = list(CALIBRATION_LEGACY_RE.finditer(text))
+    if calibrations:
+        calibration = calibrations[-1].groupdict()
+    else:
+        identities = list(CALIBRATION_IDENTITY_RE.finditer(text))
+        rtts = list(CALIBRATION_RTT_RE.finditer(text))
+        selections = list(CALIBRATION_SELECT_RE.finditer(text))
+        digests_a = list(CALIBRATION_DIGEST_A_RE.finditer(text))
+        digests_b = list(CALIBRATION_DIGEST_B_RE.finditer(text))
+        if identities and rtts and selections and digests_a and digests_b:
+            components = [
+                identities[-1].groupdict(),
+                rtts[-1].groupdict(),
+                selections[-1].groupdict(),
+                digests_a[-1].groupdict(),
+                digests_b[-1].groupdict(),
+            ]
+            roles = {component["role"] for component in components}
+            if len(roles) != 1:
+                _fail("runtime calibration records disagree on endpoint role")
+            sessions = {
+                component["session"]
+                for component in components
+                if "session" in component
+            }
+            if sessions != {components[0]["provisional"]}:
+                _fail("runtime calibration records disagree on provisional session")
+            calibration = {}
+            for component in components:
+                calibration.update(
+                    {
+                        key: value
+                        for key, value in component.items()
+                        if key != "session"
+                    }
+                )
+            calibration["digest"] = (
+                calibration.pop("digest_a") + calibration.pop("digest_b")
+            )
+        else:
+            calibration = None
+    if not attaches or calibration is None:
         _fail("runtime log does not contain complete latency calibration evidence")
     attach = attaches[-1].groupdict()
-    calibration = calibrations[-1].groupdict()
     _require_equal(int(attach["role"]), args.expected_role, "runtime attach endpoint role")
     _require_equal(
         int(calibration["role"]), args.expected_role, "runtime calibration endpoint role"

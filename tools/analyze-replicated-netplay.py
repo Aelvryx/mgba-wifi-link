@@ -33,7 +33,7 @@ TIMING = re.compile(
     r"fps-milli=(?P<fps_milli>\d+) rv-p50=(?P<rv_p50_ms>\d+)ms "
     r"rv-p95=(?P<rv_p95_ms>\d+)ms rv-max=(?P<rv_max_ms>\d+)ms"
 )
-CALIBRATION = re.compile(
+CALIBRATION_LEGACY = re.compile(
     r"calibration P(?P<role>[01]) provisional=(?P<provisional>\d+) "
     r"generation=(?P<generation>\d+) samples=(?P<samples>\d+) "
     r"min=(?P<minimum_us>\d+)us p50=(?P<p50_us>\d+)us "
@@ -43,7 +43,27 @@ CALIBRATION = re.compile(
     r"delay=(?P<delay>\d+) reason=(?P<reason>\d+) "
     r"digest=(?P<digest>[0-9a-f]{64})"
 )
-INPUT_WAIT = re.compile(
+CALIBRATION_IDENTITY = re.compile(
+    r"calibration P(?P<role>[01]) provisional=(?P<provisional>\d+) "
+    r"generation=(?P<generation>\d+) samples=(?P<samples>\d+)"
+)
+CALIBRATION_RTT = re.compile(
+    r"cal-rtt P(?P<role>[01]) s=(?P<session>\d+) min=(?P<minimum_us>\d+)us "
+    r"p50=(?P<p50_us>\d+)us p95=(?P<p95_us>\d+)us "
+    r"max=(?P<maximum_us>\d+)us"
+)
+CALIBRATION_SELECT = re.compile(
+    r"cal-select P(?P<role>[01]) s=(?P<session>\d+) selector=(?P<selector>\d+) "
+    r"floor=(?P<floor>\d+) range=(?P<range_min>\d+)-(?P<range_max>\d+) "
+    r"delay=(?P<delay>\d+) reason=(?P<reason>\d+)"
+)
+CALIBRATION_DIGEST_A = re.compile(
+    r"cal-digest-a P(?P<role>[01]) s=(?P<session>\d+) d=(?P<digest_a>[0-9a-f]{32})"
+)
+CALIBRATION_DIGEST_B = re.compile(
+    r"cal-digest-b P(?P<role>[01]) s=(?P<session>\d+) d=(?P<digest_b>[0-9a-f]{32})"
+)
+INPUT_WAIT_LEGACY = re.compile(
     r"periodic input-wait P(?P<role>[01]) released=(?P<released>\d+) "
     r"waited=(?P<waited>\d+) wait-free-ppm=(?P<wait_free_ppm>\d+) "
     r"p95=(?P<input_wait_p95_us>\d+)us max=(?P<input_wait_max_us>\d+)us "
@@ -53,13 +73,44 @@ INPUT_WAIT = re.compile(
     r"poll-send=(?P<poll_send_count>\d+)/(?P<poll_send_average_us>\d+)/"
     r"(?P<poll_send_max_us>\d+)us"
 )
-INPUT_LEAD = re.compile(
+INPUT_WAIT = re.compile(
+    r"periodic input-wait P(?P<role>[01]) released=(?P<released>\d+) "
+    r"waited=(?P<waited>\d+) wait-free-ppm=(?P<wait_free_ppm>\d+)"
+)
+INPUT_TAIL = re.compile(
+    r"periodic input-tail P(?P<role>[01]) p95=(?P<input_wait_p95_us>\d+)us "
+    r"max=(?P<input_wait_max_us>\d+)us total=(?P<input_wait_total_us>\d+)us"
+)
+INPUT_HEALTH = re.compile(
+    r"periodic input-health P(?P<role>[01]) "
+    r"deadline-miss=(?P<input_deadline_misses>\d+) "
+    r"clock-failure=(?P<telemetry_clock_failures>\d+)"
+)
+POLL_SEND = re.compile(
+    r"periodic poll-send P(?P<role>[01]) count=(?P<poll_send_count>\d+) "
+    r"avg=(?P<poll_send_average_us>\d+)us max=(?P<poll_send_max_us>\d+)us"
+)
+INPUT_LEAD_LEGACY = re.compile(
     r"periodic input-lead P(?P<role>[01]) "
     r"inserts=(?P<input_insertions0>\d+)/(?P<input_insertions1>\d+) "
     r"frames-avg=(?P<input_lead_frames_average0>\d+)/"
     r"(?P<input_lead_frames_average1>\d+) "
     r"frames-max=(?P<input_lead_frames_max0>\d+)/"
     r"(?P<input_lead_frames_max1>\d+) "
+    r"us-avg=(?P<input_lead_us_average0>\d+)/"
+    r"(?P<input_lead_us_average1>\d+) "
+    r"us-max=(?P<input_lead_us_max0>\d+)/(?P<input_lead_us_max1>\d+)"
+)
+INPUT_LEAD_FRAME = re.compile(
+    r"periodic input-lead-frame P(?P<role>[01]) "
+    r"inserts=(?P<input_insertions0>\d+)/(?P<input_insertions1>\d+) "
+    r"frames-avg=(?P<input_lead_frames_average0>\d+)/"
+    r"(?P<input_lead_frames_average1>\d+) "
+    r"frames-max=(?P<input_lead_frames_max0>\d+)/"
+    r"(?P<input_lead_frames_max1>\d+)"
+)
+INPUT_LEAD_TIME = re.compile(
+    r"periodic input-lead-time P(?P<role>[01]) "
     r"us-avg=(?P<input_lead_us_average0>\d+)/"
     r"(?P<input_lead_us_average1>\d+) "
     r"us-max=(?P<input_lead_us_max0>\d+)/(?P<input_lead_us_max1>\d+)"
@@ -181,6 +232,7 @@ def parse(path: Path) -> Log:
     result = Log()
     pending_frame: int | None = None
     pending_runtime: dict[str, int] | None = None
+    calibration_parts: dict[str, int | str] = {}
     for raw in path.read_text(errors="replace").splitlines():
         if "divergence frame=" in raw or "canonical state digest mismatch" in raw:
             result.divergence_lines.append(raw)
@@ -189,7 +241,7 @@ def parse(path: Path) -> Log:
             or "GBA replicated link: protocol-v2 session failed:" in raw
         ):
             result.failure_lines.append(raw)
-        match = CALIBRATION.search(raw)
+        match = CALIBRATION_LEGACY.search(raw)
         if match:
             values = match.groupdict()
             result.calibration = Calibration(
@@ -199,6 +251,42 @@ def parse(path: Path) -> Log:
                 }
             )
             continue
+        match = CALIBRATION_IDENTITY.search(raw)
+        if match:
+            calibration_parts = _values(match)
+            continue
+        for pattern in (
+            CALIBRATION_RTT,
+            CALIBRATION_SELECT,
+            CALIBRATION_DIGEST_A,
+            CALIBRATION_DIGEST_B,
+        ):
+            match = pattern.search(raw)
+            if not match or not calibration_parts:
+                continue
+            values = match.groupdict()
+            if int(values["role"]) != calibration_parts.get("role"):
+                raise ValueError(f"{path}: calibration role changed within one summary")
+            if int(values["session"]) != calibration_parts.get("provisional"):
+                raise ValueError(f"{path}: calibration session changed within one summary")
+            calibration_parts.update(
+                {
+                    key: value if key in ("digest_a", "digest_b") else int(value)
+                    for key, value in values.items()
+                    if key not in ("role", "session")
+                }
+            )
+            if "digest_a" in calibration_parts and "digest_b" in calibration_parts:
+                calibration_parts["digest"] = (
+                    str(calibration_parts["digest_a"])
+                    + str(calibration_parts["digest_b"])
+                )
+            required = {field.name for field in dataclasses.fields(Calibration)}
+            if required <= calibration_parts.keys():
+                result.calibration = Calibration(
+                    **{key: calibration_parts[key] for key in required}
+                )
+            break
         match = SUMMARY.search(raw)
         if match:
             values = _values(match)
@@ -235,7 +323,7 @@ def parse(path: Path) -> Log:
             del values["role"]
             result.summaries[pending_frame] = dataclasses.replace(current, **values)
             continue
-        match = INPUT_WAIT.search(raw)
+        match = INPUT_WAIT_LEGACY.search(raw)
         if match and pending_frame is not None:
             values = _values(match)
             current = result.summaries[pending_frame]
@@ -244,7 +332,27 @@ def parse(path: Path) -> Log:
             del values["role"]
             result.summaries[pending_frame] = dataclasses.replace(current, **values)
             continue
-        match = INPUT_LEAD.search(raw)
+        for pattern, label in (
+            (INPUT_WAIT, "input-wait"),
+            (INPUT_TAIL, "input-tail"),
+            (INPUT_HEALTH, "input-health"),
+            (POLL_SEND, "poll-send"),
+        ):
+            match = pattern.search(raw)
+            if not match or pending_frame is None:
+                continue
+            values = _values(match)
+            current = result.summaries[pending_frame]
+            if values["role"] != current.role:
+                raise ValueError(f"{path}: {label} role changed at frame {pending_frame}")
+            del values["role"]
+            result.summaries[pending_frame] = dataclasses.replace(current, **values)
+            break
+        else:
+            match = None
+        if match:
+            continue
+        match = INPUT_LEAD_LEGACY.search(raw)
         if match and pending_frame is not None:
             values = _values(match)
             current = result.summaries[pending_frame]
@@ -252,6 +360,22 @@ def parse(path: Path) -> Log:
                 raise ValueError(f"{path}: input-lead role changed at frame {pending_frame}")
             del values["role"]
             result.summaries[pending_frame] = dataclasses.replace(current, **values)
+            continue
+        for pattern, label in (
+            (INPUT_LEAD_FRAME, "input-lead-frame"),
+            (INPUT_LEAD_TIME, "input-lead-time"),
+        ):
+            match = pattern.search(raw)
+            if not match or pending_frame is None:
+                continue
+            values = _values(match)
+            current = result.summaries[pending_frame]
+            if values["role"] != current.role:
+                raise ValueError(f"{path}: {label} role changed at frame {pending_frame}")
+            del values["role"]
+            result.summaries[pending_frame] = dataclasses.replace(current, **values)
+            break
+        if match:
             continue
         match = FIXTURE.search(raw)
         if match and pending_frame is not None:

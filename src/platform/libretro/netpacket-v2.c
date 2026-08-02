@@ -934,41 +934,55 @@ static void _logRuntimeSummary(
 	       adapter->metrics.inputWaitedFrames) * UINT64_C(1000000) /
 	          adapter->metrics.releasedFrames
 	    : 0;
-	char inputTiming[448];
+	char inputTiming[192];
 	snprintf(inputTiming, sizeof(inputTiming),
 	    "%s input-wait P%u released=%" PRIu64 " waited=%" PRIu64
-	    " wait-free-ppm=%" PRIu64 " p95=%" PRIu64 "us max=%" PRIu64
-	    "us total=%" PRIu64 "us deadline-miss=%" PRIu64
-	    " clock-failure=%" PRIu64 " poll-send=%" PRIu64
-	    "/%" PRIu64 "/%" PRIu64 "us cal-pkt=%" PRIu64 "/%" PRIu64
-	    " cal-bytes=%" PRIu64 "/%" PRIu64 " queue-high=%zu",
+	    " wait-free-ppm=%" PRIu64,
 	    event ? event : "runtime", adapter->session.localRole,
 	    adapter->metrics.releasedFrames,
-	    adapter->metrics.inputWaitedFrames, waitFreePpm,
+	    adapter->metrics.inputWaitedFrames, waitFreePpm);
+	_log(RETRO_LOG_INFO, inputTiming);
+	snprintf(inputTiming, sizeof(inputTiming),
+	    "%s input-tail P%u p95=%" PRIu64 "us max=%" PRIu64
+	    "us total=%" PRIu64 "us",
+	    event ? event : "runtime", adapter->session.localRole,
 	    _inputWaitPercentile(adapter, 95),
 	    adapter->metrics.inputWaitMaxUs,
-	    adapter->metrics.inputWaitTotalUs,
+	    adapter->metrics.inputWaitTotalUs);
+	_log(RETRO_LOG_INFO, inputTiming);
+	snprintf(inputTiming, sizeof(inputTiming),
+	    "%s input-health P%u deadline-miss=%" PRIu64
+	    " clock-failure=%" PRIu64,
+	    event ? event : "runtime", adapter->session.localRole,
 	    adapter->metrics.inputDeadlineMisses,
-	    adapter->metrics.telemetryClockFailures,
+	    adapter->metrics.telemetryClockFailures);
+	_log(RETRO_LOG_INFO, inputTiming);
+	snprintf(inputTiming, sizeof(inputTiming),
+	    "%s poll-send P%u count=%" PRIu64 " avg=%" PRIu64
+	    "us max=%" PRIu64 "us",
+	    event ? event : "runtime", adapter->session.localRole,
 	    adapter->metrics.inputPollSendCount,
 	    adapter->metrics.inputPollSendCount
 	        ? adapter->metrics.inputPollSendTotalUs /
 	              adapter->metrics.inputPollSendCount
 	        : 0,
-	    adapter->metrics.inputPollSendMaxUs,
+	    adapter->metrics.inputPollSendMaxUs);
+	_log(RETRO_LOG_INFO, inputTiming);
+	snprintf(inputTiming, sizeof(inputTiming),
+	    "%s calibration-traffic P%u packets=%" PRIu64 "/%" PRIu64
+	    " bytes=%" PRIu64 "/%" PRIu64 " queue-high=%zu",
+	    event ? event : "runtime", adapter->session.localRole,
 	    adapter->metrics.calibrationSentPackets,
 	    adapter->metrics.calibrationReceivedPackets,
 	    adapter->metrics.calibrationSentBytes,
 	    adapter->metrics.calibrationReceivedBytes,
 	    adapter->metrics.queueHighWater);
 	_log(RETRO_LOG_INFO, inputTiming);
-	char inputLead[320];
+	char inputLead[192];
 	snprintf(inputLead, sizeof(inputLead),
-	    "%s input-lead P%u inserts=%" PRIu64 "/%" PRIu64
+	    "%s input-lead-frame P%u inserts=%" PRIu64 "/%" PRIu64
 	    " frames-avg=%" PRIu64 "/%" PRIu64
-	    " frames-max=%" PRIu64 "/%" PRIu64
-	    " us-avg=%" PRIu64 "/%" PRIu64
-	    " us-max=%" PRIu64 "/%" PRIu64,
+	    " frames-max=%" PRIu64 "/%" PRIu64,
 	    event ? event : "runtime", adapter->session.localRole,
 	    adapter->metrics.inputInsertions[0],
 	    adapter->metrics.inputInsertions[1],
@@ -981,7 +995,12 @@ static void _logRuntimeSummary(
 	              adapter->metrics.inputInsertions[1]
 	        : 0,
 	    adapter->metrics.inputLeadFramesMax[0],
-	    adapter->metrics.inputLeadFramesMax[1],
+	    adapter->metrics.inputLeadFramesMax[1]);
+	_log(RETRO_LOG_INFO, inputLead);
+	snprintf(inputLead, sizeof(inputLead),
+	    "%s input-lead-time P%u us-avg=%" PRIu64 "/%" PRIu64
+	    " us-max=%" PRIu64 "/%" PRIu64,
+	    event ? event : "runtime", adapter->session.localRole,
 	    adapter->metrics.inputInsertions[0]
 	        ? adapter->metrics.inputLeadUsTotal[0] /
 	              adapter->metrics.inputInsertions[0]
@@ -1699,26 +1718,41 @@ void mLibretroNetpacketV2RunBegin(void) {
 		_log(RETRO_LOG_INFO, message);
 		char digest[MGBA_SHA256_DIGEST_SIZE * 2 + 1];
 		_digestText(_adapter.session.selection.digest, digest);
-		char calibration[384];
+		char calibration[192];
 		snprintf(calibration, sizeof(calibration),
 		    "calibration P%u provisional=%" PRIu64
-		    " generation=%" PRIu64 " samples=%u min=%" PRIu32
-		    "us p50=%" PRIu32 "us p95=%" PRIu32 "us max=%" PRIu32
-		    "us selector=%u floor=%u range=%u-%u delay=%u reason=%u"
-		    " digest=%s",
+		    " generation=%" PRIu64 " samples=%u",
 		    _adapter.localId, _adapter.session.sessionId,
 		    _adapter.session.calibration.generation,
-		    GBA_LINK_CALIBRATION_SAMPLE_COUNT,
+		    GBA_LINK_CALIBRATION_SAMPLE_COUNT);
+		_log(RETRO_LOG_INFO, calibration);
+		snprintf(calibration, sizeof(calibration),
+		    "cal-rtt P%u s=%" PRIu64 " min=%" PRIu32 "us p50=%" PRIu32
+		    "us p95=%" PRIu32 "us max=%" PRIu32 "us",
+		    _adapter.localId, _adapter.session.sessionId,
 		    _adapter.session.selection.minimumRttUs,
 		    _adapter.session.selection.p50RttUs,
 		    _adapter.session.selection.p95RttUs,
-		    _adapter.session.selection.maximumRttUs,
+		    _adapter.session.selection.maximumRttUs);
+		_log(RETRO_LOG_INFO, calibration);
+		snprintf(calibration, sizeof(calibration),
+		    "cal-select P%u s=%" PRIu64 " selector=%u floor=%u range=%u-%u"
+		    " delay=%u reason=%u",
+		    _adapter.localId, _adapter.session.sessionId,
 		    GBA_LINK_INPUT_SELECTOR_POLICY_VERSION,
 		    _adapter.session.selection.productionFloor,
 		    _adapter.session.selection.overlappingMinimum,
 		    _adapter.session.selection.overlappingMaximum,
 		    _adapter.session.selection.selectedDelay,
-		    _adapter.session.selection.reason, digest);
+		    _adapter.session.selection.reason);
+		_log(RETRO_LOG_INFO, calibration);
+		snprintf(calibration, sizeof(calibration),
+		    "cal-digest-a P%u s=%" PRIu64 " d=%.32s",
+		    _adapter.localId, _adapter.session.sessionId, digest);
+		_log(RETRO_LOG_INFO, calibration);
+		snprintf(calibration, sizeof(calibration),
+		    "cal-digest-b P%u s=%" PRIu64 " d=%.32s",
+		    _adapter.localId, _adapter.session.sessionId, digest + 32);
 		_log(RETRO_LOG_INFO, calibration);
 		char profileDigest[MGBA_SHA256_DIGEST_SIZE * 2 + 1];
 		if (_profileIdentityText(

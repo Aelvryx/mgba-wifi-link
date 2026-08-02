@@ -38,10 +38,13 @@ def log(
     trace1 = "ab" * 32
     lines = [
             *( [
-                f"calibration P{role} provisional=17 generation=19 samples=24 "
-                "min=1000us p50=2000us p95=3000us max=4000us "
-                "selector=1 floor=1 range=1-8 delay=1 reason=1 "
-                f"digest={'12' * 32}"
+                f"calibration P{role} provisional=17 generation=19 samples=24",
+                f"cal-rtt P{role} s=17 min=1000us p50=2000us "
+                "p95=3000us max=4000us",
+                f"cal-select P{role} s=17 selector=1 floor=1 "
+                "range=1-8 delay=1 reason=1",
+                f"cal-digest-a P{role} s=17 d={'12' * 16}",
+                f"cal-digest-b P{role} s=17 d={'12' * 16}",
             ] if calibration else [] ),
             f"periodic P{role} f=108000 pkt=110000/109999 "
             f"B=12500000/12499920 chk=1799 sio={transfers}/{transfers * 2}",
@@ -53,12 +56,15 @@ def log(
             f"periodic timing P{role} elapsed=1808135ms "
             f"fps-milli={fps_milli} rv-p50=5ms rv-p95=12ms rv-max=18ms",
             f"periodic input-wait P{role} released=108000 waited={waited} "
-            f"wait-free-ppm={wait_free_ppm} p95={input_p95_us}us "
-            f"max={input_max_us}us total={input_total_us}us "
-            f"deadline-miss={deadline_misses} "
-            f"clock-failure={clock_failures} poll-send=108000/40/100us",
-            f"periodic input-lead P{role} inserts=108002/108002 "
-            "frames-avg=1/1 frames-max=1/1 "
+            f"wait-free-ppm={wait_free_ppm}",
+            f"periodic input-tail P{role} p95={input_p95_us}us "
+            f"max={input_max_us}us total={input_total_us}us",
+            f"periodic input-health P{role} deadline-miss={deadline_misses} "
+            f"clock-failure={clock_failures}",
+            f"periodic poll-send P{role} count=108000 avg=40us max=100us",
+            f"periodic input-lead-frame P{role} inserts=108002/108002 "
+            "frames-avg=1/1 frames-max=1/1",
+            f"periodic input-lead-time P{role} "
             "us-avg=16742/16742 us-max=16742/16742",
         ]
     if fixture:
@@ -71,6 +77,24 @@ def log(
 
 
 def main() -> int:
+    # Stock Android RetroArch retained at most 135 characters from these
+    # status records during physical qualification.
+    bounded_prefixes = (
+        "calibration ",
+        "cal-rtt ",
+        "cal-select ",
+        "cal-digest-",
+        "periodic input-wait ",
+        "periodic input-tail ",
+        "periodic input-health ",
+        "periodic poll-send ",
+        "periodic input-lead-frame ",
+        "periodic input-lead-time ",
+    )
+    for line in log(0).splitlines():
+        if line.startswith(bounded_prefixes):
+            assert len("Status: GBA replicated link: " + line) <= 135
+
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         host_path = root / "host.log"
@@ -94,6 +118,14 @@ def main() -> int:
             expected_delay=1,
             one_frame_gate=True,
         )
+
+        client_path.write_text(log(1).replace("cal-rtt P1 s=17", "cal-rtt P1 s=18"))
+        try:
+            ANALYZER.parse(client_path)
+        except ValueError as error:
+            assert "calibration session changed" in str(error)
+        else:
+            raise AssertionError("mixed calibration component sessions were accepted")
 
         client_path.write_text(log(1, input_max_us=16_744))
         errors = ANALYZER.validate(

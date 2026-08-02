@@ -212,6 +212,7 @@ class QualificationHelperTest(unittest.TestCase):
                 'autosave_interval = "0"',
                 'log_to_file = "true"',
                 'log_to_file_timestamp = "true"',
+                'global_core_options = "true"',
                 f'core_options_path = "{self.remote_root}/config/mgba-qualification.opt"',
                 "",
             ]
@@ -335,9 +336,13 @@ class QualificationHelperTest(unittest.TestCase):
                     f"attach P{role} policy={policy} delay={delay} calibration=25ms "
                     f"provisional={provisional} generation={generation}",
                     f"calibration P{role} provisional={provisional} generation={generation} "
-                    "samples=24 min=1000us "
-                    f"p50=2000us p95=3000us max=4000us selector=1 floor={floor} "
-                    f"range=1-8 delay={delay} reason=2 digest={'a' * 64}",
+                    "samples=24",
+                    f"cal-rtt P{role} s={provisional} min=1000us p50=2000us "
+                    "p95=3000us max=4000us",
+                    f"cal-select P{role} s={provisional} selector=1 floor={floor} "
+                    f"range=1-8 delay={delay} reason=2",
+                    f"cal-digest-a P{role} s={provisional} d={'a' * 32}",
+                    f"cal-digest-b P{role} s={provisional} d={'a' * 32}",
                     controller_lines,
                     "",
                 ]
@@ -394,6 +399,17 @@ class QualificationHelperTest(unittest.TestCase):
         result = self.run_helper("preflight")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("effective config value savefile_directory", result.stderr)
+
+    def test_run_specific_core_options_must_be_enabled(self) -> None:
+        thor_config = self.run_root / "device-snapshots/thor-qualification.cfg"
+        with thor_config.open("a", encoding="utf-8") as output:
+            output.write('global_core_options = "false"\n')
+        manifest = json.loads((self.run_root / "manifest.json").read_text(encoding="utf-8"))
+        manifest["devices"][0]["configuration_sha256"] = self.sha(thor_config)
+        (self.run_root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        result = self.run_helper("preflight")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("effective config value global_core_options", result.stderr)
 
     def test_manifest_cannot_attest_a_different_loaded_core(self) -> None:
         manifest_path = self.run_root / "manifest.json"
@@ -473,6 +489,21 @@ class QualificationHelperTest(unittest.TestCase):
         mixed_session = self.run_helper("check-controls")
         self.assertNotEqual(mixed_session.returncode, 0)
         self.assertIn("attach/calibration provisional ID", mixed_session.stderr)
+
+    def test_runtime_gate_rejects_mixed_calibration_component_sessions(self) -> None:
+        self.stage()
+        self.write_log(self.thor_serial, [("Ayn Odin", 1)])
+        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
+        thor_log = self.device_path(self.thor_serial, f"{self.remote_root}/logs/retroarch.log")
+        thor_log.write_text(
+            thor_log.read_text(encoding="utf-8").replace(
+                "cal-rtt P0 s=9", "cal-rtt P0 s=11"
+            ),
+            encoding="utf-8",
+        )
+        result = self.run_helper("check-controls")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("calibration records disagree on provisional session", result.stderr)
 
     def test_low_latency_prepared_run_is_accepted_when_manifest_matches(self) -> None:
         manifest_path = self.run_root / "manifest.json"

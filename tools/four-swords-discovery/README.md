@@ -76,7 +76,10 @@ The helper interprets the last occurrence of every config key, matching
 RetroArch's effective value. It requires run-specific save, state, and log
 directories, disabled config-save-on-exit and autosave, timestamped file
 logging, a run-specific `core_options_path`, native joypad index 0, and no
-injected host hotkey. This prevents the qualification launch from persisting
+injected host hotkey. It also requires `global_core_options = "true"`; without
+that setting RetroArch may ignore the run-specific options file in favour of a
+per-core file from the normal configuration tree. This prevents the
+qualification launch from persisting
 core-option changes into the normal RetroArch configuration tree.
 
 After launch, the human presses one physical button on each handheld. Do not

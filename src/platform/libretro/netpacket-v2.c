@@ -37,6 +37,8 @@
 	M_NETPACKET_V2_SYMBOL(TestCallbackGeneration)
 #define mLibretroNetpacketV2TestPendingPacketCount \
 	M_NETPACKET_V2_SYMBOL(TestPendingPacketCount)
+#define mLibretroNetpacketV2TestInjectInbound \
+	M_NETPACKET_V2_SYMBOL(TestInjectInbound)
 #define mLibretroNetpacketV2TestPlayerForRole \
 	M_NETPACKET_V2_SYMBOL(TestPlayerForRole)
 #define mLibretroNetpacketV2TestInstallPair \
@@ -2094,6 +2096,19 @@ size_t mLibretroNetpacketV2TestPendingPacketCount(void) {
 	return count;
 }
 
+bool mLibretroNetpacketV2TestInjectInbound(
+		const void* data, size_t size) {
+	if (!_adapter.sessionPrepared || !data || !size ||
+	    !GBALinkTransportQueueInbound(
+	        &_adapter.transport, _adapter.session.transportGeneration,
+	        data, size)) {
+		return false;
+	}
+	bool result = GBALinkV2SessionUpdate(&_adapter.session, false);
+	_finishFailed();
+	return result;
+}
+
 uint8_t mLibretroNetpacketV2TestPlayerForRole(enum GBALinkRole role) {
 	return _playerForRole(role);
 }
@@ -2110,9 +2125,15 @@ bool mLibretroNetpacketV2TestInstallPair(
 	GBALinkTransportInit(
 	    &_adapter.transport, &_transportVTable, &_adapter);
 	GBALinkV2SessionInit(&_adapter.session, &_adapter.transport);
+	if (!GBALinkTransportStart(
+	        &_adapter.transport, generation, role)) {
+		return false;
+	}
 	_adapter.sessionPrepared = true;
 	_adapter.session.state = GBA_LINK_V2_SESSION_READY;
 	_adapter.session.localRole = role;
+	_adapter.session.transportGeneration = generation;
+	_adapter.session.sessionId = generation;
 	_adapter.session.snapshotGeneration = generation;
 	_adapter.session.inputDelay = 2;
 	_adapter.session.firstFrame = 0;

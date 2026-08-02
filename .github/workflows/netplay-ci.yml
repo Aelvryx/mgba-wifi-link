@@ -120,14 +120,10 @@ jobs:
       - name: Build focused suite
         run: |
           cmake --build "${{ matrix.build_dir }}" --parallel 2 --target \
-            test-gba-netplay-driver \
             test-gba-netplay-identity \
             test-gba-netplay-input-sync \
-            test-gba-netplay-integration \
-            test-gba-netplay-protocol \
             test-gba-netplay-protocol-v2 \
             test-gba-netplay-rtc-sync \
-            test-gba-netplay-session \
             test-gba-netplay-session-v2 \
             test-gba-netplay-transport \
             test-gba-replica \
@@ -135,7 +131,6 @@ jobs:
             test-gba-replicated-pair-spike \
             test-gba-sio \
             test-libretro-replicated-pair-spike \
-            test-libretro-netpacket \
             test-libretro-netpacket-v2 \
             test-libretro-netpacket-v2-replay
 
@@ -150,6 +145,11 @@ jobs:
             --output-on-failure \
             --tests-regex 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' \
             --parallel 2
+
+      - name: Audit retired protocol-v1 surfaces
+        run: |
+          python3 tools/audit-protocol-v1-absence.py \
+            --build-dir "${{ matrix.build_dir }}"
 
   fixture:
     name: Fixture reproducibility
@@ -180,8 +180,8 @@ jobs:
 
       - name: Validate structured-log analyzers
         run: |
-          python3 tools/test-analyze-link-netplay-log.py
           python3 tools/test-analyze-replicated-netplay.py
+          python3 tools/audit-protocol-v1-absence.py
 
       - name: Validate Android qualification helper
         run: |
@@ -230,3 +230,6 @@ jobs:
           test -s build-ci-android-arm64/mgba_libretro.so
           file build-ci-android-arm64/mgba_libretro.so \
             | grep --fixed-strings 'ARM aarch64'
+          python3 tools/audit-protocol-v1-absence.py \
+            --build-dir build-ci-android-arm64 \
+            --binary build-ci-android-arm64/mgba_libretro.so

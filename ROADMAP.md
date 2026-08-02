@@ -1,8 +1,9 @@
 # Roadmap
 
-This roadmap is a direction-setting document, not a promise or release date.
-GitHub issues carry the concrete work; OpenSpec is used only when a change needs
-an explicit behavioural contract.
+This roadmap keeps the project pointed in a useful direction without pretending
+that experimental emulator work has predictable dates. GitHub issues carry
+actionable work; OpenSpec is used only when a change needs a behavioural or
+architectural contract.
 
 ## Product principles
 
@@ -14,49 +15,117 @@ an explicit behavioural contract.
    qualification into ceremony.
 6. Keep human input for complex navigation and gameplay; automate everything
    mechanical and repeatable.
+7. Prefer a smaller dependable product over many half-supported modes.
 
-## Now — usable experimental release
+## Lightweight WSJF
 
-These are the next practical steps toward a less confusing, easier-to-install
-alpha.
+Priorities use a deliberately rough Weighted Shortest Job First calculation:
 
-- **[Remove cable-sync v1 from the shipped runtime](https://github.com/AnthonyStainer/mgba/issues/6).** Its diagnostic purpose is
-  complete, it is not playable, and archived design/traces preserve the useful
-  history. Removal should include the frontend option, registration/dispatch,
-  dead production code, and obsolete tests while retaining any genuinely useful
-  generic SIO coverage.
-- **[Publish the current protocol-v2 foundation cleanly](https://github.com/AnthonyStainer/mgba/issues/7).** Produce a reproducible
-  Android ARM64 artifact from an exact reviewed head, with install/upgrade notes,
-  hashes, and an honest compatibility table.
-- **[Grow compatibility evidence](https://github.com/AnthonyStainer/mgba/issues/8).** Make it easy to report successful and failed
-  Multi-Pak titles without distributing copyrighted data.
-- **[Measure a direct 5 GHz hotspot path](https://github.com/AnthonyStainer/mgba/issues/9).** Compare mesh LAN and direct hotspot
-  calibration/input-wait metrics. Promote a one-frame floor only if the exact
-  artifact passes the existing bilateral gate; otherwise retain two frames as
-  the default without drama.
+```text
+WSJF = (user/release value + time criticality + risk reduction/opportunity) / job size
+```
 
-## Next — broader usefulness
+Each input uses relative buckets `1, 2, 3, 5, 8, 13, 21`, with scores rounded
+half up to one decimal place. A higher score means
+“consider sooner,” not “promise a date.” Scores are estimates, and dependencies
+override the arithmetic: a release cannot precede the cleanup or decision that
+defines what it contains. We should rescore when evidence changes, not after
+every completed task.
 
-- **[Four-player Multi-Pak](https://github.com/AnthonyStainer/mgba/issues/10).** Extend replicated topology, input ownership,
-  verification, UX, and device qualification without multiplying networked
-  cable transactions.
-- **[Linux handheld builds](https://github.com/AnthonyStainer/mgba/issues/11).** Establish reproducible libretro builds and install
-  guidance for H700-class Anbernic devices, beginning with the RG34XXSP.
-- **Synchronized cartridge inputs.** Negotiate and carry sensor values where
-  useful instead of rejecting tilt, gyro, or luminance titles.
-- **Release automation.** Build, hash, attest, and attach supported artifacts
-  from reviewed tags with minimal manual handling.
+| Rank | Outcome | Value | Urgency | Risk / enablement | Size | WSJF | Horizon |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | [Remove shipped cable-sync v1](https://github.com/AnthonyStainer/mgba/issues/6) | 5 | 8 | 8 | 3 | **7.0** | Now |
+| 2 | [Publish the current v2 foundation](https://github.com/AnthonyStainer/mgba/issues/7) | 8 | 8 | 5 | 3 | **7.0** | Now, after #6 and #9 |
+| 3 | [Test hotspot latency and decide the default](https://github.com/AnthonyStainer/mgba/issues/9) | 5 | 5 | 8 | 3 | **6.0** | Now |
+| 4 | [Grow the compatibility matrix](https://github.com/AnthonyStainer/mgba/issues/8) | 5 | 5 | 5 | 3 | **5.0** | Now / continuous |
+| 5 | Produce a one-command sanitized diagnostic bundle | 5 | 3 | 8 | 5 | **3.2** | Next |
+| 6 | Automate reviewed release artifacts and provenance | 5 | 3 | 8 | 5 | **3.2** | Next |
+| 7 | Fuzz packet, profile, and replica-bundle decoding | 3 | 3 | 8 | 5 | **2.8** | Next |
+| 8 | [Qualify H700 Linux handhelds](https://github.com/AnthonyStainer/mgba/issues/11) | 5 | 3 | 5 | 5 | **2.6** | Next |
+| 9 | Establish CPU, memory, audio, and thermal budgets | 5 | 3 | 5 | 5 | **2.6** | Next |
+| 10 | Harden Android suspend, resume, and network-change teardown | 5 | 3 | 5 | 8 | **1.6** | Next |
+| 11 | [Design four-player Multi-Pak](https://github.com/AnthonyStainer/mgba/issues/10) | 8 | 3 | 8 | 13 | **1.5** | Next / research |
+| 12 | Synchronize cartridge sensors | 3 | 2 | 5 | 8 | **1.3** | Later |
+| 13 | Support NORMAL8/NORMAL32 and cross-ROM cable sessions | 5 | 2 | 8 | 13 | **1.2** | Later / research |
+| 14 | Add Single-Pak multiboot | 8 | 3 | 8 | 21 | **0.9** | Later / research |
+| 15 | Reconnection and host migration | 5 | 1 | 5 | 13 | **0.8** | Later |
+| 16 | Prediction or rollback | 8 | 1 | 8 | 21 | **0.8** | Later / research |
+| 17 | Wireless Adapter / RFU | 8 | 1 | 8 | 21 | **0.8** | Later / research |
+| 18 | Live-session savestates | 3 | 1 | 5 | 13 | **0.7** | Later |
+| 19 | GB/GBC network link | 5 | 1 | 5 | 21 | **0.5** | Outside current GBA scope |
+| 20 | Internet relay / NAT traversal | 5 | 1 | 3 | 21 | **0.4** | Later |
 
-## Later — research, not commitments
+The low scores for Single-Pak, RFU, and rollback do not mean low value. They
+reflect large uncertain jobs whose first useful increment is expensive.
 
-- Prediction/rollback to reduce perceived input latency beyond fixed buffering.
-- Single-Pak multiboot.
-- GBA Wireless Adapter/RFU support.
-- Reconnection and host migration.
-- Internet relay or NAT traversal.
+## Recommended execution order
 
-Each of these changes alters either emulation scope or distributed failure
-semantics and needs evidence before an implementation promise.
+### Now — close the current alpha properly
+
+1. **Remove v1 (#6).** It is selectable production surface for an unusable
+   prototype. Preserve its archived design and evidence; delete the frontend
+   option, registration/dispatch, dead implementation, and obsolete tests while
+   retaining generic SIO coverage.
+2. **Run the direct-hotspot comparison (#9).** This is a short decision test,
+   not a new latency architecture. If one frame passes the existing bilateral
+   gate, propose the smallest default change. Otherwise retain two frames.
+3. **Publish v0.2.0 alpha (#7).** Release the exact resulting v2-only artifact
+   with hashes, install/upgrade notes, and honest policy/compatibility claims.
+4. **Grow compatibility evidence (#8).** This proceeds continuously and should
+   not hold the release hostage to an arbitrary game count.
+
+### Next — strengthen the product and open platforms
+
+- Add a sanitized report bundle so users can capture build identity, frontend,
+  policy, attachment, calibration, wait, and teardown evidence without leaking
+  ROM, save, path, address, or input data.
+- Automate release builds, checksums, provenance, and GitHub attachments from a
+  reviewed tag.
+- Fuzz all network- and replica-controlled decoders and retain their allocation
+  bounds under sanitizers.
+- Establish a repeatable performance/thermal budget before multiplying local
+  replicas or adding lower-powered targets.
+- Run the [H700 feasibility path](https://github.com/AnthonyStainer/mgba/issues/11).
+- Harden lifecycle failure when Android backgrounds the frontend, changes
+  networks, or suspends one endpoint.
+- Research [four-player topology](https://github.com/AnthonyStainer/mgba/issues/10)
+  in parallel, but do not commit implementation until CPU/memory/thermal and
+  distributed-state costs are credible.
+
+### Later — expand cable and cartridge scope
+
+#### Single-Pak multiboot
+
+Single-Pak is a distinct architecture, not a player-count toggle. The host owns
+the cartridge while clients receive and execute a downloaded multiboot image
+from WRAM. It therefore needs:
+
+- asymmetric initial machine/content bundles;
+- accurate BIOS/multiboot transfer and client boot state;
+- a different content-identity and persistence policy;
+- reset, failure, and retry semantics during download;
+- redistributable multiboot fixtures before commercial qualification.
+
+The first step is a feasibility/specification change, not production code.
+
+#### Other link families
+
+- NORMAL8/NORMAL32 and cross-ROM sessions need explicit identity and timing
+  rules rather than relaxing exact-ROM equality globally.
+- Wireless Adapter/RFU is a different peripheral and multiplayer protocol, not
+  a cable mode.
+- GB/GBC link is outside the current GBA product boundary and should not inherit
+  assumptions from the replicated GBA pair.
+
+#### Latency and resilience
+
+- Prediction/rollback can reduce perceived input latency but changes save,
+  audio, presentation, verification, and failure semantics.
+- Reconnection, host migration, and live-session savestates all require a
+  complete transferable session state—not merely keeping a socket alive.
+- Internet relay/NAT traversal should follow a clear hostile-peer security model
+  and should reuse frontend facilities where possible rather than adding silent
+  direct sockets.
 
 ## Decision log
 
@@ -65,14 +134,18 @@ semantics and needs evidence before an implementation promise.
 | Production runtime | Replicated protocol v2 only | v1 removal change is reviewed |
 | Default delay | Calibrated, minimum two frames | Exact one-frame candidate passes both-device gate |
 | Network path | Ordinary LAN supported | Direct-hotspot A/B evidence exists |
-| Players | Exactly two | Four-player topology proposal is reviewed |
+| Players | Exactly two | Four-player resource and topology proposal is reviewed |
+| Cartridge model | Identical Multi-Pak cartridges | Single-Pak or cross-ROM proposal defines asymmetric identity |
+| Serial modes | GBA MULTI for networked play | NORMAL-mode need is characterized and reviewed |
 | Savestates | Rejected during a live session | Network session state has a complete serialization design |
+| Internet | Trusted local network | Threat model and frontend transport path are agreed |
 
 ## How work is tracked
 
-- Milestones group the current release horizon.
-- Issues define concrete outcomes and link back here.
+- The `v0.2.0 — Usable alpha` milestone contains the current release horizon.
+- Issues define actionable now/next outcomes; later inventory remains here until
+  it is close enough to investigate responsibly.
 - OpenSpec captures architecture or behavioural changes, then is archived after
   merge.
-- This file is updated when priorities or decision gates change—not after every
-  implementation detail.
+- This file is rescored when evidence, dependencies, or product priorities
+  materially change.

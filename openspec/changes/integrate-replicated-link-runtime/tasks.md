@@ -79,5 +79,5 @@
 - [x] 8.1 Organize the patch so versioned-session boundary preservation, product-façade rename, prototype/audit cleanup, and specification/documentation integration are independently reviewable from any unavoidable semantic edit.
 - [x] 8.2 Obtain focused review of the canonical-versus-versioned boundary, spike/audit invariant ownership, current/historical documentation split, and unchanged-wire/behavior claim.
 - [x] 8.3 Open the implementation PR with exact baseline/final target mappings and protected validation evidence.
-- [ ] 8.4 Require every protected GitHub check to pass on the immutable reviewed head and confirm no physical rerun was skipped after an actual behavior change.
+- [x] 8.4 Require every protected GitHub check to pass on the immutable reviewed head and confirm no physical rerun was skipped after an actual behavior change.
 - [ ] 8.5 Sync approved capability deltas, remove the empty `gba-link-runtime-selection` main-spec directory, archive `integrate-replicated-link-runtime`, merge through protected `master`, update the roadmap/release issue, and leave the workspace clean.

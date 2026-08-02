@@ -2,10 +2,9 @@
 
 Protocol v2 replaces networked SIO transactions with a deterministic pair of
 local GBA replicas on each endpoint. It is intentionally incompatible with the
-retained distributed-SIO diagnostic protocol:
+retired distributed-SIO protocol:
 
 - release compatibility string: `mgba-gba-link-replicated-v2`
-- diagnostic compatibility string: `mgba-gba-link-netplay-v1`
 - wire version: exact version `2`; no automatic downgrade
 - runtime compatibility version: exact version `2`; older experimental-v2
   peers are rejected during `HELLO`
@@ -138,9 +137,9 @@ later replicated frame is released.
 ## Runtime messages
 
 Protocol v2 admits only fixed-delay input batches, periodic pair-state checks
-and detach control after attachment. Protocol-v1 grant, mode, transfer and
-completion messages have different magic/version semantics and cannot decode
-inside a v2 session.
+and detach control after attachment. A bounded raw retired-wire regression
+proves that old magic/version bytes cannot decode or dispatch inside a v2
+session, either before replica capture or after readiness.
 
 Each endpoint owns a bounded 256-frame input ring for each logical player.
 Host packets may author P0 only and client packets P1 only. An initial seed

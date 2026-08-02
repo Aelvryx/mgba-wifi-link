@@ -1,7 +1,7 @@
 # mGBA Wi-Fi Link
 
-[![GBA Wi-Fi link netplay](https://github.com/AnthonyStainer/mgba/actions/workflows/netplay-ci.yml/badge.svg)](https://github.com/AnthonyStainer/mgba/actions/workflows/netplay-ci.yml)
-[![Latest prerelease](https://img.shields.io/github/v/release/AnthonyStainer/mgba?include_prereleases&label=prerelease)](https://github.com/AnthonyStainer/mgba/releases)
+[![GBA Wi-Fi link netplay](https://github.com/Aelvryx/mgba/actions/workflows/netplay-ci.yml/badge.svg)](https://github.com/Aelvryx/mgba/actions/workflows/netplay-ci.yml)
+[![Latest prerelease](https://img.shields.io/github/v/release/Aelvryx/mgba?include_prereleases&label=prerelease)](https://github.com/Aelvryx/mgba/releases)
 [![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
 
 An experimental [mGBA](https://github.com/mgba-emu/mgba) fork for two-player
@@ -42,7 +42,7 @@ still experimental and untested games remain untested.
 
 ## Install the Android core
 
-1. Download the newest Android ARM64 core from [Releases](https://github.com/AnthonyStainer/mgba/releases).
+1. Download the newest Android ARM64 core from [Releases](https://github.com/Aelvryx/mgba/releases).
 2. Put the `.so` file in Android's Downloads folder.
 3. In RetroArch, choose **Load Core → Install or Restore a Core** and select it.
 4. Repeat on the second device using the identical core file.
@@ -136,9 +136,11 @@ The main implementation lives in `src/gba/sio/netplay`; the libretro adapter is
 
 The immediate engineering priorities are:
 
-1. Remove the obsolete distributed-cable v1 runtime from shipped builds.
-2. Package the current deterministic/calibrated v2 runtime as a clean release.
-3. Expand compatibility reporting and test direct-hotspot latency.
+1. Validate and package the v2-only deterministic/calibrated runtime as a
+   clean release.
+2. Test direct-hotspot latency and decide whether one-frame buffering can
+   become the default.
+3. Expand compatibility reporting and diagnostic capture.
 
 Four-player Multi-Pak and Linux handheld support follow. Rollback/prediction,
 Single-Pak, and RFU are later research, not promises. See [ROADMAP.md](ROADMAP.md)

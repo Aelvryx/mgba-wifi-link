@@ -9,6 +9,8 @@
 #include <mgba/internal/gba/sio/netplay/session-v2.h>
 #include <mgba-util/sha256.h>
 
+#include "netplay-legacy-wire-fixture.h"
+
 struct V2Endpoint {
 	struct GBALinkTransport transport;
 	struct GBALinkV2Session session;
@@ -424,6 +426,26 @@ static void _deinitPair(struct V2Pair* pair) {
 	GBALinkV2SessionDeinit(&pair->host.session);
 	GBALinkTransportDeinit(&pair->client.transport);
 	GBALinkTransportDeinit(&pair->host.transport);
+}
+
+M_TEST_DEFINE(legacyV1HeaderDuringAttachmentCapturesNoReplica) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	_startPair(&pair);
+	assert_true(GBALinkTransportQueueInbound(
+	    &pair.host.transport, pair.host.transport.generation,
+	    GBALinkTestLegacyV1Header,
+	    sizeof(GBALinkTestLegacyV1Header)));
+	_pump(&pair, 2);
+	assert_int_equal(
+	    pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
+	assert_int_equal(
+	    pair.host.failureReason, GBA_LINK_V2_REASON_MALFORMED_PACKET);
+	assert_int_equal(pair.host.captureCalls, 0);
+	assert_int_equal(pair.client.captureCalls, 0);
+	assert_int_equal(pair.host.installCalls, 0);
+	assert_int_equal(pair.client.installCalls, 0);
+	_deinitPair(&pair);
 }
 
 M_TEST_DEFINE(bilateralBundlesInstallInCanonicalOrderAndReleaseAtomically) {
@@ -1009,6 +1031,7 @@ M_TEST_DEFINE(runtimeInputDeadlineFailsWithSpecificReason) {
 }
 
 M_TEST_SUITE_DEFINE(GBALinkSessionV2,
+	cmocka_unit_test(legacyV1HeaderDuringAttachmentCapturesNoReplica),
 	cmocka_unit_test(bilateralBundlesInstallInCanonicalOrderAndReleaseAtomically),
 	cmocka_unit_test(acceptAckDelayDoesNotAffectCalibratedInputDelay),
 	cmocka_unit_test(replicaCaptureCannotInflateCalibratedInputDelay),

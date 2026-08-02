@@ -2,7 +2,10 @@
 
 Date: 2026-07-31
 
-Status: protocol v1 is correct on the successful path but is not commercially playable. This document is the regression baseline for `make-wifi-link-netplay-realtime`.
+Status: retired protocol-v1 historical evidence. The implementation and its
+packet-log analyzer are no longer in the active source tree; Git history
+preserves both. This document remains the architectural regression baseline
+for `make-wifi-link-netplay-realtime`.
 
 ## Scope and privacy
 
@@ -17,7 +20,8 @@ The captures used isolated diagnostic configurations and save directories. Norma
 | Run 2 Thor core log | `c61fbe4f394089cb33959745de479da1ebc56476936587cf9fcdfe59c9671741` |
 | Run 2 Odin core log | `1a51eb60f84dbb2518f248598201e6d48df8450f52a19d3f846e412a5d256dfa` |
 
-Metrics are reproducible from equivalent traces with:
+At the time of capture, metrics were reproduced from equivalent traces with
+the now-retired analyzer:
 
 ```sh
 tools/analyze-link-netplay-log.py retroarch.log \
@@ -126,4 +130,7 @@ The replacement is successful only when the exact two-device build demonstrates 
 - an honest compatibility result for every attempted title, with Four Swords retained as a named investigation rather than counted as a successful link;
 - recorded input delay, rendezvous percentiles, CPU, memory, temperature, and throttling state.
 
-The protocol-v1 implementation remains valuable as a deterministic SIO and failure-semantics oracle. It is not a viable commercial-game runtime.
+The retired implementation was valuable as a deterministic SIO and
+failure-semantics oracle, but it was not a viable commercial-game runtime.
+Current correctness evidence belongs to the common SIO, replicated-pair, v2
+session, adapter, and paired-replay suites.

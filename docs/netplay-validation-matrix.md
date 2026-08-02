@@ -1,6 +1,6 @@
 # GBA Link Netplay Validation Matrix
 
-Date: 2026-08-01
+Date: 2026-08-02
 
 This document maps the MVP's automated evidence to protocol phases and failure
 classes. Test names below are cmocka case names inside the named source file.
@@ -17,7 +17,7 @@ Protocol v2 replaces per-cable-event network barriers with one replicated
 P0/P1 pair on each endpoint and frame-authoritative input packets. The
 protocol-v2 branch has the following automated and rendered-device evidence:
 
-- All 17 focused SIO, input-ring, v2 codec/session, replica, pair,
+- All 13 surviving focused SIO, input-ring, v2 codec/session, replica, pair,
   save-routing, and libretro-adapter test executables pass normally, under
   ASan/UBSan with leak detection, and under TSan.
 - `test-libretro-netpacket-v2-replay` compiles the actual adapter twice into
@@ -432,9 +432,10 @@ different sampled trace, mismatched serial counters, inadequate verification
 or audio coverage, empty audio, non-frame-scaled packet counts, excessive
 queue growth, or more than five-percent serial-throughput difference.
 
-The remaining sections document protocol-v1 correctness and its earlier
-physical qualification. That code remains a diagnostic SIO oracle; it is not
-the normal release runtime.
+The remaining sections are retired protocol-v1 historical evidence. The
+listed sources, tests, analyzer, and selectable runtime have since been
+deleted; the measurements remain an architectural record and can be
+reconstructed from Git history rather than the active toolchain.
 
 ## Deterministic two-core evidence
 
@@ -557,6 +558,24 @@ non-purpose-built Multi-Pak workload used for this qualification.
 
 ## Commands and current results
 
+The active v2-only focused targets are:
+
+```text
+test-gba-netplay-identity
+test-gba-netplay-input-sync
+test-gba-netplay-protocol-v2
+test-gba-netplay-rtc-sync
+test-gba-netplay-session-v2
+test-gba-netplay-transport
+test-gba-replica
+test-gba-replicated-pair
+test-gba-replicated-pair-spike
+test-gba-sio
+test-libretro-replicated-pair-spike
+test-libretro-netpacket-v2
+test-libretro-netpacket-v2-replay
+```
+
 Normal focused suite:
 
 ```sh
@@ -568,7 +587,7 @@ env PYTHONPATH=/tmp/mgba-build-tools \
     -R 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' -j8
 ```
 
-Result: 18/18 tests passed.
+Result after protocol-v1 removal: 13/13 tests passed.
 
 ASan/UBSan focused suite:
 
@@ -583,7 +602,8 @@ env PYTHONPATH=/tmp/mgba-build-tools \
     -R 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' -j4
 ```
 
-Result: 18/18 tests passed with no sanitizer or leak finding.
+Result after protocol-v1 removal: 13/13 tests passed with no sanitizer or leak
+finding.
 
 TSan focused suite:
 
@@ -597,15 +617,16 @@ env PYTHONPATH=/tmp/mgba-build-tools \
     -R 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' -j4
 ```
 
-Result: 18/18 tests passed with no thread-sanitizer finding.
+Result after protocol-v1 removal: 13/13 tests passed with no thread-sanitizer
+finding.
 
-The complete normal suite passed 38 of 39 tests. Its sole failure is the known
+The complete normal suite passed 33 of 34 tests. Its sole failure is the known
 pinned-upstream `util-hash/stagedCrc32` case. That identical failure is recorded
 in the unmodified baseline and is unrelated to this change. These results were
-rerun after splitting the patch stack and rebasing it onto
-`71aa6c7dab7654bfdbbd57e696f704671a97e55d`.
+rerun on the v2-only branch based on
+`a3c888308c31c4498d6218256e6e39d36b7630e9`.
 
-`.github/workflows/netplay-ci.yml` independently configures and builds all 18
+`.github/workflows/netplay-ci.yml` independently configures and builds all 13
 focused test executables on Ubuntu 24.04 in normal, ASan/UBSan, and TSan jobs.
 It also runs the complete normal mGBA suite while independently confirming the
 single pinned upstream failure, builds and inspects an Android arm64-v8a
@@ -642,8 +663,8 @@ stable two-frame, experimental one-frame, and injected higher-than-two-frame
 policies. In each policy both endpoint pairs reported the same nonzero local
 transfer/completion/word counts, all four corresponding replicas matched, and
 the wire carried 252 frame-input packets for 125 released frames. Every packet
-on the replay wire decoded as protocol v2; no protocol-v1 per-transfer message
-was accepted.
+on the replay wire decoded as protocol v2; no retired per-transfer message was
+accepted.
 
 Selector policy 1 uses 24 integer-microsecond samples. Exact boundary vectors
 include 16,742 microseconds selecting one frame and 16,743 microseconds

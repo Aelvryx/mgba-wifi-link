@@ -17,6 +17,8 @@
 #include <mgba/internal/gba/sio/netplay/protocol-v2.h>
 #include <mgba-util/vfs.h>
 
+#include "../../gba/test/netplay-legacy-wire-fixture.h"
+
 struct V2Frontend {
 	struct retro_netpacket_callback callbacks;
 	bool supported;
@@ -46,6 +48,7 @@ enum V2TeardownAction {
 	V2_TEARDOWN_STOP,
 	V2_TEARDOWN_RESET,
 	V2_TEARDOWN_UNLOAD,
+	V2_TEARDOWN_LEGACY_PACKET,
 };
 
 static struct V2Frontend* _frontend;
@@ -458,6 +461,11 @@ static void _teardownPairAction(
 	case V2_TEARDOWN_UNLOAD:
 		mLibretroNetpacketV2Unload();
 		break;
+	case V2_TEARDOWN_LEGACY_PACKET:
+		assert_false(mLibretroNetpacketV2TestInjectInbound(
+		    GBALinkTestLegacyV1Header,
+		    sizeof(GBALinkTestLegacyV1Header)));
+		break;
 	}
 	assert_int_equal(fixture->save[23], 0xFF);
 	assert_false(GBASIOMultiplayerIsBusy(original->sio.siocnt));
@@ -493,6 +501,13 @@ M_TEST_DEFINE(failureBeforeVerificationRestoresAttachmentSave) {
 			mLibretroNetpacketV2Unload();
 		}
 	}
+}
+
+M_TEST_DEFINE(legacyV1HeaderAfterReadinessRestoresAttachmentCheckpoint) {
+	struct V2AdapterFixture* fixture = *state;
+	_teardownPairAction(
+	    fixture, GBA_LINK_ROLE_HOST,
+	    V2_TEARDOWN_LEGACY_PACKET);
 }
 
 M_TEST_DEFINE(verifiedRollbackRestoresStateAndSaveAtomically) {
@@ -580,6 +595,9 @@ M_TEST_SUITE_DEFINE_SETUP_TEARDOWN(LibretroNetpacketV2,
 	    missingPollingAndSynchronousStopFailClosed, _setup, _teardown),
 	cmocka_unit_test_setup_teardown(
 	    failureBeforeVerificationRestoresAttachmentSave,
+	    _setup, _teardown),
+	cmocka_unit_test_setup_teardown(
+	    legacyV1HeaderAfterReadinessRestoresAttachmentCheckpoint,
 	    _setup, _teardown),
 	cmocka_unit_test_setup_teardown(
 	    verifiedRollbackRestoresStateAndSaveAtomically,

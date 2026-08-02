@@ -235,7 +235,6 @@ class QualificationHelperTest(unittest.TestCase):
             options.write_text(
                 '\n'.join(
                     (
-                        'mgba_gba_link_netplay_runtime = "replicated-v2"',
                         f'mgba_link_netplay_latency = "{self.latency_policy}"',
                         '',
                     )
@@ -518,7 +517,6 @@ class QualificationHelperTest(unittest.TestCase):
         for index, name in enumerate(("thor", "odin")):
             options = self.run_root / "device-snapshots" / f"{name}-mgba-qualification.opt"
             options.write_text(
-                'mgba_gba_link_netplay_runtime = "replicated-v2"\n'
                 'mgba_link_netplay_latency = "low_latency"\n',
                 encoding="utf-8",
             )

@@ -126,20 +126,6 @@ struct retro_core_option_v2_definition option_defs_us[] = {
       "OFF"
    },
    {
-      "mgba_gba_link_netplay_runtime",
-      "GBA Link Netplay Runtime (Restart)",
-      NULL,
-      "Selects the real-time replicated-pair protocol. The cable-synchronized v1 runtime is retained only for diagnostic SIO traces and is not suitable for gameplay.",
-      NULL,
-      "system",
-      {
-         { "replicated-v2", "Replicated Pair v2" },
-         { "cable-v1",      "Cable Sync v1 (Diagnostic)" },
-         { NULL, NULL },
-      },
-      "replicated-v2"
-   },
-   {
       "mgba_gb_colors",
       "Default Game Boy Palette",
       NULL,

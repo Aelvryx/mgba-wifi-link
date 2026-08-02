@@ -27,9 +27,10 @@ and `..`, existing device run directories, path escapes, duplicate-config
 ambiguity, or a staged hash mismatch.
 
 Each endpoint also needs a run-owned
-`device-snapshots/<name>-mgba-qualification.opt`. It must select
-`mgba_gba_link_netplay_runtime = "replicated-v2"` and the policy named by the
-manifest (`mgba_link_netplay_latency = "stable"` or `"low_latency"`). Invoke
+`device-snapshots/<name>-mgba-qualification.opt`. It must select the policy
+named by the manifest (`mgba_link_netplay_latency = "stable"` or
+`"low_latency"`). Protocol v2 is the only shipped runtime and requires no
+runtime selector. Invoke
 the helper with matching `EXPECTED_LATENCY_POLICY` and
 `EXPECTED_SELECTED_DELAY` values. The helper stages and hashes this file and
 then requires the latest runtime log to prove the same policy, 24-sample

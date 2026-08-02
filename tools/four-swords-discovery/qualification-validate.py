@@ -281,11 +281,6 @@ def validate_config(args: argparse.Namespace) -> None:
         _require_equal(values.get(key), expected_value, f"effective config value {key}")
     options = _effective_config(Path(args.options))
     _require_equal(
-        options.get("mgba_gba_link_netplay_runtime"),
-        "replicated-v2",
-        "effective core option mgba_gba_link_netplay_runtime",
-    )
-    _require_equal(
         options.get("mgba_link_netplay_latency"),
         args.latency_policy,
         "effective core option mgba_link_netplay_latency",

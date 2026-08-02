@@ -5,7 +5,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "util/test/suite.h"
 
-#include <mgba/internal/gba/sio/netplay/session.h>
 #include <mgba/internal/gba/sio/netplay/transport.h>
 
 struct FakeTransport {
@@ -107,35 +106,6 @@ static void _init(
 	fake->now = 1234;
 	GBALinkTransportInit(transport, &_vtable, fake);
 	assert_true(GBALinkTransportStart(transport, 1, GBA_LINK_ROLE_HOST));
-}
-
-M_TEST_DEFINE(sequenceDomainsAreIndependentAndNeverWrap) {
-	struct GBALinkSequenceState sequences;
-	GBALinkSequenceStateInit(&sequences);
-	for (enum GBALinkSequenceDomain domain = GBA_LINK_SEQUENCE_PACKET;
-	     domain < GBA_LINK_SEQUENCE_DOMAIN_COUNT;
-	     domain = (enum GBALinkSequenceDomain) (domain + 1)) {
-		uint64_t value = 0;
-		assert_true(GBALinkSequenceTake(&sequences, domain, &value));
-		assert_int_equal(value, 1);
-	}
-
-	uint64_t value = 0;
-	assert_true(GBALinkSequenceTake(&sequences, GBA_LINK_SEQUENCE_PACKET, &value));
-	assert_int_equal(value, 2);
-	assert_true(GBALinkSequenceTake(&sequences, GBA_LINK_SEQUENCE_TRANSFER, &value));
-	assert_int_equal(value, 2);
-	assert_int_equal(sequences.next[GBA_LINK_SEQUENCE_MODE], 2);
-
-	sequences.next[GBA_LINK_SEQUENCE_COMPLETION] = UINT64_MAX;
-	assert_true(GBALinkSequenceTake(
-	    &sequences, GBA_LINK_SEQUENCE_COMPLETION, &value));
-	assert_int_equal(value, UINT64_MAX);
-	assert_true(GBALinkSequenceIsExhausted(
-	    &sequences, GBA_LINK_SEQUENCE_COMPLETION));
-	assert_false(GBALinkSequenceTake(
-	    &sequences, GBA_LINK_SEQUENCE_COMPLETION, &value));
-	assert_int_equal(sequences.next[GBA_LINK_SEQUENCE_COMPLETION], UINT64_MAX);
 }
 
 M_TEST_DEFINE(reliableFlushedSendCopiesBeforeCallback) {
@@ -297,20 +267,7 @@ M_TEST_DEFINE(explicitStopInvalidatesBeforeCallback) {
 	GBALinkTransportDeinit(&transport);
 }
 
-M_TEST_DEFINE(sessionDeinitStopsEveryLiveState) {
-	struct GBALinkTransport transport;
-	struct FakeTransport fake;
-	_init(&transport, &fake);
-	struct GBALinkSession session;
-	GBALinkSessionInit(&session, &transport);
-	session.state = GBA_LINK_SESSION_ATTACH_BARRIER;
-	GBALinkSessionDeinit(&session);
-	assert_false(transport.active);
-	assert_int_equal(fake.stopCalls, 1);
-}
-
 M_TEST_SUITE_DEFINE(GBALinkTransport,
-	cmocka_unit_test(sequenceDomainsAreIndependentAndNeverWrap),
 	cmocka_unit_test(reliableFlushedSendCopiesBeforeCallback),
 	cmocka_unit_test(sendFailureFailsClosed),
 	cmocka_unit_test(synchronousStopDuringSendInvalidatesGeneration),
@@ -320,5 +277,4 @@ M_TEST_SUITE_DEFINE(GBALinkTransport,
 	cmocka_unit_test(inboundQueueExhaustionFailsClosed),
 	cmocka_unit_test(oversizedPacketsFailClosed),
 	cmocka_unit_test(oldGenerationCannotEnterNewSession),
-	cmocka_unit_test(explicitStopInvalidatesBeforeCallback),
-	cmocka_unit_test(sessionDeinitStopsEveryLiveState))
+	cmocka_unit_test(explicitStopInvalidatesBeforeCallback))

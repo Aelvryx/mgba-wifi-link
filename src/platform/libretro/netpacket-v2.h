@@ -54,6 +54,8 @@ bool mLibretroNetpacketV2TestPollReceive(void);
 void mLibretroNetpacketV2TestSetTimeMs(uint64_t nowMs);
 uint64_t mLibretroNetpacketV2TestCallbackGeneration(void);
 size_t mLibretroNetpacketV2TestPendingPacketCount(void);
+bool mLibretroNetpacketV2TestInjectInbound(
+	const void* data, size_t size);
 uint8_t mLibretroNetpacketV2TestPlayerForRole(enum GBALinkRole role);
 bool mLibretroNetpacketV2TestInstallPair(
 	const struct GBAReplicaManifest manifests[2],

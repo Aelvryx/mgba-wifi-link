@@ -10,7 +10,7 @@
 
 #include <mgba/internal/gba/replica.h>
 #include <mgba/internal/gba/sio/netplay/identity.h>
-#include <mgba/internal/gba/sio/netplay/protocol.h>
+#include <mgba/internal/gba/sio/netplay/types.h>
 
 CXX_GUARD_START
 

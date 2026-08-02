@@ -354,7 +354,6 @@ M_TEST_DEFINE(exactV2VersionAndCapabilitiesDoNotDowngrade) {
 
 	packet.payload.hello.runtimeCompatibilityVersion++;
 	assert_int_equal(GBALinkV2PacketEncodedSize(&packet), 0);
-	assert_true(strcmp(GBA_LINK_V2_PROTOCOL_NAME, GBA_LINK_PROTOCOL_NAME));
 }
 
 M_TEST_DEFINE(rolesOwnersSessionsAndSequencesFailClosed) {

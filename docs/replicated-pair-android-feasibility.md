@@ -2,6 +2,9 @@
 
 Date: 2026-07-31
 
+Status: historical feasibility evidence. The distributed protocol-v1 runtime
+mentioned below has since been removed from production and test builds.
+
 Decision: **GO**. The cooperative replicated-pair architecture clears the
 Android feasibility gate on both target devices. Production protocol-v2 work
 may proceed.
@@ -13,7 +16,7 @@ The tested source snapshot was based on
 `63d5ac7a6955be1de8a8b2cafeae49c20ffee1ac` and staged binary-diff SHA-256
 `874f86cc2eb7f3849b3c785f1b5c11dc48d2b7f44e13f03d4c2fb8e521267971`.
 The temporary diagnostic option was disabled by default and did not alter the
-protocol-v1 runtime unless explicitly enabled before content load. It was
+then-current runtime unless explicitly enabled before content load. It was
 removed from the release core after this gate passed; equivalent local-pair
 coverage remains in the focused test targets.
 

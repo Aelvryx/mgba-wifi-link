@@ -31,8 +31,10 @@ and feature tests.
 
 - Keep upstream-generic SIO dispatch and hardware-characterisation changes in
   focused commits that can be reviewed independently.
-- Keep the transport-neutral codec/session logic separate from the libretro
-  Netpacket adapter and from `GBASIONetplayDriver`.
+- Keep the protocol-v2 codec/session logic separate from the libretro
+  Netpacket adapter and local replicated-pair cable execution. The retired
+  distributed-cable protocol is preserved only in labelled historical
+  evidence and Git history.
 - Keep temporary feasibility-spike code out of production build paths after its
   findings and reusable lifecycle tests have been preserved.
 - Do not mix generated artifacts, build directories, local ROMs, device logs, or

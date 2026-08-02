@@ -114,6 +114,11 @@ The measured network target can still select a larger delay. If either peer
 uses Stable, the negotiated floor is two frames. Changing the option while a
 session is live cannot alter that session; disconnect first.
 
+Protocol v2 is the only shipped GBA Netpacket runtime. Older configurations
+may still contain an `mgba_gba_link_netplay_runtime` line with any value; the
+core no longer declares or queries that key, so the line is inert and may be
+removed.
+
 The recorded Thor/Odin mesh-Wi-Fi run selected two frames under both policies.
 That is the current qualified outcome: Low Latency was active, but its clean
 calibration correctly declined to commit one frame on that network path.
@@ -245,11 +250,10 @@ expected pre-attachment no-peer state, then runs all four MULTI baud selectors
 indefinitely and fails closed after a real peer has been observed. This makes
 late host/join runs useful for serial-throughput and audio qualification.
 
-The legacy protocol-v1 implementation and traces remain only as a diagnostic
-SIO oracle. The normal libretro registration selects protocol v2. Developers
-can select **GBA Link Netplay Runtime → Cable Sync v1 (Diagnostic)** and
-restart content to reproduce a v1 trace; that mode is intentionally labelled
-unsuitable for gameplay.
+The retired protocol-v1 implementation is not compiled, registered, or
+selectable. Its labelled historical traces and performance findings remain in
+the repository and Git history as architectural evidence; current diagnostics
+exercise protocol v2 and the local replicated pair directly.
 
 ## Physical-device test ownership
 

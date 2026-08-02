@@ -136,9 +136,11 @@ The main implementation lives in `src/gba/sio/netplay`; the libretro adapter is
 
 The immediate engineering priorities are:
 
-1. Remove the obsolete distributed-cable v1 runtime from shipped builds.
-2. Package the current deterministic/calibrated v2 runtime as a clean release.
-3. Expand compatibility reporting and test direct-hotspot latency.
+1. Validate and package the v2-only deterministic/calibrated runtime as a
+   clean release.
+2. Test direct-hotspot latency and decide whether one-frame buffering can
+   become the default.
+3. Expand compatibility reporting and diagnostic capture.
 
 Four-player Multi-Pak and Linux handheld support follow. Rollback/prediction,
 Single-Pak, and RFU are later research, not promises. See [ROADMAP.md](ROADMAP.md)

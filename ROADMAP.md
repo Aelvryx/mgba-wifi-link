@@ -34,7 +34,7 @@ every completed task.
 
 | Rank | Outcome | Value | Urgency | Risk / enablement | Size | WSJF | Horizon |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| 1 | [Remove shipped cable-sync v1](https://github.com/AnthonyStainer/mgba/issues/6) | 5 | 8 | 8 | 3 | **7.0** | Now |
+| — | [Remove shipped cable-sync v1](https://github.com/AnthonyStainer/mgba/issues/6) | 5 | 8 | 8 | 3 | **7.0** | **Completed in PR #14** |
 | 2 | [Publish the current v2 foundation](https://github.com/AnthonyStainer/mgba/issues/7) | 8 | 8 | 5 | 3 | **7.0** | Now, after #6 and #9 |
 | 3 | [Test hotspot latency and decide the default](https://github.com/AnthonyStainer/mgba/issues/9) | 5 | 5 | 8 | 3 | **6.0** | Now |
 | 4 | [Grow the compatibility matrix](https://github.com/AnthonyStainer/mgba/issues/8) | 5 | 5 | 5 | 3 | **5.0** | Now / continuous |
@@ -62,10 +62,10 @@ reflect large uncertain jobs whose first useful increment is expensive.
 
 ### Now — close the current alpha properly
 
-1. **Remove v1 (#6).** It is selectable production surface for an unusable
-   prototype. Preserve its archived design and evidence; delete the frontend
-   option, registration/dispatch, dead implementation, and obsolete tests while
-   retaining generic SIO coverage.
+1. **Remove v1 (#6): completed in PR #14.** The frontend selector, distributed
+   runtime, obsolete tests, and v1-only analyzer are gone. Historical evidence
+   remains labelled, while generic SIO and supported v2 invariants have active
+   test owners.
 2. **Run the direct-hotspot comparison (#9).** This is a short decision test,
    not a new latency architecture. If one frame passes the existing bilateral
    gate, propose the smallest default change. Otherwise retain two frames.
@@ -131,7 +131,7 @@ The first step is a feasibility/specification change, not production code.
 
 | Decision | Current position | Revisit when |
 | --- | --- | --- |
-| Production runtime | Replicated protocol v2 only | v1 removal change is reviewed |
+| Production runtime | Replicated protocol v2 only; v1 runtime and selector removed | A new reviewed architecture demonstrates a concrete need |
 | Default delay | Calibrated, minimum two frames | Exact one-frame candidate passes both-device gate |
 | Network path | Ordinary LAN supported | Direct-hotspot A/B evidence exists |
 | Players | Exactly two | Four-player resource and topology proposal is reviewed |

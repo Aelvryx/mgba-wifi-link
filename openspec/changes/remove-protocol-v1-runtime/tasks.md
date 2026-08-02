@@ -46,7 +46,7 @@
 - [x] 6.3 Update the Four Swords qualification validator/helper and mocked fixtures so they require protocol-v2 runtime identity without requiring `mgba_gba_link_netplay_runtime`.
 - [x] 6.4 Preserve archived OpenSpec content unchanged and retain v1 performance/packet evidence with an explicit retired-historical label and no current selection instructions.
 - [x] 6.5 Update the validation matrix to separate active v2 evidence from retired v1 evidence and to list the post-removal focused commands and targets accurately.
-- [ ] 6.6 Update the roadmap and GitHub issue #6 status only when the implementation and protected validation are complete; do not change the one-frame default or close hotspot issue #9.
+- [x] 6.6 Update the roadmap and GitHub issue #6 status only when the implementation and protected validation are complete; do not change the one-frame default or close hotspot issue #9.
 
 ## 7. Validate the v2-only core
 

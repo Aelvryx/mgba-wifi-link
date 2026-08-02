@@ -15,6 +15,9 @@ from typing import Any
 
 RUN_SCHEMA = "mgba-four-swords-discovery-run-v2"
 INSTALLED_HASH_REASON = "APP_PRIVATE_PATH_UNREADABLE"
+DIAGNOSTIC_SCHEMA = 1
+PRODUCT_ID = "mgba-gba-wifi-link"
+PROTOCOL_ID = "mgba-gba-link-replicated-v2"
 AUTOCONF_RE = re.compile(r"^\[Autoconf\]\s+(.+?) configured in port ([0-9]+)\.$")
 LATENCY_POLICIES = {
     "stable": (1, 2),
@@ -59,6 +62,16 @@ CALIBRATION_DIGEST_A_RE = re.compile(
 CALIBRATION_DIGEST_B_RE = re.compile(
     r"cal-digest-b P(?P<role>[01]) s=(?P<session>[0-9]+) "
     r"d=(?P<digest_b>[0-9a-f]{32})"
+)
+PRODUCT_RECORD_RE = re.compile(
+    r"product schema=(?P<schema>[0-9]+) id=(?P<product>[a-z0-9-]+) "
+    r"protocol=(?P<protocol>[a-z0-9-]+)\s*$"
+)
+FAILURE_RECORD_RE = re.compile(
+    r"failure schema=(?P<schema>[0-9]+) P(?P<role>[01]) "
+    r"s=(?P<session>[0-9]+) generation=(?P<generation>[0-9]+) "
+    r"reason=(?P<reason>[0-9]+) state=(?P<state>[a-z][a-z0-9-]*) "
+    r"frame=(?P<frame>[0-9]+)\s*$"
 )
 
 
@@ -307,15 +320,48 @@ def _autoconf_assignments(text: str) -> dict[int, str]:
     return ports
 
 
+def _structured_records(
+    text: str, marker: str, pattern: re.Pattern[str], label: str
+) -> list[dict[str, str]]:
+    records: list[dict[str, str]] = []
+    for line in text.splitlines():
+        if marker not in line:
+            continue
+        match = pattern.search(line)
+        if not match:
+            _fail(f"runtime log contains malformed structured {label} record")
+        records.append(match.groupdict())
+    return records
+
+
 def validate_runtime_log(args: argparse.Namespace) -> None:
     text = sys.stdin.read().replace("\r", "")
+    products = _structured_records(
+        text, "product schema=", PRODUCT_RECORD_RE, "product"
+    )
+    if not products:
+        _fail("runtime log does not prove structured GBA Wi-Fi Link registration")
+    for product in products:
+        _require_equal(
+            int(product["schema"]), DIAGNOSTIC_SCHEMA,
+            "runtime diagnostic schema",
+        )
+        _require_equal(product["product"], PRODUCT_ID, "runtime product identity")
+        _require_equal(
+            product["protocol"], PROTOCOL_ID, "runtime protocol identity"
+        )
+    failures = _structured_records(
+        text, "failure schema=", FAILURE_RECORD_RE, "failure"
+    )
+    for failure in failures:
+        _require_equal(
+            int(failure["schema"]), DIAGNOSTIC_SCHEMA,
+            "runtime failure diagnostic schema",
+        )
     required = {
         "frontend identity": f"RetroArch {args.frontend_version} (Git {args.frontend_git})",
         "loaded app-private core path": f'[Core] Loading dynamic libretro core from: "{args.internal_core}".',
         "content identity": f"[Content] CRC32: {args.content_crc32}.",
-        "GBA Wi-Fi Link registration": (
-            "registered mgba-gba-wifi-link using mgba-gba-link-replicated-v2"
-        ),
         "isolated save path": f'[Override] Redirecting save file to "{args.remote_root}/saves/',
         "isolated state path": f'[Override] Redirecting save state to "{args.remote_root}/states/',
     }
@@ -391,6 +437,23 @@ def validate_runtime_log(args: argparse.Namespace) -> None:
     _require_equal(
         attach["generation"], calibration["generation"], "attach/calibration generation"
     )
+    for failure in failures:
+        _require_equal(
+            int(failure["role"]), args.expected_role,
+            "runtime failure endpoint role",
+        )
+        if int(failure["session"]):
+            _require_equal(
+                failure["session"], attach["provisional"],
+                "failure/attach session",
+            )
+        if int(failure["generation"]):
+            _require_equal(
+                failure["generation"], attach["generation"],
+                "failure/attach generation",
+            )
+    if failures:
+        _fail("runtime log contains a structured GBA Wi-Fi Link failure")
     _require_equal(int(attach["policy"]), expected_policy, "runtime latency policy")
     _require_equal(int(attach["delay"]), args.selected_delay, "runtime selected input delay")
     _require_equal(int(calibration["samples"]), 24, "runtime calibration sample count")

@@ -498,10 +498,46 @@ static const char* _reasonName(enum GBALinkReason reason) {
 	}
 }
 
+static void _logStructuredFailure(
+		struct mLibretroGBAWifiLinkAdapter* adapter,
+		unsigned reason, const char* state) {
+	if (!adapter) {
+		return;
+	}
+	unsigned role = adapter->localId;
+	if (role > 1 && adapter->sessionPrepared &&
+	    (adapter->session.localRole == GBA_LINK_ROLE_HOST ||
+	     adapter->session.localRole == GBA_LINK_ROLE_CLIENT)) {
+		role = adapter->session.localRole == GBA_LINK_ROLE_HOST ? 0 : 1;
+	}
+	if (role > 1) {
+		return;
+	}
+	char record[224];
+	snprintf(record, sizeof(record),
+	    "failure schema=%u P%u s=%" PRIu64
+	    " generation=%" PRIu64 " reason=%u state=%s frame=%" PRIu64,
+	    M_LIBRETRO_GBA_WIFI_LINK_DIAGNOSTIC_SCHEMA, role,
+	    adapter->sessionPrepared ? adapter->session.sessionId : 0,
+	    adapter->sessionPrepared
+	        ? adapter->session.calibration.generation : 0,
+	    reason, state ? state : "transport",
+	    adapter->runtimeInitialized ? adapter->runtime.input.nextFrame : 0);
+	_log(RETRO_LOG_ERROR, record);
+}
+
 static void _diagnostic(
 	void* context, enum GBALinkDiagnosticLevel level,
 	enum GBALinkReason reason, const char* detail) {
-	UNUSED(context);
+	struct mLibretroGBAWifiLinkAdapter* adapter = context;
+	if (!adapter || !adapter->sessionPrepared ||
+	    adapter->session.state != GBA_LINK_V2_SESSION_FAILED) {
+		_logStructuredFailure(
+		    adapter, reason,
+		    adapter && adapter->sessionPrepared
+		        ? GBALinkV2SessionStateName(adapter->session.state)
+		        : "transport");
+	}
 	char message[384];
 	snprintf(message, sizeof(message), "Link failed: %s%s%s",
 	    _reasonName(reason), detail && detail[0] ? " (" : "",
@@ -1242,6 +1278,9 @@ static void _failed(void* context, enum GBALinkV2Reason reason) {
 	if (reason == GBA_LINK_V2_REASON_INPUT_TIMEOUT) {
 		++adapter->metrics.inputDeadlineMisses;
 	}
+	_logStructuredFailure(
+	    adapter, reason,
+	    GBALinkV2SessionStateName(adapter->session.state));
 	char detail[224];
 	size_t detailLength = GBALinkV2SessionFormatFailureDetail(
 	    &adapter->session, reason, detail, sizeof(detail));
@@ -1665,6 +1704,13 @@ bool mLibretroGBAWifiLinkRegister(
 		mLibretroGBAWifiLinkUnload();
 		return false;
 	}
+	char productRecord[160];
+	snprintf(productRecord, sizeof(productRecord),
+	    "product schema=%u id=%s protocol=%s",
+	    M_LIBRETRO_GBA_WIFI_LINK_DIAGNOSTIC_SCHEMA,
+	    M_LIBRETRO_GBA_WIFI_LINK_PRODUCT_ID,
+	    GBA_LINK_V2_PROTOCOL_NAME);
+	_log(RETRO_LOG_INFO, productRecord);
 	_log(RETRO_LOG_INFO,
 	    "registered " M_LIBRETRO_GBA_WIFI_LINK_PRODUCT_ID
 	    " using " GBA_LINK_V2_PROTOCOL_NAME);

@@ -227,7 +227,20 @@ def main() -> int:
 
         host_path.write_text(
             log(0, fixture=False)
-            + "\nStatus: GBA Wi-Fi Link: session failed: reason=8\n"
+            + "\nStatus: GBA Wi-Fi Link: connection ended unexpectedly\n"
+        )
+        assert not ANALYZER.validate(
+            ANALYZER.parse(host_path),
+            commercial_client,
+            108000,
+            None,
+            require_fixture=False,
+        )
+
+        host_path.write_text(
+            log(0, fixture=False)
+            + "\nStatus: GBA Wi-Fi Link: failure schema=1 P0 s=17 "
+            "generation=19 reason=8 state=failed frame=9000\n"
         )
         errors = ANALYZER.validate(
             ANALYZER.parse(host_path),
@@ -237,6 +250,33 @@ def main() -> int:
             require_fixture=False,
         )
         assert any("explicit replicated-link failure" in error for error in errors)
+
+        host_path.write_text(
+            log(0, fixture=False)
+            + "\nfailure schema=1 P1 s=18 generation=20 "
+            "reason=8 state=failed frame=9000\n"
+        )
+        errors = ANALYZER.validate(
+            ANALYZER.parse(host_path),
+            commercial_client,
+            108000,
+            None,
+            require_fixture=False,
+        )
+        assert any("failure role" in error for error in errors)
+        assert any("different session" in error for error in errors)
+        assert any("different generation" in error for error in errors)
+
+        host_path.write_text(
+            log(0, fixture=False)
+            + "\nfailure schema=1 P0 path=/private reason=8\n"
+        )
+        try:
+            ANALYZER.parse(host_path)
+        except ValueError as error:
+            assert "malformed structured failure" in str(error)
+        else:
+            raise AssertionError("malformed or sensitive failure record was accepted")
 
         host_path.write_text(log(0, fixture=False, lead0=2))
         errors = ANALYZER.validate(

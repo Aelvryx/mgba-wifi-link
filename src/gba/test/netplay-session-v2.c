@@ -1030,7 +1030,7 @@ M_TEST_DEFINE(runtimeInputDeadlineFailsWithSpecificReason) {
 	_deinitPair(&pair);
 }
 
-M_TEST_SUITE_DEFINE(GBALinkSessionV2,
+M_TEST_SUITE_DEFINE(GBALinkV2Session,
 	cmocka_unit_test(legacyV1HeaderDuringAttachmentCapturesNoReplica),
 	cmocka_unit_test(bilateralBundlesInstallInCanonicalOrderAndReleaseAtomically),
 	cmocka_unit_test(acceptAckDelayDoesNotAffectCalibratedInputDelay),

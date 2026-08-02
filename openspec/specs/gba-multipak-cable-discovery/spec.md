@@ -21,12 +21,12 @@ The project SHALL retest Four Swords on the exact topology-settled alpha.2 build
 - **AND** Stage A proceeds with bounded diagnostic instrumentation and deterministic layered isolation
 
 ### Requirement: Deterministic layered fault isolation
-If the baseline-failure scenario activates Stage A, the project SHALL diagnose discovery in widening order through ordinary local mGBA lockstep, a network-free replicated pair, the paired protocol-v2 adapter, and finally physical frontend behavior. Layers one through three SHALL use identical P0 and P1 initial-state payloads, emulator configuration, bounded per-frame P0/P1 input script, and named comparison boundary. Investigation SHALL stop at the first failing layer.
+If the baseline-failure scenario activates Stage A, the project SHALL diagnose discovery in widening order through ordinary local mGBA lockstep, a network-free replicated pair, the paired GBA Wi-Fi Link adapter, and finally physical frontend behavior. Layers one through three SHALL use identical P0 and P1 initial-state payloads, emulator configuration, bounded per-frame P0/P1 input script, and named comparison boundary. Investigation SHALL stop at the first failing layer.
 
 #### Scenario: Automated ladder begins
 - **WHEN** a human has created or verified the bounded pre-link navigation once
 - **THEN** automation records one private per-frame P0/P1 input script
-- **AND** ordinary lockstep, direct replicated pair, and paired protocol-v2 adapters replay that exact script from identical player states and configuration
+- **AND** ordinary lockstep, direct replicated pair, and paired GBA Wi-Fi Link adapters replay that exact script from identical player states and configuration
 - **AND** only the script digest and frame range enter the run evidence
 
 #### Scenario: Ordinary local lockstep fails
@@ -37,14 +37,14 @@ If the baseline-failure scenario activates Stage A, the project SHALL diagnose d
 #### Scenario: Local lockstep passes but replicated pair fails
 - **WHEN** ordinary local lockstep reaches the expected discovery outcome but the equivalent network-free replicated pair does not
 - **THEN** diagnosis stops at replica restoration, topology settlement, pair scheduling, or local peripheral assignment
-- **AND** protocol-v2 behavior remains unchanged
+- **AND** GBA Wi-Fi Link adapter behavior remains unchanged
 
-#### Scenario: Both local layers pass but protocol v2 fails
-- **WHEN** ordinary lockstep and the network-free replicated pair produce equivalent successful transitions but paired protocol-v2 adapters diverge
+#### Scenario: Both local layers pass but the paired adapter fails
+- **WHEN** ordinary lockstep and the network-free replicated pair produce equivalent successful transitions but paired GBA Wi-Fi Link adapters diverge
 - **THEN** diagnosis stops at attachment, bundle installation, input seeding, session release, or adapter integration
 
 #### Scenario: All automated layers agree
-- **WHEN** local lockstep, the replicated pair, and paired protocol-v2 adapters produce equivalent successful anchored traces
+- **WHEN** local lockstep, the replicated pair, and paired GBA Wi-Fi Link adapters produce equivalent successful anchored traces
 - **THEN** the exact build advances to prepared two-device qualification
 
 #### Scenario: Discovery uses a supported NORMAL mode
@@ -91,7 +91,7 @@ If the baseline-failure scenario activates Stage A tracing, the emulator SHALL p
 
 #### Scenario: Tracing is disabled
 - **WHEN** no observer is installed or the diagnostic option is off
-- **THEN** SIO, lockstep, replicated-pair, protocol-v2, allocation, formatting, file-output, and network behavior remain unchanged
+- **THEN** SIO, lockstep, replicated-pair, GBA Wi-Fi Link adapter, allocation, formatting, file-output, and network behavior remain unchanged
 
 ### Requirement: Correlated event ordering and observer safety
 If the baseline-failure scenario activates Stage A tracing, every transition record SHALL be a fully copied immutable value containing a globally monotonic run ordinal, per-player ordinal, coordinator ordinal where applicable, operation ID where applicable, optional flush-boundary operation ID where applicable, transfer ID where applicable, actor player, target player or mask, transition origin, and trace phase. An operation ID SHALL correlate only an attempted register operation with its resulting mode, line, and START effects. If an earlier read run identifies the operation that ended it, the run SHALL use `flush_boundary_operation_id` and SHALL NOT become part of that operation. After setup, event emission SHALL be non-blocking, allocation-free, formatting-free, non-reentrant, safe while the coordinator mutex is held, and safe under ordinary local-lockstep threading.
@@ -155,7 +155,7 @@ Anchors SHALL use these exact emitting conditions:
 | `FIRST_TRANSFER_COMPLETE` | First transfer whose normal completion path has completed on both logical players. |
 | `TERMINAL` | After all prior read runs are flushed and immediately before the pre-mutation terminal snapshot. |
 
-Ordinary local lockstep SHALL map attachment anchors around local driver attachment, final IDs, visible topology, settled coordinator work, and the first post-settle guest instruction. A direct replicated pair SHALL use the same meanings around pair construction and topology settlement. Protocol-v2 adapters SHALL map any additional session scaffolding around these anchors without weakening their guest-visible conditions.
+Ordinary local lockstep SHALL map attachment anchors around local driver attachment, final IDs, visible topology, settled coordinator work, and the first post-settle guest instruction. A direct replicated pair SHALL use the same meanings around pair construction and topology settlement. Paired GBA Wi-Fi Link adapters SHALL map any additional session scaffolding around these anchors without weakening their guest-visible conditions.
 
 #### Scenario: Comparable automated runs are exported
 - **WHEN** two layers are prepared for comparison

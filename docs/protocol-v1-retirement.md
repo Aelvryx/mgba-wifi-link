@@ -244,6 +244,12 @@ stop/deinit cases remain in the same surviving target.
 
 ## Post-removal audit
 
+The machine-readable retirement inventory is maintained in
+`tools/gba-wifi-link-boundary-policy.json`. The current positive boundary audit
+uses that inventory to prevent any retired path, symbol family, target,
+configuration identity, or compatibility string from being reused by the
+canonical product.
+
 The allowed v1 references are limited to archived OpenSpec, explicitly labelled
 historical evidence, this retirement record, and one bounded raw legacy-header
 vector in a v2 rejection test. Current source, generated targets, active

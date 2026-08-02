@@ -4,13 +4,16 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
+POLICY_PATH = Path(__file__).with_name("gba-wifi-link-boundary-policy.json")
 
 PRODUCT_ID = "mgba-gba-wifi-link"
 PROTOCOL_ID = "mgba-gba-link-replicated-v2"
@@ -29,75 +32,39 @@ VERSIONED_PATHS = (
     "src/gba/sio/netplay/protocol-v2.c",
 )
 
-RETIRED_REUSE_PATHS = (
-    "include/mgba/internal/gba/sio/netplay/session.h",
-    "src/gba/sio/netplay/session.c",
-    "src/platform/libretro/netpacket.h",
-    "src/platform/libretro/netpacket.c",
-)
-
-OBSOLETE_PRODUCT_PATHS = (
-    "src/platform/libretro/netpacket-v2.h",
-    "src/platform/libretro/netpacket-v2.c",
-    "src/platform/test/libretro-netpacket-v2.c",
-    "src/platform/test/libretro-netpacket-v2-replay.c",
-    "src/gba/test/replicated-pair-spike.c",
-    "src/platform/libretro/replicated-pair-spike.h",
-    "src/platform/libretro/replicated-pair-spike.c",
-    "src/platform/test/libretro-replicated-pair-spike.c",
-    "tools/netpacket-spike",
-)
-
 CURRENT_SURFACES = (
+    "include/mgba/internal/gba/sio/netplay",
+    "src/gba/sio/netplay",
+    "src/gba/test",
+    "src/gba/CMakeLists.txt",
     "src/platform/libretro",
     "src/platform/test",
-    "src/gba/CMakeLists.txt",
     "CMakeLists.txt",
     ".github/workflows/gba-wifi-link-ci.yml",
-    "tools/gba-wifi-link-qualification",
-    "tools/four-swords-discovery",
-    "tools/analyze-gba-wifi-link.py",
-    "tools/test-analyze-gba-wifi-link.py",
+    "tools",
     "README.md",
     "ROADMAP.md",
     "UPSTREAM.md",
     "docs/gba-wifi-link.md",
     "docs/gba-wifi-link-validation-matrix.md",
+    "docs/gba-link-protocol-v2.md",
+    "docs/gba-wifi-link-integration.md",
+    "docs/protocol-v1-retirement.md",
+    "openspec/specs",
+    "openspec/changes/integrate-replicated-link-runtime",
 )
 
-OBSOLETE_PRODUCT_TEXT = (
-    "mLibretroNetpacketV2",
-    "M_LIBRETRO_NETPACKET_V2",
-    "netpacket-v2",
-    "libretro-netpacket-v2",
-    "replicated-pair-spike",
-    "netpacket-spike",
-    "GBA replicated link",
-    "GBA Link Netplay Latency",
+HISTORICAL_OR_MIGRATION_PATHS = (
+    "docs/protocol-v1-retirement.md",
+    "docs/gba-wifi-link-integration.md",
+    "docs/gba-wifi-link-validation-matrix.md",
+    "openspec/changes/integrate-replicated-link-runtime/",
 )
 
-RETIRED_SYMBOL_PATTERNS = (
-    re.compile(r"\bGBALinkSession(?:\b|[A-Z_])"),
-    re.compile(r"\bGBA_LINK_SESSION_"),
-    re.compile(r"\bmLibretroNetpacket(?!V2)"),
-)
-
-EXPECTED_TARGETS = (
-    "test-gba-netplay-protocol-v2",
-    "test-gba-netplay-session-v2",
-    "test-gba-replicated-pair-scheduler",
-    "test-libretro-replicated-pair-frontend",
-    "test-libretro-gba-wifi-link",
-    "test-libretro-gba-wifi-link-replay",
-)
-
-FORBIDDEN_TARGETS = (
-    "test-gba-netplay-session",
-    "test-libretro-netpacket",
-    "test-libretro-netpacket-v2",
-    "test-libretro-netpacket-v2-replay",
-    "test-gba-replicated-pair-spike",
-    "test-libretro-replicated-pair-spike",
+VERSIONED_IMPLEMENTATION_PREFIXES = (
+    "include/mgba/internal/gba/sio/netplay/",
+    "src/gba/sio/netplay/",
+    "src/gba/test/",
 )
 
 TEXT_SUFFIXES = {
@@ -115,41 +82,231 @@ TEXT_SUFFIXES = {
     ".yml",
 }
 
+EXPECTED_TARGETS = (
+    "test-gba-netplay-protocol-v2",
+    "test-gba-netplay-session-v2",
+    "test-gba-replicated-pair-scheduler",
+    "test-libretro-replicated-pair-frontend",
+    "test-libretro-gba-wifi-link",
+    "test-libretro-gba-wifi-link-replay",
+)
+
+VERSIONED_TOKEN = re.compile(
+    r"protocol-v2|session-v2|GBALinkV2|GBA_LINK_V2|"
+    r"(?<![A-Za-z0-9_])V2(?![A-Za-z0-9_])|"
+    r"(?<![A-Za-z0-9_])v2(?![A-Za-z0-9_])"
+)
+
 
 def fail(message: str) -> None:
     print(f"GBA Wi-Fi Link boundary audit: {message}", file=sys.stderr)
     raise SystemExit(1)
 
 
+def load_policy(path: Path = POLICY_PATH) -> dict[str, list[str]]:
+    try:
+        value: Any = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        fail(f"cannot read boundary policy {path}: {error}")
+    if not isinstance(value, dict):
+        fail("boundary policy root must be an object")
+    required = {
+        "retired_paths",
+        "retired_symbol_families",
+        "retired_targets",
+        "retired_configuration_identities",
+        "retired_compatibility_strings",
+        "obsolete_product_paths",
+        "obsolete_product_text",
+        "obsolete_targets",
+    }
+    if set(value) != required:
+        fail("boundary policy fields do not match the required inventory")
+    for name, entries in value.items():
+        if not isinstance(entries, list) or not entries or not all(
+            isinstance(entry, str) and entry for entry in entries
+        ):
+            fail(f"boundary policy {name} must be a non-empty string list")
+        if len(entries) != len(set(entries)):
+            fail(f"boundary policy {name} contains duplicates")
+    return value
+
+
+POLICY = load_policy()
+
+
 def read(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8", errors="replace")
 
 
+def _is_historical_or_migration(relative: str) -> bool:
+    return relative.startswith(HISTORICAL_OR_MIGRATION_PATHS)
+
+
+def _retired_reference_allowed(relative: str, token: str, line: str) -> bool:
+    if _is_historical_or_migration(relative):
+        return True
+    if relative.startswith("openspec/specs/gba-wifi-link-runtime/"):
+        return True
+    if relative == "docs/gba-wifi-link.md" and token == (
+        "mgba_gba_link_netplay_runtime"
+    ):
+        return True
+    if relative == "src/gba/test/netplay-legacy-wire-fixture.h":
+        return True
+    return False
+
+
+def _obsolete_reference_allowed(relative: str, token: str, line: str) -> bool:
+    if _is_historical_or_migration(relative):
+        return True
+    return relative.startswith("openspec/specs/gba-wifi-link-runtime/")
+
+
+def _versioned_token_allowed(relative: str, token: str, line: str) -> bool:
+    if relative == "src/platform/libretro/libretro.h":
+        # Upstream libretro API/VFS version names are unrelated to this product.
+        return True
+    if relative.startswith("src/platform/libretro/libretro_core_options"):
+        return bool(
+            re.search(
+                r"retro_core_option|core options v2 interface|"
+                r"SET_CORE_OPTIONS_V2",
+                line,
+                re.IGNORECASE,
+            )
+        )
+    if relative.startswith(VERSIONED_IMPLEMENTATION_PREFIXES):
+        return True
+    if relative.startswith("openspec/specs/") or relative.startswith(
+        "openspec/changes/integrate-replicated-link-runtime/"
+    ):
+        return True
+    if relative in (
+        "docs/gba-link-protocol-v2.md",
+        "docs/gba-wifi-link-validation-matrix.md",
+        "docs/gba-wifi-link-integration.md",
+        "docs/protocol-v1-retirement.md",
+        "UPSTREAM.md",
+    ):
+        return True
+    if relative in PRODUCT_PATHS:
+        return token in {
+            "protocol-v2",
+            "session-v2",
+            "GBALinkV2",
+            "GBA_LINK_V2",
+        } or PROTOCOL_ID in line
+    if relative.startswith("tools/"):
+        return (
+            PROTOCOL_ID in line
+            or "run-v2" in line
+            or "test-gba-netplay-protocol-v2" in line
+            or "test-gba-netplay-session-v2" in line
+        )
+    if relative in ("CMakeLists.txt", "src/gba/CMakeLists.txt") or relative.startswith(
+        ".github/workflows/"
+    ):
+        return bool(
+            re.search(
+                r"sio/netplay/(?:protocol|session)-v2|"
+                r"test/netplay-(?:protocol|session)-v2|"
+                r"test-gba-netplay-(?:protocol|session)-v2",
+                line,
+            )
+        )
+    if relative == "README.md":
+        return "Protocol-v2 design" in line or PROTOCOL_ID in line
+    if relative == "docs/gba-wifi-link.md":
+        return (
+            PROTOCOL_ID in line
+            or "protocol v2" in line.lower()
+            or "protocol-v2" in line.lower()
+        )
+    return False
+
+
+def _contains_family(text: str, family: str) -> bool:
+    return bool(
+        re.search(
+            rf"(?<![A-Za-z0-9_]){re.escape(family)}",
+            text,
+        )
+    )
+
+
+def find_text_policy_violations(relative: str, text: str) -> list[str]:
+    """Return current-boundary violations; exposed for the policy self-test."""
+    violations: list[str] = []
+    for line_number, line in enumerate(text.splitlines(), 1):
+        for token in POLICY["obsolete_product_text"]:
+            if token in line and not _obsolete_reference_allowed(
+                relative, token, line
+            ):
+                violations.append(
+                    f"obsolete product text {token!r} at {relative}:{line_number}"
+                )
+        for token in (
+            POLICY["retired_symbol_families"]
+            + POLICY["retired_configuration_identities"]
+            + POLICY["retired_compatibility_strings"]
+            + POLICY["retired_targets"]
+        ):
+            if token in POLICY["retired_symbol_families"]:
+                present = _contains_family(line, token)
+            elif token in POLICY["retired_targets"]:
+                present = bool(
+                    re.search(
+                        rf"(?<![A-Za-z0-9_-]){re.escape(token)}"
+                        rf"(?![A-Za-z0-9_-])",
+                        line,
+                    )
+                )
+            else:
+                present = token in line
+            if present and not _retired_reference_allowed(relative, token, line):
+                violations.append(
+                    f"retired identity {token!r} at {relative}:{line_number}"
+                )
+        for match in VERSIONED_TOKEN.finditer(line):
+            token = match.group(0)
+            if not _versioned_token_allowed(relative, token, line):
+                violations.append(
+                    f"unclassified versioned token {token!r} at "
+                    f"{relative}:{line_number}"
+                )
+    return violations
+
+
 def current_files() -> list[Path]:
-    files: list[Path] = []
+    files: set[Path] = set()
+    excluded = {
+        Path(__file__).resolve(),
+        POLICY_PATH.resolve(),
+        Path(__file__).with_name("test-audit-gba-wifi-link-boundary.py").resolve(),
+    }
     for relative in CURRENT_SURFACES:
         path = ROOT / relative
         if not path.exists():
             fail(f"current surface does not exist: {relative}")
         candidates = path.rglob("*") if path.is_dir() else (path,)
         for candidate in candidates:
-            if not candidate.is_file():
+            if not candidate.is_file() or candidate.resolve() in excluded:
                 continue
-            if candidate.resolve() == Path(__file__).resolve():
+            if "openspec/changes/archive" in candidate.as_posix():
                 continue
-            if (
-                candidate.suffix.lower() in TEXT_SUFFIXES
-                or candidate.name == "CMakeLists.txt"
+            if candidate.suffix.lower() in TEXT_SUFFIXES or candidate.name == (
+                "CMakeLists.txt"
             ):
-                files.append(candidate)
-    return files
+                files.add(candidate)
+    return sorted(files)
 
 
 def audit_source() -> None:
     for relative in PRODUCT_PATHS + VERSIONED_PATHS:
         if not (ROOT / relative).is_file():
             fail(f"required boundary path is missing: {relative}")
-    for relative in RETIRED_REUSE_PATHS + OBSOLETE_PRODUCT_PATHS:
+    for relative in POLICY["retired_paths"] + POLICY["obsolete_product_paths"]:
         if (ROOT / relative).exists():
             fail(f"retired or obsolete product path exists: {relative}")
 
@@ -157,12 +314,8 @@ def audit_source() -> None:
     options = read("src/platform/libretro/libretro_core_options.h")
     facade_header = read("src/platform/libretro/gba-wifi-link.h")
     facade_source = read("src/platform/libretro/gba-wifi-link.c")
-    session_header = read(
-        "include/mgba/internal/gba/sio/netplay/session-v2.h"
-    )
-    protocol_header = read(
-        "include/mgba/internal/gba/sio/netplay/protocol-v2.h"
-    )
+    session_header = read("include/mgba/internal/gba/sio/netplay/session-v2.h")
+    protocol_header = read("include/mgba/internal/gba/sio/netplay/protocol-v2.h")
 
     if libretro.count("mLibretroGBAWifiLinkRegister(") != 1:
         fail("libretro does not have exactly one canonical registration call")
@@ -172,6 +325,8 @@ def audit_source() -> None:
         fail("the retired runtime selector is declared or queried")
     if PRODUCT_ID not in facade_header + facade_source:
         fail("canonical product identity is missing from the façade")
+    if "product schema=" not in facade_source or "failure schema=" not in facade_source:
+        fail("the façade lacks stable structured product/failure diagnostics")
     if "GBALinkV2Session" not in session_header:
         fail("the concrete session lost its version-qualified API")
     if '#include <mgba/internal/gba/sio/netplay/protocol-v2.h>' not in session_header:
@@ -186,14 +341,11 @@ def audit_source() -> None:
             fail(f"versioned protocol constant changed or moved: {expected}")
 
     for path in current_files():
+        relative = path.relative_to(ROOT).as_posix()
         text = path.read_text(encoding="utf-8", errors="replace")
-        relative = path.relative_to(ROOT)
-        for obsolete in OBSOLETE_PRODUCT_TEXT:
-            if obsolete in text:
-                fail(f"obsolete product text {obsolete!r} in {relative}")
-        for pattern in RETIRED_SYMBOL_PATTERNS:
-            if pattern.search(text):
-                fail(f"retired v1 symbol identity in {relative}: {pattern.pattern}")
+        violations = find_text_policy_violations(relative, text)
+        if violations:
+            fail(violations[0])
 
 
 def command_output(command: list[str]) -> str:
@@ -209,15 +361,17 @@ def command_output(command: list[str]) -> str:
     return result.stdout
 
 
+def _target_present(output: str, target: str) -> bool:
+    return bool(re.search(rf"(?m)^\s*{re.escape(target)}(?:\s|:|$)", output))
+
+
 def audit_generated_targets(build_dir: Path) -> None:
-    output = command_output(
-        ["cmake", "--build", str(build_dir), "--target", "help"]
-    )
+    output = command_output(["cmake", "--build", str(build_dir), "--target", "help"])
     for target in EXPECTED_TARGETS:
-        if not re.search(rf"(?m)^\s*{re.escape(target)}(?:\s|:|$)", output):
+        if not _target_present(output, target):
             fail(f"canonical generated target is missing: {target}")
-    for target in FORBIDDEN_TARGETS:
-        if re.search(rf"(?m)^\s*{re.escape(target)}(?:\s|:|$)", output):
+    for target in POLICY["retired_targets"] + POLICY["obsolete_targets"]:
+        if _target_present(output, target):
             fail(f"obsolete or retired generated target exists: {target}")
 
 
@@ -226,17 +380,16 @@ def audit_binary(binary: Path) -> None:
         fail(f"binary does not exist: {binary}")
     strings = command_output(["strings", str(binary)])
     symbols = command_output(["nm", "-D", str(binary)])
-    for identity in (PRODUCT_ID, PROTOCOL_ID):
+    for identity in (PRODUCT_ID, PROTOCOL_ID, "product schema=", "failure schema="):
         if identity not in strings:
             fail(f"Android binary lacks required identity: {identity}")
     for forbidden in (
-        "mLibretroNetpacketRegister",
-        "mLibretroNetpacketV2",
-        "GBA replicated link",
-        "registered replicated-pair Netpacket protocol v2",
+        POLICY["retired_symbol_families"]
+        + POLICY["retired_compatibility_strings"]
+        + POLICY["obsolete_product_text"]
     ):
         if forbidden in strings or forbidden in symbols:
-            fail(f"Android binary contains obsolete product identity: {forbidden}")
+            fail(f"Android binary contains retired or obsolete identity: {forbidden}")
 
 
 def main() -> None:

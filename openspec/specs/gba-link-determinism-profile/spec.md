@@ -106,10 +106,10 @@ Both peers SHALL exchange and validate their complete profile during bilateral `
 - **THEN** the provisional session fails as a conflicting duplicate
 
 ### Requirement: Enabled cheats are incompatible with replicated play
-The adapter SHALL refuse protocol-v2 attachment when any cheat is enabled and SHALL reject attempts to enable, disable, add, remove, or mutate cheats while any protocol-v2 transport or session state is non-disconnected.
+The GBA Wi-Fi Link adapter SHALL refuse attachment when any cheat is enabled and SHALL reject attempts to enable, disable, add, remove, or mutate cheats while any link transport or session state is non-disconnected.
 
 #### Scenario: Enabled cheat blocks HELLO
-- **WHEN** a peer attempts to start protocol v2 with an enabled cheat
+- **WHEN** a peer attempts to start GBA Wi-Fi Link with an enabled cheat
 - **THEN** it reports an actionable cheat-policy error and emits no compatible `HELLO`
 
 #### Scenario: Cheat mutation during a live state is rejected
@@ -193,7 +193,7 @@ RTC normalization SHALL be captured with machine state, cartridge RTC metadata, 
 - **THEN** the previous complete machine, save, and RTC checkpoint remains the only rollback target
 
 ### Requirement: Unsynchronized external inputs fail closed
-The adapter SHALL derive the peer-equal cartridge-required external-input mask from effective cartridge hardware before `HELLO`, and each endpoint SHALL separately advertise its synchronized-input capability mask. Protocol v2 SHALL require the required mask to be a subset of both endpoint masks and SHALL reject a session requiring tilt, gyroscope, luminance/solar, camera, microphone, or another input not carried authoritatively by both endpoints under the negotiated frame-input format. `HW_EREADER` SHALL be rejected explicitly as unsupported cartridge-data input before a compatible `HELLO`, calibration, or replica capture rather than being admitted as digital-only content. An endpoint's unused capability superset SHALL NOT reject. Local-output capabilities such as rumble SHALL NOT cause rejection. Current camera and microphone inputs have no equivalent detected GBA cartridge-hardware flag in this adapter path; reserved mask bits remain unavailable and any future detectable requirement SHALL fail unless carried authoritatively.
+The GBA Wi-Fi Link adapter SHALL derive the peer-equal cartridge-required external-input mask from effective cartridge hardware before `HELLO`, and each endpoint SHALL separately advertise its synchronized-input capability mask. The current version-2 wire/runtime contract SHALL require the required mask to be a subset of both endpoint masks and SHALL reject a session requiring tilt, gyroscope, luminance/solar, camera, microphone, or another input not carried authoritatively by both endpoints under the negotiated frame-input format. `HW_EREADER` SHALL be rejected explicitly as unsupported cartridge-data input before a compatible `HELLO`, calibration, or replica capture rather than being admitted as digital-only content. An endpoint's unused capability superset SHALL NOT reject. Local-output capabilities such as rumble SHALL NOT cause rejection. Current camera and microphone inputs have no equivalent detected GBA cartridge-hardware flag in this adapter path; reserved mask bits remain unavailable and any future detectable requirement SHALL fail unless carried authoritatively.
 
 #### Scenario: Digital-only cartridge proceeds
 - **WHEN** the cartridge requires only the synchronized digital GBA keys
@@ -216,7 +216,7 @@ The adapter SHALL derive the peer-equal cartridge-required external-input mask f
 - **THEN** attachment fails with an actionable unsupported cartridge-data diagnostic before compatible `HELLO`, calibration, replica capture, or manifest transmission
 
 ### Requirement: Live deterministic settings are immutable
-Every setting represented by the deterministic profile, RTC normalization policy, or authoritative-input capability negotiation SHALL be frozen for every non-disconnected protocol-v2 state. A requested change SHALL be rejected, or the session SHALL be fully torn down before the change takes effect.
+Every setting represented by the deterministic profile, RTC normalization policy, or authoritative-input capability negotiation SHALL be frozen for every non-disconnected GBA Wi-Fi Link state. A requested change SHALL be rejected, or the session SHALL be fully torn down before the change takes effect.
 
 #### Scenario: Core variable update during calibration is rejected
 - **WHEN** a timing, idle, input-direction, RTC, or sensor-policy variable update is reported during latency calibration

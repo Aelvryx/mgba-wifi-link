@@ -182,6 +182,7 @@ jobs:
 
       - name: Validate GBA Wi-Fi Link product boundary
         run: |
+          python3 tools/test-audit-gba-wifi-link-boundary.py
           cmake -S . -B build-ci-boundary -G Ninja \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \

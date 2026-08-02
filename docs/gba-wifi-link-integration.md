@@ -134,11 +134,24 @@ the full historical deletion inventory in every sanitizer job.
 
 ## Structured diagnostic contract
 
-Human-facing status text may say GBA Wi-Fi Link. The machine-readable record
-kinds `attach`, `calibration`, `cal-rtt`, `cal-select`, `cal-digest-a`,
-`cal-digest-b`, and `determinism` retain their current fields, role/session
-correlation, units, and privacy behavior. Any incompatible record change must
-introduce and validate an explicit diagnostic schema version.
+Human-facing status text may say GBA Wi-Fi Link and may change independently of
+qualification. Diagnostic schema 1 adds these stable product-level records:
+
+```text
+product schema=1 id=mgba-gba-wifi-link protocol=mgba-gba-link-replicated-v2
+failure schema=1 P<role> s=<session> generation=<generation>
+        reason=<numeric-reason> state=<stable-state> frame=<replicated-frame>
+```
+
+The analyzer and Android validator consume those records rather than the
+friendly registration or failure sentences. A structured failure always
+rejects a run; a missing or malformed product record also fails closed. The
+existing machine-readable record kinds `attach`, `calibration`, `cal-rtt`,
+`cal-select`, `cal-digest-a`, `cal-digest-b`, and `determinism` retain their
+current fields, role/session correlation, units, and privacy behavior. No
+structured record contains paths, addresses, ROM or save data, input history,
+profile digests, or BIOS data. Any incompatible record change must introduce
+and validate a new diagnostic schema version.
 
 ## Final evidence
 
@@ -158,11 +171,12 @@ replaced or supplemented with the immutable PR-head run at landing:
 - The complete normal suite passes all 33 applicable executables. The separate
   pinned-upstream `util-hash/stagedCrc32` case retains its exact known failure;
   its other 17 internal cases pass.
-- The analyzer smoke test and all 22 Android qualification-helper cases pass.
-  The source/generated-target positive boundary audit passes.
+- The analyzer smoke test, all 26 Android qualification-helper cases, and all
+  8 positive-boundary policy cases pass. The source/generated-target positive
+  boundary audit passes.
 - A local NDK r27 ARM64 build produces an Android 21 AArch64 shared object with
   SHA-256
-  `193df12beb2671ef3710e38b246cfb4c703fb170dd2b0faeb24d857e79794c97`.
+  `75f6e75f936d305073943a11ee2d031593b5fc3af9e1c1fc76a597da0abbc13e`.
   Its binary audit finds both `mgba-gba-wifi-link` and
   `mgba-gba-link-replicated-v2`, and no retired product identity.
 - The normal host libretro core has SHA-256

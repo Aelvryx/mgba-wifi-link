@@ -50,9 +50,9 @@
 
 ## 6. Integrate current specifications and documentation
 
-- [ ] 6.1 Add the authoritative `gba-wifi-link-runtime` capability and migrate continuing façade, optional disconnected-execution, versioned session/wire-boundary, structured-diagnostic, validation-ownership, behavior-neutrality, and current-versus-historical requirements into it.
-- [ ] 6.2 Remove the obsolete `gba-link-runtime-selection` capability after its delta is synced, leaving its design/removal history under archived OpenSpec.
-- [ ] 6.3 Sync canonical active terminology into determinism, fixed-delay, and Multi-Pak discovery specifications without changing exact versioned digest, compatibility, or wire language.
+- [x] 6.1 Add the authoritative `gba-wifi-link-runtime` capability and migrate continuing façade, optional disconnected-execution, versioned session/wire-boundary, structured-diagnostic, validation-ownership, behavior-neutrality, and current-versus-historical requirements into it.
+- [x] 6.2 Remove the obsolete `gba-link-runtime-selection` capability after its delta is synced, leaving its design/removal history under archived OpenSpec.
+- [x] 6.3 Sync canonical active terminology into determinism, fixed-delay, and Multi-Pak discovery specifications without changing exact versioned digest, compatibility, or wire language.
 - [x] 6.4 Update README navigation, implementation paths, roadmap priorities/decision log, Wi-Fi Link setup/troubleshooting, and release language to describe the canonical runtime directly.
 - [x] 6.5 Update `UPSTREAM.md` to describe the current fork/master patch stack and future refresh process rather than obsolete `feature/wifi-link-netplay*` branches.
 - [x] 6.6 Keep the technical protocol reference explicitly version 2 and verify every exact protocol string, magic, value, layout, and digest-domain statement remains correct.
@@ -77,7 +77,7 @@
 ## 8. Review and land the integration
 
 - [x] 8.1 Organize the patch so versioned-session boundary preservation, product-façade rename, prototype/audit cleanup, and specification/documentation integration are independently reviewable from any unavoidable semantic edit.
-- [ ] 8.2 Obtain focused review of the canonical-versus-versioned boundary, spike/audit invariant ownership, current/historical documentation split, and unchanged-wire/behavior claim.
+- [x] 8.2 Obtain focused review of the canonical-versus-versioned boundary, spike/audit invariant ownership, current/historical documentation split, and unchanged-wire/behavior claim.
 - [x] 8.3 Open the implementation PR with exact baseline/final target mappings and protected validation evidence.
 - [ ] 8.4 Require every protected GitHub check to pass on the immutable reviewed head and confirm no physical rerun was skipped after an actual behavior change.
 - [ ] 8.5 Sync approved capability deltas, remove the empty `gba-link-runtime-selection` main-spec directory, archive `integrate-replicated-link-runtime`, merge through protected `master`, update the roadmap/release issue, and leave the workspace clean.

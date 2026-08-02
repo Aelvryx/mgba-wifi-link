@@ -53,6 +53,7 @@ enum GBAWifiLinkTeardownAction {
 
 static struct GBAWifiLinkFrontend* _frontend;
 static struct mLogger _silentLogger;
+static char _capturedLog[4096];
 
 static void _discardLog(
 		struct mLogger* logger, int category,
@@ -60,11 +61,23 @@ static void _discardLog(
 	UNUSED(logger);
 	UNUSED(category);
 	UNUSED(level);
-	UNUSED(format);
-	UNUSED(args);
+	size_t length = strlen(_capturedLog);
+	if (length < sizeof(_capturedLog) - 2) {
+		int written = vsnprintf(
+		    &_capturedLog[length], sizeof(_capturedLog) - length,
+		    format, args);
+		if (written > 0) {
+			length = strlen(_capturedLog);
+			if (length < sizeof(_capturedLog) - 1) {
+				_capturedLog[length] = '\n';
+				_capturedLog[length + 1] = '\0';
+			}
+		}
+	}
 }
 
 M_TEST_SUITE_SETUP(LibretroGBAWifiLink) {
+	_capturedLog[0] = '\0';
 	_silentLogger.log = _discardLog;
 	mLogSetDefaultLogger(&_silentLogger);
 	return 0;
@@ -141,6 +154,7 @@ static enum mPlatform _nonGbaPlatform(const struct mCore* core) {
 }
 
 static int _setup(void** state) {
+	_capturedLog[0] = '\0';
 	struct GBAWifiLinkFixture* fixture =
 	    calloc(1, sizeof(*fixture));
 	assert_non_null(fixture);
@@ -182,6 +196,10 @@ M_TEST_DEFINE(registersExactReplicatedProtocol) {
 	assert_string_equal(
 	    fixture->frontend.callbacks.protocol_version,
 	    GBA_LINK_V2_PROTOCOL_NAME);
+	assert_non_null(strstr(
+	    _capturedLog,
+	    "product schema=1 id=mgba-gba-wifi-link "
+	    "protocol=mgba-gba-link-replicated-v2"));
 	assert_false(mLibretroGBAWifiLinkOwnsExecution());
 	assert_null(mLibretroGBAWifiLinkPresentedCore());
 	assert_int_equal(mLibretroGBAWifiLinkTestPlayerForRole(
@@ -550,6 +568,10 @@ M_TEST_DEFINE(legacyV1HeaderAfterReadinessRestoresAttachmentCheckpoint) {
 	_teardownPairAction(
 	    fixture, GBA_LINK_ROLE_HOST,
 	    GBA_WIFI_LINK_TEARDOWN_LEGACY_PACKET);
+	assert_non_null(strstr(
+	    _capturedLog,
+	    "failure schema=1 P0 s=77 generation=0 reason="));
+	assert_non_null(strstr(_capturedLog, "state=failed frame=0"));
 }
 
 M_TEST_DEFINE(verifiedRollbackRestoresStateAndSaveAtomically) {

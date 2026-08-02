@@ -1,4 +1,10 @@
-## ADDED Requirements
+# GBA Wi-Fi Link Runtime Specification
+
+## Purpose
+
+Define the canonical GBA Wi-Fi Link product façade, its optional ownership of ordinary emulation, the preserved versioned session/wire boundary, stable diagnostics, permanent validation, and current-versus-historical documentation rules.
+
+## Requirements
 
 ### Requirement: GBA Wi-Fi Link is the canonical product runtime
 The libretro core SHALL present the replicated GBA Wi-Fi Link as one canonical product rather than as a selectable or alternative v2 product path. A product-specific `gba-wifi-link` / `mLibretroGBAWifiLink*` façade SHALL own the frontend lifecycle and the sole GBA Netpacket registration path. The concrete `session-v2` state machine and `protocol-v2` codec/schema SHALL retain version-qualified identities because they implement the actual version-2 compatibility contract.

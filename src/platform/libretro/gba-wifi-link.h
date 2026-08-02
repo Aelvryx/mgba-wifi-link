@@ -12,6 +12,7 @@
 #include <mgba-util/image.h>
 
 #define M_LIBRETRO_GBA_WIFI_LINK_PRODUCT_ID "mgba-gba-wifi-link"
+#define M_LIBRETRO_GBA_WIFI_LINK_DIAGNOSTIC_SCHEMA 1
 
 struct mLibretroGBAWifiLinkTestMetrics {
 	uint16_t selectedDelay;

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate paired protocol-v2 structured logs from a qualification run."""
+"""Validate paired GBA Wi-Fi Link structured logs from a qualification run."""
 
 from __future__ import annotations
 
@@ -237,8 +237,8 @@ def parse(path: Path) -> Log:
         if "divergence frame=" in raw or "canonical state digest mismatch" in raw:
             result.divergence_lines.append(raw)
         if (
-            "GBA replicated link: Link failed:" in raw
-            or "GBA replicated link: protocol-v2 session failed:" in raw
+            "GBA Wi-Fi Link: Link failed:" in raw
+            or "GBA Wi-Fi Link: session failed:" in raw
         ):
             result.failure_lines.append(raw)
         match = CALIBRATION_LEGACY.search(raw)

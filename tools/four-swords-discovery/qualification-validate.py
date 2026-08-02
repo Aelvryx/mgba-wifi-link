@@ -313,7 +313,9 @@ def validate_runtime_log(args: argparse.Namespace) -> None:
         "frontend identity": f"RetroArch {args.frontend_version} (Git {args.frontend_git})",
         "loaded app-private core path": f'[Core] Loading dynamic libretro core from: "{args.internal_core}".',
         "content identity": f"[Content] CRC32: {args.content_crc32}.",
-        "protocol-v2 registration": "registered replicated-pair Netpacket protocol v2",
+        "GBA Wi-Fi Link registration": (
+            "registered mgba-gba-wifi-link using mgba-gba-link-replicated-v2"
+        ),
         "isolated save path": f'[Override] Redirecting save file to "{args.remote_root}/saves/',
         "isolated state path": f'[Override] Redirecting save state to "{args.remote_root}/states/',
     }

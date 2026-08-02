@@ -1,6 +1,6 @@
 # mGBA Wi-Fi Link
 
-[![GBA Wi-Fi link netplay](https://github.com/Aelvryx/mgba/actions/workflows/netplay-ci.yml/badge.svg)](https://github.com/Aelvryx/mgba/actions/workflows/netplay-ci.yml)
+[![GBA Wi-Fi Link](https://github.com/Aelvryx/mgba/actions/workflows/gba-wifi-link-ci.yml/badge.svg)](https://github.com/Aelvryx/mgba/actions/workflows/gba-wifi-link-ci.yml)
 [![Latest prerelease](https://img.shields.io/github/v/release/Aelvryx/mgba?include_prereleases&label=prerelease)](https://github.com/Aelvryx/mgba/releases)
 [![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
 
@@ -58,7 +58,7 @@ exact source commit and SHA-256 for every supported artifact.
 3. On player one, use RetroArch's **Netplay → Host** flow.
 4. On player two, choose **Connect to Netplay Host** and select or enter the
    host address.
-5. Wait for the replicated-link-ready message before entering the game's
+5. Wait for the GBA Wi-Fi Link ready message before entering the game's
    Multi-Pak menu.
 6. Let player one make any leader-only selections required by the game.
 
@@ -119,25 +119,25 @@ tests, and an Android ARM64 build.
 ## Project navigation
 
 - [Roadmap](ROADMAP.md)
-- [Installation, operation, and troubleshooting](docs/wifi-link-netplay.md)
-- [Validation matrix](docs/netplay-validation-matrix.md)
+- [Installation, operation, and troubleshooting](docs/gba-wifi-link.md)
+- [Validation matrix](docs/gba-wifi-link-validation-matrix.md)
 - [Protocol-v2 design](docs/gba-link-protocol-v2.md)
 - [Pinned upstream and libretro revisions](UPSTREAM.md)
 - [Contributing](CONTRIBUTING.md)
 - [Support and issue routing](SUPPORT.md)
 - [Security policy](SECURITY.md)
 
-The main implementation lives in `src/gba/sio/netplay`; the libretro adapter is
-`src/platform/libretro/netpacket-v2.c`. Tests are under `src/gba/test` and
-`src/platform/test`. Completed design changes are retained under
-`openspec/changes/archive`.
+The product façade is `src/platform/libretro/gba-wifi-link.c`. Its concrete
+version-2 session and codec live under `src/gba/sio/netplay`; tests are under
+`src/gba/test` and `src/platform/test`. Completed design changes are retained
+under `openspec/changes/archive`.
 
 ## Roadmap at a glance
 
 The immediate engineering priorities are:
 
-1. Validate and package the v2-only deterministic/calibrated runtime as a
-   clean release.
+1. Validate and package the integrated GBA Wi-Fi Link runtime as a clean
+   release.
 2. Test direct-hotspot latency and decide whether one-frame buffering can
    become the default.
 3. Expand compatibility reporting and diagnostic capture.

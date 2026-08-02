@@ -123,7 +123,7 @@ if shell.startswith("cat "):
 if shell.startswith("grep -E "):
     path = shlex.split(shell)[-1]
     for line in remote(path).read_text(encoding="utf-8").splitlines():
-        if any(needle in line for needle in ("[Autoconf]", "Found joypad", "registered replicated-pair", "CRC32", "Loading dynamic", "RetroArch ")):
+        if any(needle in line for needle in ("[Autoconf]", "Found joypad", "registered mgba-gba-wifi-link", "CRC32", "Loading dynamic", "RetroArch ")):
             print(line)
     raise SystemExit(0)
 if shell.startswith("rm -rf "):
@@ -331,7 +331,8 @@ class QualificationHelperTest(unittest.TestCase):
                     f"[Content] CRC32: {self.crc32}.",
                     f'[Override] Redirecting save file to "{self.remote_root}/saves/mGBA/game.srm".',
                     f'[Override] Redirecting save state to "{self.remote_root}/states/mGBA/game.state".',
-                    "Status: GBA replicated link: registered replicated-pair Netpacket protocol v2",
+                    "Status: GBA Wi-Fi Link: registered mgba-gba-wifi-link "
+                    "using mgba-gba-link-replicated-v2",
                     f"attach P{role} policy={policy} delay={delay} calibration=25ms "
                     f"provisional={provisional} generation={generation}",
                     f"calibration P{role} provisional={provisional} generation={generation} "
@@ -571,7 +572,11 @@ class QualificationHelperTest(unittest.TestCase):
         thor_log = self.device_path(self.thor_serial, f"{self.remote_root}/logs/retroarch.log")
         cases = (
             (f"RetroArch {self.frontend_version}", "RetroArch 9.9.9", "frontend identity"),
-            ("registered replicated-pair Netpacket protocol v2", "registered unknown core", "protocol-v2 registration"),
+            (
+                "registered mgba-gba-wifi-link using mgba-gba-link-replicated-v2",
+                "registered unknown core",
+                "GBA Wi-Fi Link registration",
+            ),
             (self.crc32, "0x00000000", "content identity"),
         )
         for old, new, expected_error in cases:

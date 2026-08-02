@@ -1,4 +1,4 @@
-# GBA Link Netplay Validation Matrix
+# GBA Wi-Fi Link Validation Matrix
 
 Date: 2026-08-02
 
@@ -11,16 +11,16 @@ Swords, and the supplied diagnostic workloads are verified; Advance Wars has
 a successful user playtest; other commercial titles remain unqualified. The
 v2 wire/runtime contract is deliberately not frozen yet.
 
-## Protocol-v2 real-time evidence
+## Version-2 replicated-runtime evidence
 
 Protocol v2 replaces per-cable-event network barriers with one replicated
 P0/P1 pair on each endpoint and frame-authoritative input packets. The
-protocol-v2 branch has the following automated and rendered-device evidence:
+the versioned runtime has the following automated and rendered-device evidence:
 
 - All 13 surviving focused SIO, input-ring, v2 codec/session, replica, pair,
   save-routing, and libretro-adapter test executables pass normally, under
   ASan/UBSan with leak detection, and under TSan.
-- `test-libretro-netpacket-v2-replay` compiles the actual adapter twice into
+- `test-libretro-gba-wifi-link-replay` compiles the actual adapter twice into
   one process and connects the independent host/client instances through an
   ordered deterministic-latency wire. It covers a complete bilateral replica
   exchange, 125 input frames, state checks, role presentation, every
@@ -70,7 +70,7 @@ The short structured summaries include cumulative packets/bytes, verification
 count, local SIO transfers/words/waits, input rendezvous timing, future input
 depth, queue high-water, audio samples/frames/empties, per-core scheduler work,
 and separate full rolling P0/P1 trace digests. The checked
-`tools/analyze-replicated-netplay.py` validator compares the two logs and the
+`tools/analyze-gba-wifi-link.py` validator compares the two logs and the
 direct-pair baseline, enforcing the frame floor, every sampled trace, serial
 counters, state-check coverage, audio coverage, packet scaling, queue bound,
 and five-percent throughput limit. The soak used core SHA-256
@@ -141,7 +141,7 @@ hashes are:
 The analyzer command for a real-game run is:
 
 ```sh
-python3 tools/analyze-replicated-netplay.py \
+python3 tools/analyze-gba-wifi-link.py \
   /path/to/host.log /path/to/client.log \
   --minimum-frames 30000 --commercial
 ```
@@ -391,10 +391,10 @@ to their disposable paths first: RetroArch rewrites a core-options file on
 unload even when the main configuration is read-only in intent.
 
 ```sh
-install -d /tmp/mgba-v2-qualification-save \
-  /tmp/mgba-v2-qualification-state
-cp tools/netpacket-spike/qualification-core-options.cfg \
-  /tmp/mgba-v2-qualification-core-options.cfg
+install -d /tmp/mgba-gba-wifi-link-qualification-save \
+  /tmp/mgba-gba-wifi-link-qualification-state
+cp tools/gba-wifi-link-qualification/qualification-core-options.cfg \
+  /tmp/mgba-gba-wifi-link-qualification-core-options.cfg
 
 retroarch=/path/to/retroarch
 core=/path/to/mgba_libretro.so
@@ -402,26 +402,26 @@ rom=/path/to/gba-link-continuous.gba
 port=55448
 
 "$retroarch" -v \
-  --config tools/netpacket-spike/retroarch-qualification.cfg \
+  --config tools/gba-wifi-link-qualification/retroarch-qualification.cfg \
   --host --port="$port" --max-frames=180000 \
-  -L "$core" "$rom" > /tmp/mgba-v2-host.log 2>&1 &
+  -L "$core" "$rom" > /tmp/mgba-gba-wifi-link-host.log 2>&1 &
 host_pid=$!
 sleep 0.2
 "$retroarch" -v \
-  --config tools/netpacket-spike/retroarch-qualification.cfg \
+  --config tools/gba-wifi-link-qualification/retroarch-qualification.cfg \
   --connect=127.0.0.1 --port="$port" --max-frames=180000 \
-  -L "$core" "$rom" > /tmp/mgba-v2-client.log 2>&1 &
+  -L "$core" "$rom" > /tmp/mgba-gba-wifi-link-client.log 2>&1 &
 client_pid=$!
 wait "$host_pid"
 wait "$client_pid"
 
-python3 tools/analyze-replicated-netplay.py \
-  /tmp/mgba-v2-host.log /tmp/mgba-v2-client.log
+python3 tools/analyze-gba-wifi-link.py \
+  /tmp/mgba-gba-wifi-link-host.log /tmp/mgba-gba-wifi-link-client.log
 ```
 
 The release core no longer exposes the temporary local-pair diagnostic option.
-The transport-independent `test-gba-replicated-pair-spike` and
-`test-libretro-replicated-pair-spike` targets retain that scheduler and
+The transport-independent `test-gba-replicated-pair-scheduler` and
+`test-libretro-replicated-pair-frontend` targets retain that scheduler and
 frontend-boundary coverage without adding a user-visible release switch. The
 analyzer's optional `--baseline` input remains available for comparing a run
 with a captured `replicated-pair diagnostic` summary such as the exact
@@ -432,10 +432,12 @@ different sampled trace, mismatched serial counters, inadequate verification
 or audio coverage, empty audio, non-frame-scaled packet counts, excessive
 queue growth, or more than five-percent serial-throughput difference.
 
-The remaining sections are retired protocol-v1 historical evidence. The
+The sections from **Deterministic two-core evidence** through **Final clean
+Android qualification** are retired protocol-v1 historical evidence. Their
 listed sources, tests, analyzer, and selectable runtime have since been
 deleted; the measurements remain an architectural record and can be
-reconstructed from Git history rather than the active toolchain.
+reconstructed from Git history rather than the active toolchain. Later
+sections return explicitly to the current GBA Wi-Fi Link implementation.
 
 ## Deterministic two-core evidence
 
@@ -558,7 +560,7 @@ non-purpose-built Multi-Pak workload used for this qualification.
 
 ## Commands and current results
 
-The active v2-only focused targets are:
+The active GBA Wi-Fi Link focused targets are:
 
 ```text
 test-gba-netplay-identity
@@ -569,11 +571,11 @@ test-gba-netplay-session-v2
 test-gba-netplay-transport
 test-gba-replica
 test-gba-replicated-pair
-test-gba-replicated-pair-spike
+test-gba-replicated-pair-scheduler
 test-gba-sio
-test-libretro-replicated-pair-spike
-test-libretro-netpacket-v2
-test-libretro-netpacket-v2-replay
+test-libretro-replicated-pair-frontend
+test-libretro-gba-wifi-link
+test-libretro-gba-wifi-link-replay
 ```
 
 Normal focused suite:
@@ -584,7 +586,7 @@ env PYTHONPATH=/tmp/mgba-build-tools \
   /tmp/mgba-build-tools/bin/ctest \
     --test-dir build-dev \
     --output-on-failure \
-    -R 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' -j8
+    -R 'gba-netplay|gba-replica|gba-sio|libretro-gba-wifi-link|libretro-replicated-pair-frontend' -j8
 ```
 
 Result after protocol-v1 removal: 13/13 tests passed.
@@ -599,7 +601,7 @@ env PYTHONPATH=/tmp/mgba-build-tools \
   /tmp/mgba-build-tools/bin/ctest \
     --test-dir build-asan \
     --output-on-failure \
-    -R 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' -j4
+    -R 'gba-netplay|gba-replica|gba-sio|libretro-gba-wifi-link|libretro-replicated-pair-frontend' -j4
 ```
 
 Result after protocol-v1 removal: 13/13 tests passed with no sanitizer or leak
@@ -614,7 +616,7 @@ env PYTHONPATH=/tmp/mgba-build-tools \
   /tmp/mgba-build-tools/bin/ctest \
     --test-dir build-tsan \
     --output-on-failure \
-    -R 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' -j4
+    -R 'gba-netplay|gba-replica|gba-sio|libretro-gba-wifi-link|libretro-replicated-pair-frontend' -j4
 ```
 
 Result after protocol-v1 removal: 13/13 tests passed with no thread-sanitizer
@@ -623,11 +625,12 @@ finding.
 The complete normal suite passed 33 of 34 tests. Its sole failure is the known
 pinned-upstream `util-hash/stagedCrc32` case. That identical failure is recorded
 in the unmodified baseline and is unrelated to this change. These results were
-rerun on the v2-only branch based on
+rerun on the historical v2-only development branch based on
 `a3c888308c31c4498d6218256e6e39d36b7630e9`.
 
-`.github/workflows/netplay-ci.yml` independently configures and builds all 13
-focused test executables on Ubuntu 24.04 in normal, ASan/UBSan, and TSan jobs.
+`.github/workflows/gba-wifi-link-ci.yml` independently configures and builds
+all 13 focused test executables on Ubuntu 24.04 in normal, ASan/UBSan, and TSan
+jobs.
 It also runs the complete normal mGBA suite while independently confirming the
 single pinned upstream failure, builds and inspects an Android arm64-v8a
 libretro core with NDK r27, and uses the SHA-256-pinned Arm GNU Toolchain
@@ -645,13 +648,13 @@ slow in that regression and no longer changes selector-policy-v1 output.
 | Requirement | Automated evidence |
 | --- | --- |
 | Canonical deterministic profile and capability supersets | `gba-netplay-identity`: category golden vectors, poisoned storage, schema/order/flag failures, mismatch diagnostics, unused capability supersets |
-| RTC normalization and source restoration | `gba-netplay-rtc-sync`, `libretro-netpacket-v2-replay`: wall clock/offset conversion, fixed/fake preservation, negative and overflow boundaries, corresponding P0/P1 replicas, teardown restoration |
-| Unsynchronized external-input rejection | `gba-netplay-rtc-sync`, `gba-netplay-session-v2`, `libretro-netpacket-v2`: digital/tilt/gyro/solar/rumble masks, e-Reader hardware rejection, actionable mismatch diagnostics, and rejection before calibration or replica capture |
+| RTC normalization and source restoration | `gba-netplay-rtc-sync`, `libretro-gba-wifi-link-replay`: wall clock/offset conversion, fixed/fake preservation, negative and overflow boundaries, corresponding P0/P1 replicas, teardown restoration |
+| Unsynchronized external-input rejection | `gba-netplay-rtc-sync`, `gba-netplay-session-v2`, `libretro-gba-wifi-link`: digital/tilt/gyro/solar/rumble masks, e-Reader hardware rejection, actionable mismatch diagnostics, and rejection before calibration or replica capture |
 | Protocol codec | `gba-netplay-protocol-v2`: every new fixed payload, truncation/extension, Boolean/reserved bytes, ordinals, duration bounds and role validation |
 | Bilateral calibration | `gba-netplay-session-v2`: 12 host plus 12 client probes, complete vector reports, semantic replay, absolute deadlines, fallible clocks, wrong role/identity/state and stop re-entry |
 | Exact selector | `gba-netplay-input-sync`: nearest-rank p50/p95, rational frame boundaries, outlier and range behavior, one-/two-frame `F -> F + D` mapping |
-| Attachment and runtime | `libretro-netpacket-v2` and paired replay: profile/calibration before replica capture, immutable selected delay, normalized pair installation, checkpoint teardown, delayed/jittered/lost inputs |
-| Runtime latency evidence | paired replay and `tools/test-analyze-replicated-netplay.py`: per-endpoint wait-free ratio, aggregate waited-frame p95/max, insertion lead, deadline/clock failures, one-frame gate and one-endpoint tail rejection |
+| Attachment and runtime | `libretro-gba-wifi-link` and paired replay: profile/calibration before replica capture, immutable selected delay, normalized pair installation, checkpoint teardown, delayed/jittered/lost inputs |
+| Runtime latency evidence | paired replay and `tools/test-analyze-gba-wifi-link.py`: per-endpoint wait-free ratio, aggregate waited-frame p95/max, insertion lead, deadline/clock failures, one-frame gate and one-endpoint tail rejection |
 | Android qualification custody | `tools/four-swords-discovery/test-qualification-helper.py`: exact policy/options staging, selected-delay runtime proof, endpoint-role and session-identity binding, stale/mixed/malformed evidence, and remote hash checks |
 
 The paired replay accepts an optional local `GBA_LINK_REPLAY_ROM_PATH` so an

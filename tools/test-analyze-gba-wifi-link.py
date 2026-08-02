@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic smoke tests for analyze-replicated-netplay.py."""
+"""Deterministic smoke tests for analyze-gba-wifi-link.py."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).with_name("analyze-replicated-netplay.py")
+SCRIPT = Path(__file__).with_name("analyze-gba-wifi-link.py")
 SPEC = importlib.util.spec_from_file_location("replicated_log_analyzer", SCRIPT)
 assert SPEC and SPEC.loader
 ANALYZER = importlib.util.module_from_spec(SPEC)
@@ -93,7 +93,7 @@ def main() -> int:
     )
     for line in log(0).splitlines():
         if line.startswith(bounded_prefixes):
-            assert len("Status: GBA replicated link: " + line) <= 135
+            assert len("Status: GBA Wi-Fi Link: " + line) <= 135
 
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -227,7 +227,7 @@ def main() -> int:
 
         host_path.write_text(
             log(0, fixture=False)
-            + "\nStatus: GBA replicated link: protocol-v2 session failed: reason=8\n"
+            + "\nStatus: GBA Wi-Fi Link: session failed: reason=8\n"
         )
         errors = ANALYZER.validate(
             ANALYZER.parse(host_path),
@@ -247,7 +247,7 @@ def main() -> int:
             require_fixture=False,
         )
         assert any("frame-lead counters differ" in error for error in errors)
-    print("replicated netplay analyzer smoke test: pass")
+    print("GBA Wi-Fi Link analyzer smoke test: pass")
     return 0
 
 

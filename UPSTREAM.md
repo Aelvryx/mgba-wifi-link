@@ -7,19 +7,22 @@
 - Pinned upstream commit: `71aa6c7dab7654bfdbbd57e696f704671a97e55d`
 - Pinned commit date: `2026-07-30T23:01:50-07:00`
 - Pinned commit subject: `Qt: Remove unneeded Qt Multimedia-only include`
-- Upstream-facing protocol-v2 branch: `feature/wifi-link-netplay-v2`
-- Integration/evidence branch: `feature/wifi-link-netplay`
+- Fork repository: `https://github.com/Aelvryx/mgba.git`
+- Protected integration branch: `master`
 
 The repository was initialized directly from mGBA Git history. The
-protocol-v2 branch descends from the pinned commit above and contains the
-reviewable product, tests, CI, user documentation, and the active OpenSpec
-change. Project-local `.codex` helpers, device captures, logs, commercial ROMs,
-and generated build products remain outside this patch stack.
+fork's `master` patch stack descends from the pinned commit above and contains
+the reviewed GBA Wi-Fi Link product, tests, CI, user documentation, and
+archived OpenSpec decisions. Feature branches are short-lived review branches
+created from protected `master`; none is a permanent alternate runtime or
+provenance line. Project-local `.codex` helpers, device captures, logs,
+commercial ROMs, and generated build products remain outside this patch stack.
 
 ```sh
 git fetch upstream master --tags
-git switch -c feature/wifi-link-netplay-v2 \
-  71aa6c7dab7654bfdbbd57e696f704671a97e55d
+git switch master
+git pull --ff-only origin master
+git switch -c feature/<reviewed-change>
 ```
 
 No mGBA source snapshot was imported and no upstream commit was copied into a
@@ -35,8 +38,9 @@ and feature tests.
   Netpacket adapter and local replicated-pair cable execution. The retired
   distributed-cable protocol is preserved only in labelled historical
   evidence and Git history.
-- Keep temporary feasibility-spike code out of production build paths after its
-  findings and reusable lifecycle tests have been preserved.
+- Keep feasibility experiments out of production build paths after their
+  findings and reusable scheduler/frontend lifecycle tests have graduated to
+  permanent-purpose ownership.
 - Do not mix generated artifacts, build directories, local ROMs, device logs, or
   captures into source commits.
 - Rebase rather than merge upstream into this feature branch unless preserving a
@@ -162,22 +166,25 @@ api_version=1
 dlopen_and_symbol_call=pass
 ```
 
-## Feature qualification
+## GBA Wi-Fi Link qualification
 
-The experimental protocol-v2 baseline preserves the pinned upstream ancestry and header revision
-above. Detailed automated, sanitizer, localhost, two-device Android, and
+GBA Wi-Fi Link preserves the pinned upstream ancestry and header revision
+above. Its concrete session and wire compatibility contract remains version 2.
+Detailed automated, sanitizer, localhost, two-device Android, and
 independent-workload evidence is recorded in
-`docs/netplay-validation-matrix.md`; build, installation, protocol, policy, and
-failure semantics are documented in `docs/wifi-link-netplay.md`.
+`docs/gba-wifi-link-validation-matrix.md`; build, installation, protocol,
+policy, and failure semantics are documented in `docs/gba-wifi-link.md`.
 
 After splitting and rebasing the first upstream-facing stack onto
 `71aa6c7dab7654bfdbbd57e696f704671a97e55d`, a clean Linux build produced the
 shared library, libretro core, and all test executables. The complete normal
 suite passed 37 of 38 tests; its only failure remains the same
-`util-hash/stagedCrc32` baseline case documented above. Protocol v2 expands the
-focused set to 17 tests; all 17 pass normally, under ASan/UBSan with leak
-detection, and under TSan. Its real-adapter replay and 134,400-frame stock
-RetroArch soak are recorded in the validation matrix. Arm GNU Toolchain
+`util-hash/stagedCrc32` baseline case documented above. The protocol-v2
+development stack reached 17 focused tests before the retired v1-only targets
+were removed. The integrated product now has 13 focused executables; all 13
+pass normally, under ASan/UBSan with leak detection, and under TSan. Its
+real-adapter replay and 134,400-frame stock RetroArch soak are recorded in the
+validation matrix. Arm GNU Toolchain
 15.2.Rel1 reproduces the committed 32 KiB test ROM byte-for-byte.
 
 The feature workflow also configures and runs the complete normal suite while
@@ -198,7 +205,7 @@ FPS with matching P0/P1 traces, normal audio delivery, zero serial errors or
 timeouts, and atomic verified-checkpoint restoration after forced peer stop.
 The same binary passed a 15,600-frame Mario Kart Multi-Pak gameplay smoke with
 13,100 local cable words and no audiovisual or protocol fault. Detailed hashes
-and observations are in `docs/netplay-validation-matrix.md`.
+and observations are in `docs/gba-wifi-link-validation-matrix.md`.
 
 The earlier 8,029,120-byte production candidate from
 `9c528d38965998b15c8e7325326fd96f74362088` had SHA-256

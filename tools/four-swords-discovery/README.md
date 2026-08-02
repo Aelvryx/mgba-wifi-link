@@ -26,6 +26,16 @@ component that begins and ends with a letter or digit. The helper refuses `.`
 and `..`, existing device run directories, path escapes, duplicate-config
 ambiguity, or a staged hash mismatch.
 
+Each endpoint also needs a run-owned
+`device-snapshots/<name>-mgba-qualification.opt`. It must select
+`mgba_gba_link_netplay_runtime = "replicated-v2"` and the policy named by the
+manifest (`mgba_link_netplay_latency = "stable"` or `"low_latency"`). Invoke
+the helper with matching `EXPECTED_LATENCY_POLICY` and
+`EXPECTED_SELECTED_DELAY` values. The helper stages and hashes this file and
+then requires the latest runtime log to prove the same policy, 24-sample
+calibration, selector version, product floor, and selected delay. A stale or
+incomplete log cannot qualify a run.
+
 Android does not let ADB read RetroArch's app-private installed core. Install
 the exact staged artifact first through RetroArch's human-owned core installer,
 open Core Information, and preserve a private screenshot showing the embedded
@@ -66,7 +76,10 @@ The helper interprets the last occurrence of every config key, matching
 RetroArch's effective value. It requires run-specific save, state, and log
 directories, disabled config-save-on-exit and autosave, timestamped file
 logging, a run-specific `core_options_path`, native joypad index 0, and no
-injected host hotkey. This prevents the qualification launch from persisting
+injected host hotkey. It also requires `global_core_options = "true"`; without
+that setting RetroArch may ignore the run-specific options file in favour of a
+per-core file from the normal configuration tree. This prevents the
+qualification launch from persisting
 core-option changes into the normal RetroArch configuration tree.
 
 After launch, the human presses one physical button on each handheld. Do not

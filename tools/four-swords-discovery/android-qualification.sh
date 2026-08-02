@@ -19,6 +19,8 @@ readonly THOR_SERIAL="${THOR_SERIAL:-11c5b80}"
 readonly ODIN_SERIAL="${ODIN_SERIAL:-6986c674}"
 readonly THOR_CONTROLLER="${THOR_CONTROLLER:-Ayn Odin}"
 readonly ODIN_CONTROLLER="${ODIN_CONTROLLER:-Ayn Odin (Xbox Mode)}"
+readonly EXPECTED_LATENCY_POLICY="${EXPECTED_LATENCY_POLICY:-stable}"
+readonly EXPECTED_SELECTED_DELAY="${EXPECTED_SELECTED_DELAY:-2}"
 
 if [[ -n "${ADB:-}" ]]; then
   readonly ADB_BIN="$ADB"
@@ -86,8 +88,8 @@ assert_path_contract() {
 
 for_each_device() {
   local callback=$1
-  "$callback" "$THOR_SERIAL" thor "$THOR_CONTROLLER"
-  "$callback" "$ODIN_SERIAL" odin "$ODIN_CONTROLLER"
+  "$callback" "$THOR_SERIAL" thor "$THOR_CONTROLLER" 0
+  "$callback" "$ODIN_SERIAL" odin "$ODIN_CONTROLLER" 1
 }
 
 assert_device() {
@@ -149,10 +151,14 @@ validate_local_inputs() {
     --package "$PACKAGE" --content-crc32 "$EXPECTED_CONTENT_CRC32" \
     --rom-sha256 "$EXPECTED_ROM_SHA256" \
     --thor-serial "$THOR_SERIAL" --odin-serial "$ODIN_SERIAL" \
-    --thor-controller "$THOR_CONTROLLER" --odin-controller "$ODIN_CONTROLLER"
+    --thor-controller "$THOR_CONTROLLER" --odin-controller "$ODIN_CONTROLLER" \
+    --latency-policy "$EXPECTED_LATENCY_POLICY" \
+    --selected-delay "$EXPECTED_SELECTED_DELAY"
   for name in thor odin; do
     cfg="$root/device-snapshots/$name-qualification.cfg"
-    python3 "$VALIDATOR" config --config "$cfg" --remote-root "$remote"
+    python3 "$VALIDATOR" config --config "$cfg" \
+      --options "$root/device-snapshots/$name-mgba-qualification.opt" \
+      --remote-root "$remote" --latency-policy "$EXPECTED_LATENCY_POLICY"
   done
 }
 
@@ -186,6 +192,7 @@ stage_device() {
   $ADB_BIN -s "$serial" shell "mkdir -p '$remote/core' '$remote/config' '$remote/logs' '$remote/saves/mGBA' '$remote/states/mGBA'"
   $ADB_BIN -s "$serial" push "$CORE_PATH" "$remote/core/mgba_libretro_android.so" >/dev/null
   $ADB_BIN -s "$serial" push "$root/device-snapshots/$name-qualification.cfg" "$remote/config/retroarch-qualification.cfg" >/dev/null
+  $ADB_BIN -s "$serial" push "$root/device-snapshots/$name-mgba-qualification.opt" "$remote/config/mgba-qualification.opt" >/dev/null
   $ADB_BIN -s "$serial" push "$root/saves/$name/qualification-pre-run.srm" "$remote/saves/mGBA/The Legend of Zelda - A Link to the Past & Four Swords.srm" >/dev/null
 }
 
@@ -209,6 +216,7 @@ assert_remote_staging() {
   pairs=(
     "$CORE_PATH|$remote/core/mgba_libretro_android.so"
     "$root/device-snapshots/$name-qualification.cfg|$remote/config/retroarch-qualification.cfg"
+    "$root/device-snapshots/$name-mgba-qualification.opt|$remote/config/mgba-qualification.opt"
     "$root/saves/$name/qualification-pre-run.srm|$remote/saves/mGBA/The Legend of Zelda - A Link to the Past & Four Swords.srm"
   )
   for pair in "${pairs[@]}"; do
@@ -246,6 +254,7 @@ check_control_device() {
   local serial=$1
   local name=$2
   local expected_controller=$3
+  local expected_role=$4
   local log
   local remote
   assert_device "$serial" "$name"
@@ -254,7 +263,7 @@ check_control_device() {
   log="$(latest_log "$serial")"
   [[ -n "$log" ]] || { echo "$name has no qualification log" >&2; exit 1; }
   echo "===== $name"
-  $ADB_BIN -s "$serial" shell "grep -E '\[Autoconf\]|Found joypad|registered replicated-pair|CRC32|Loading dynamic libretro core|^RetroArch ' '$log'" | tr -d '\r'
+  $ADB_BIN -s "$serial" shell "grep -E '\[Autoconf\]|Found joypad|registered replicated-pair|CRC32|Loading dynamic libretro core|^RetroArch |attach P[01] policy=|calibration P[01]|cal-(rtt|select|digest-[ab]) P[01]' '$log'" | tr -d '\r'
   if ! $ADB_BIN -s "$serial" shell "cat '$log'" | tr -d '\r' | \
       python3 "$VALIDATOR" runtime-log \
         --frontend-version "$EXPECTED_FRONTEND_VERSION" \
@@ -262,7 +271,10 @@ check_control_device() {
         --internal-core "$INTERNAL_CORE" \
         --content-crc32 "$EXPECTED_CONTENT_CRC32" \
         --remote-root "$remote" \
-        --expected-controller "$expected_controller"; then
+        --expected-controller "$expected_controller" \
+        --expected-role "$expected_role" \
+        --latency-policy "$EXPECTED_LATENCY_POLICY" \
+        --selected-delay "$EXPECTED_SELECTED_DELAY"; then
     echo "$name failed prepared-run validation; stop and relaunch without ADB input injection" >&2
     exit 1
   fi

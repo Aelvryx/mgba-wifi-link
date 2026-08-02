@@ -568,7 +568,7 @@ env PYTHONPATH=/tmp/mgba-build-tools \
     -R 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' -j8
 ```
 
-Result: 17/17 tests passed.
+Result: 18/18 tests passed.
 
 ASan/UBSan focused suite:
 
@@ -583,7 +583,7 @@ env PYTHONPATH=/tmp/mgba-build-tools \
     -R 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' -j4
 ```
 
-Result: 17/17 tests passed with no sanitizer or leak finding.
+Result: 18/18 tests passed with no sanitizer or leak finding.
 
 TSan focused suite:
 
@@ -597,18 +597,106 @@ env PYTHONPATH=/tmp/mgba-build-tools \
     -R 'gba-netplay|gba-replica|gba-sio|libretro-netpacket|libretro-replicated-pair-spike' -j4
 ```
 
-Result: 17/17 tests passed with no thread-sanitizer finding.
+Result: 18/18 tests passed with no thread-sanitizer finding.
 
-The complete normal suite passed 37 of 38 tests. Its sole failure is the known
+The complete normal suite passed 38 of 39 tests. Its sole failure is the known
 pinned-upstream `util-hash/stagedCrc32` case. That identical failure is recorded
 in the unmodified baseline and is unrelated to this change. These results were
 rerun after splitting the patch stack and rebasing it onto
 `71aa6c7dab7654bfdbbd57e696f704671a97e55d`.
 
-`.github/workflows/netplay-ci.yml` independently configures and builds all 17
+`.github/workflows/netplay-ci.yml` independently configures and builds all 18
 focused test executables on Ubuntu 24.04 in normal, ASan/UBSan, and TSan jobs.
 It also runs the complete normal mGBA suite while independently confirming the
 single pinned upstream failure, builds and inspects an Android arm64-v8a
 libretro core with NDK r27, and uses the SHA-256-pinned Arm GNU Toolchain
 15.2.Rel1 archive to rebuild the CC0 ROM and compare it byte-for-byte with
 `tools/gba-link-test-rom/fixtures/gba-link-test.gba`.
+
+## Determinism and clean-latency increment (candidate evidence)
+
+The `harden-protocol-v2-determinism-latency` change increments the experimental
+runtime compatibility version and replaces the old ACCEPT/ACK attachment
+duration selector. The historical selector is characterized in
+`docs/netplay-determinism-latency-baseline.md`; replica capture is deliberately
+slow in that regression and no longer changes selector-policy-v1 output.
+
+| Requirement | Automated evidence |
+| --- | --- |
+| Canonical deterministic profile and capability supersets | `gba-netplay-identity`: category golden vectors, poisoned storage, schema/order/flag failures, mismatch diagnostics, unused capability supersets |
+| RTC normalization and source restoration | `gba-netplay-rtc-sync`, `libretro-netpacket-v2-replay`: wall clock/offset conversion, fixed/fake preservation, negative and overflow boundaries, corresponding P0/P1 replicas, teardown restoration |
+| Unsynchronized external-input rejection | `gba-netplay-rtc-sync`, `gba-netplay-session-v2`, `libretro-netpacket-v2`: digital/tilt/gyro/solar/rumble masks, e-Reader hardware rejection, actionable mismatch diagnostics, and rejection before calibration or replica capture |
+| Protocol codec | `gba-netplay-protocol-v2`: every new fixed payload, truncation/extension, Boolean/reserved bytes, ordinals, duration bounds and role validation |
+| Bilateral calibration | `gba-netplay-session-v2`: 12 host plus 12 client probes, complete vector reports, semantic replay, absolute deadlines, fallible clocks, wrong role/identity/state and stop re-entry |
+| Exact selector | `gba-netplay-input-sync`: nearest-rank p50/p95, rational frame boundaries, outlier and range behavior, one-/two-frame `F -> F + D` mapping |
+| Attachment and runtime | `libretro-netpacket-v2` and paired replay: profile/calibration before replica capture, immutable selected delay, normalized pair installation, checkpoint teardown, delayed/jittered/lost inputs |
+| Runtime latency evidence | paired replay and `tools/test-analyze-replicated-netplay.py`: per-endpoint wait-free ratio, aggregate waited-frame p95/max, insertion lead, deadline/clock failures, one-frame gate and one-endpoint tail rejection |
+| Android qualification custody | `tools/four-swords-discovery/test-qualification-helper.py`: exact policy/options staging, selected-delay runtime proof, endpoint-role and session-identity binding, stale/mixed/malformed evidence, and remote hash checks |
+
+The paired replay accepts an optional local `GBA_LINK_REPLAY_ROM_PATH` so an
+independently distributed workload can pass through the same adapters without
+being committed here. The v8.0.3 LinkCable `basic` release asset (SHA-256
+`305cbd56bf77ebe1597be5dafa5fd3617e0bf19b81b85ac56e98048133e342df`)
+passed the full replay suite. Its deterministic workload completed under the
+stable two-frame, experimental one-frame, and injected higher-than-two-frame
+policies. In each policy both endpoint pairs reported the same nonzero local
+transfer/completion/word counts, all four corresponding replicas matched, and
+the wire carried 252 frame-input packets for 125 released frames. Every packet
+on the replay wire decoded as protocol v2; no protocol-v1 per-transfer message
+was accepted.
+
+Selector policy 1 uses 24 integer-microsecond samples. Exact boundary vectors
+include 16,742 microseconds selecting one frame and 16,743 microseconds
+selecting two frames before the negotiated product floor. `Auto (Stable)` has
+a two-frame floor. `Auto (Low Latency, Experimental)` has a one-frame floor but
+is not a published result until the exact candidate completes at least 1,800
+seconds and 106,200 frames on both Android endpoints with at least 99% wait-free
+frames, waited-frame p95 no more than 8,000 microseconds, and no wait above
+16,743 microseconds.
+
+### Proportionate exact-device closeout
+
+The reviewed Android ARM64 candidate at
+`20c5d8d111cc23cefcb6711b8eb0aafccf75c24b` had SHA-256
+`c1a9edabc29381ba99dc5d91da01d952e1fa0f8000048c67eb00e4096fda6a18`.
+RetroArch 1.22.2 (Git `69a4f0e`) loaded the app-private installed core on the
+Thor as P0 and Odin as P1. Staged core, ROM, configuration, and option files
+were hash-checked; saves, states, and logs used run-specific paths. Raw logs
+and screenshots remain private.
+
+The exact candidate produced these bounded CC0 continuous-fixture results:
+
+| Policy | Selected delay | Common frames / elapsed | FPS P0 / P1 | Matched transfers | Result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Auto (Stable) | 2 | 8,400 / about 139 s | 60.294 / 60.310 | 4,195 per replica | matching trace samples and line state; 139 checks; zero fixture errors, timeouts, divergence, or empty-audio frames |
+| Auto (Low Latency, Experimental) | 2 | 8,400 / about 139 s | 60.318 / 60.317 | 4,196 per replica | policy 2 was active, but valid calibration conservatively selected two frames; matching traces and line state; zero fixture errors, timeouts, divergence, or empty-audio frames |
+
+Stable calibration measured min/p50/p95/max RTT values of
+15,473/16,764/24,672/25,700 microseconds. Low-latency calibration measured
+16,145/18,215/25,442/25,572 microseconds. The latter legitimately exceeded
+the one-frame selector budget, so the conditional 1,800-second one-frame gate
+was not activated and no qualified one-frame result is claimed. The earlier
+45-minute Four Swords playthrough was recovered as policy 1 / two-frame
+operation, correcting the contemporaneous assumption that its option-file
+label proved policy 2.
+
+The low-latency two-frame run reached 8,765 host frames before an intentional
+client stop. Teardown restored verified local state; the fixture reported
+4,378 matching transfers and no errors or timeouts. Pre-stop process PSS was
+about 161 MiB on Thor and 146 MiB on Odin; battery temperatures were 29.0 C
+and 30.0 C. The run-owned device directories, installer copy, and CC0 ROM were
+removed afterward while leaving the installed alpha core available for ad-hoc
+testing.
+
+Both devices were on strong Wi-Fi 6 links but associated with different 5 GHz
+BSSIDs and channels. A direct 5 GHz Android-hotspot A/B run is therefore a
+useful future attempt to qualify one frame; it is not required for the
+two-frame determinism/calibration increment. The source option remains clearly
+labelled experimental and unqualified rather than turning repeated calibration
+attempts into a search for a favourable sample.
+
+Physical logs also exposed that RetroArch truncates long core log records. The
+follow-up diagnostic-only correction splits calibration, wait-tail, health,
+poll-to-send, and input-lead data into short correlated records and requires
+the isolated configuration to enable its run-specific core-options file. This
+does not alter emulation, calibration, input mapping, or steady-state netplay.

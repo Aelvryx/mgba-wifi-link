@@ -7,6 +7,27 @@
 
 #include <mgba/internal/gba/sio/netplay/input-sync.h>
 
+#include <stdatomic.h>
+
+static atomic_uint_fast64_t _nextConnectionNonce = 1;
+static atomic_uint_fast64_t _nextProvisionalSessionId = 1;
+static atomic_uint_fast64_t _nextCalibrationGeneration = 1;
+
+static bool _allocateUnique(
+	atomic_uint_fast64_t* counter, uint64_t* value) {
+	uint_fast64_t allocated = atomic_load(counter);
+	for (;;) {
+		if (!allocated || allocated == UINT64_MAX) {
+			return false;
+		}
+		if (atomic_compare_exchange_weak(
+		        counter, &allocated, allocated + 1)) {
+			*value = allocated;
+			return true;
+		}
+	}
+}
+
 static enum GBALinkReason _transportReason(enum GBALinkV2Reason reason) {
 	switch (reason) {
 	case GBA_LINK_V2_REASON_QUEUE_EXHAUSTED:
@@ -63,6 +84,8 @@ const char* GBALinkV2DeadlineOperationName(
 	case GBA_LINK_V2_DEADLINE_NONE: return "none";
 	case GBA_LINK_V2_DEADLINE_QUIESCENT: return "quiescent rendezvous";
 	case GBA_LINK_V2_DEADLINE_HANDSHAKE: return "protocol-v2 handshake";
+	case GBA_LINK_V2_DEADLINE_CALIBRATION: return "latency calibration";
+	case GBA_LINK_V2_DEADLINE_ACCEPT: return "calibrated accept";
 	case GBA_LINK_V2_DEADLINE_MANIFEST: return "replica manifest";
 	case GBA_LINK_V2_DEADLINE_CHUNKS: return "replica chunks";
 	case GBA_LINK_V2_DEADLINE_INSTALL: return "replica pair installation";
@@ -80,6 +103,12 @@ const char* GBALinkV2SessionStateName(enum GBALinkV2SessionState state) {
 	case GBA_LINK_V2_SESSION_DISCONNECTED: return "disconnected";
 	case GBA_LINK_V2_SESSION_WAIT_QUIESCENT: return "wait-quiescent";
 	case GBA_LINK_V2_SESSION_HELLO: return "hello";
+	case GBA_LINK_V2_SESSION_CALIBRATION_BEGIN_WAIT:
+		return "calibration-begin-wait";
+	case GBA_LINK_V2_SESSION_HOST_PROBES: return "host-probes";
+	case GBA_LINK_V2_SESSION_CLIENT_PROBES: return "client-probes";
+	case GBA_LINK_V2_SESSION_WAIT_ACCEPT: return "wait-accept";
+	case GBA_LINK_V2_SESSION_CALIBRATED: return "calibrated";
 	case GBA_LINK_V2_SESSION_ACCEPTED: return "accepted";
 	case GBA_LINK_V2_SESSION_REPLICA_EXCHANGE: return "replica-exchange";
 	case GBA_LINK_V2_SESSION_INSTALLING: return "installing";
@@ -88,6 +117,47 @@ const char* GBALinkV2SessionStateName(enum GBALinkV2SessionState state) {
 	case GBA_LINK_V2_SESSION_FAILED: return "failed";
 	}
 	return "invalid";
+}
+
+size_t GBALinkV2SessionFormatFailureDetail(
+		const struct GBALinkV2Session* session, enum GBALinkV2Reason reason,
+		char* output, size_t capacity) {
+	if (!session || !output || !capacity) {
+		return 0;
+	}
+	output[0] = '\0';
+	int written = 0;
+	if (reason == GBA_LINK_V2_REASON_PROFILE_CATEGORY) {
+		written = snprintf(output, capacity,
+		    "profile-category=%s(%u) schema=%u/%u runtime=%u/%u",
+		    GBALinkV2DeterminismCategoryName(
+		        session->profileMismatchCategory),
+		    session->profileMismatchCategory,
+		    session->config.determinismProfile.schemaVersion,
+		    session->remoteProfileSchemaVersion,
+		    GBA_LINK_V2_RUNTIME_COMPATIBILITY_VERSION,
+		    session->remoteRuntimeCompatibilityVersion);
+	} else if (reason == GBA_LINK_V2_REASON_CAPABILITY_MISMATCH ||
+	           reason == GBA_LINK_V2_REASON_RTC_TIME_SEMANTICS ||
+	           reason == GBA_LINK_V2_REASON_RTC_SOURCE ||
+	           reason == GBA_LINK_V2_REASON_EXTERNAL_INPUT) {
+		written = snprintf(output, capacity,
+		    "capability=%s(%u) missing-input=%016" PRIx64
+		    " schema=%u/%u runtime=%u/%u",
+		    GBALinkV2CapabilityMismatchName(
+		        session->capabilityMismatch),
+		    session->capabilityMismatch,
+		    session->missingRequiredInputMask,
+		    session->config.determinismProfile.schemaVersion,
+		    session->remoteProfileSchemaVersion,
+		    GBA_LINK_V2_RUNTIME_COMPATIBILITY_VERSION,
+		    session->remoteRuntimeCompatibilityVersion);
+	}
+	if (written <= 0) {
+		output[0] = '\0';
+		return 0;
+	}
+	return (size_t) written < capacity ? (size_t) written : capacity - 1;
 }
 
 static void _setDeadline(
@@ -101,6 +171,29 @@ static void _setDeadline(
 	session->deadlineAtMs =
 	    GBALinkTransportMonotonicTimeMs(session->transport) +
 	    session->config.deadlines.milliseconds[operation];
+}
+
+static bool _monotonicUs(
+	struct GBALinkV2Session* session, uint64_t* now,
+	enum GBALinkV2Reason reason, const char* diagnostic) {
+	if (GBALinkTransportMonotonicTimeUs(session->transport, now)) {
+		return true;
+	}
+	GBALinkV2SessionFail(session, reason, diagnostic);
+	return false;
+}
+
+static bool _absoluteDeadline(
+	struct GBALinkV2Session* session, uint64_t now,
+	uint64_t* deadline, enum GBALinkV2Reason reason,
+	const char* diagnostic) {
+	const uint64_t duration = UINT64_C(3000000);
+	if (now > UINT64_MAX - duration) {
+		GBALinkV2SessionFail(session, reason, diagnostic);
+		return false;
+	}
+	*deadline = now + duration;
+	return true;
 }
 
 static void _releaseReplicaState(struct GBALinkV2Session* session) {
@@ -165,6 +258,21 @@ bool GBALinkV2SessionConfigure(
 	    config->minimumInputDelay > config->maximumInputDelay ||
 	    config->maximumInputDelay > GBA_LINK_V2_MAX_INPUT_DELAY ||
 	    config->estimatedJitterMs > 30000 ||
+	    (config->productPolicy != GBA_LINK_V2_PRODUCT_STABLE &&
+	     config->productPolicy != GBA_LINK_V2_PRODUCT_LOW_LATENCY) ||
+	    config->minimumInputDelay <
+	        (config->productPolicy == GBA_LINK_V2_PRODUCT_STABLE
+	             ? GBA_LINK_INPUT_STABLE_FLOOR
+	             : GBA_LINK_INPUT_LOW_LATENCY_FLOOR) ||
+	    !GBALinkV2DeterminismProfileValidate(
+	        &config->determinismProfile) ||
+	    !GBALinkV2DeterminismCapabilitiesValidate(
+	        &config->deterministicCapabilities) ||
+	    !config->cartridgeRequiredInputMask ||
+	    (config->cartridgeRequiredInputMask &
+	     ~GBA_LINK_V2_KNOWN_EXTERNAL_INPUTS) ||
+	    !session->transport || !session->transport->vtable ||
+	    !session->transport->vtable->monotonicTimeUs ||
 	    !GBALinkV2DeadlinePolicyValidate(&config->deadlines) ||
 	    !config->callbacks || !config->callbacks->quiescentBoundary ||
 	    !config->callbacks->setPaused ||
@@ -289,8 +397,15 @@ bool GBALinkV2SessionStart(
 	session->transportGeneration = transportGeneration;
 	session->nextPacketSequence = 1;
 	session->nextRemotePacketSequence = 1;
+	if (!_allocateUnique(
+	        &_nextConnectionNonce,
+	        &session->localHello.connectionNonce)) {
+		return false;
+	}
 	session->state = GBA_LINK_V2_SESSION_WAIT_QUIESCENT;
+	uint64_t connectionNonce = session->localHello.connectionNonce;
 	memset(&session->localHello, 0, sizeof(session->localHello));
+	session->localHello.connectionNonce = connectionNonce;
 	session->localHello.capabilities = session->config.capabilities;
 	session->localHello.requiredCapabilities =
 	    GBA_LINK_V2_REQUIRED_CAPABILITIES;
@@ -310,12 +425,19 @@ bool GBALinkV2SessionStart(
 	    session->config.maximumInputDelay;
 	session->localHello.experimentalRuntime =
 	    session->config.experimentalRuntime;
+	session->localHello.productPolicy = session->config.productPolicy;
+	session->localHello.profile = session->config.determinismProfile;
+	session->localHello.deterministicCapabilities =
+	    session->config.deterministicCapabilities;
 	_setDeadline(session, GBA_LINK_V2_DEADLINE_QUIESCENT);
 	return _enterQuiescent(session);
 }
 
 static bool _helloCompatible(
 	struct GBALinkV2Session* session, const struct GBALinkV2Hello* hello) {
+	session->remoteRuntimeCompatibilityVersion =
+	    hello->runtimeCompatibilityVersion;
+	session->remoteProfileSchemaVersion = hello->profile.schemaVersion;
 	if (hello->runtimeCompatibilityVersion !=
 	        GBA_LINK_V2_RUNTIME_COMPATIBILITY_VERSION ||
 	    hello->emulationCompatibilityVersion !=
@@ -343,6 +465,49 @@ static bool _helloCompatible(
 		    "protocol-v2 exact ROM mismatch");
 		return false;
 	}
+	uint16_t profileMismatch = 0;
+	if (!GBALinkV2DeterminismProfilesCompatible(
+	        &session->config.determinismProfile, &hello->profile,
+	        &profileMismatch)) {
+		session->profileMismatchCategory = profileMismatch;
+		GBALinkV2SessionFail(
+		    session, GBA_LINK_V2_REASON_PROFILE_CATEGORY,
+		    "protocol-v2 deterministic profile mismatch");
+		return false;
+	}
+	enum GBALinkV2CapabilityMismatch capabilityMismatch;
+	const struct GBALinkV2DeterminismCapabilities* host =
+	    session->localRole == GBA_LINK_ROLE_HOST
+	        ? &session->config.deterministicCapabilities
+	        : &hello->deterministicCapabilities;
+	const struct GBALinkV2DeterminismCapabilities* client =
+	    session->localRole == GBA_LINK_ROLE_CLIENT
+	        ? &session->config.deterministicCapabilities
+	        : &hello->deterministicCapabilities;
+	if (!GBALinkV2DeterminismCapabilitiesCompatible(
+	        host, client, session->config.cartridgeRequiredInputMask,
+	        &capabilityMismatch)) {
+		session->capabilityMismatch = capabilityMismatch;
+		if (capabilityMismatch == GBA_LINK_V2_CAPABILITY_EXTERNAL_INPUT) {
+			session->missingRequiredInputMask =
+			    session->config.cartridgeRequiredInputMask &
+			    ~(host->synchronizedInputCapabilityMask &
+			      client->synchronizedInputCapabilityMask);
+		}
+		enum GBALinkV2Reason reason = GBA_LINK_V2_REASON_CAPABILITY_MISMATCH;
+		if (capabilityMismatch ==
+		    GBA_LINK_V2_CAPABILITY_RTC_TIME_SEMANTICS) {
+			reason = GBA_LINK_V2_REASON_RTC_TIME_SEMANTICS;
+		} else if (capabilityMismatch == GBA_LINK_V2_CAPABILITY_RTC_SOURCE) {
+			reason = GBA_LINK_V2_REASON_RTC_SOURCE;
+		} else if (capabilityMismatch ==
+		           GBA_LINK_V2_CAPABILITY_EXTERNAL_INPUT) {
+			reason = GBA_LINK_V2_REASON_EXTERNAL_INPUT;
+		}
+		GBALinkV2SessionFail(
+		    session, reason, "protocol-v2 deterministic capability mismatch");
+		return false;
+	}
 	uint16_t minimum = session->config.minimumInputDelay;
 	if (hello->minimumInputDelay > minimum) {
 		minimum = hello->minimumInputDelay;
@@ -360,8 +525,21 @@ static bool _helloCompatible(
 	}
 	session->overlappingMinimumInputDelay = minimum;
 	session->overlappingMaximumInputDelay = maximum;
-	/* ACCEPT carries a valid provisional value; SESSION_READY freezes D. */
-	session->inputDelay = minimum;
+	session->productPolicy =
+	    session->config.productPolicy == GBA_LINK_V2_PRODUCT_STABLE ||
+	            hello->productPolicy == GBA_LINK_V2_PRODUCT_STABLE
+	        ? GBA_LINK_V2_PRODUCT_STABLE
+	        : GBA_LINK_V2_PRODUCT_LOW_LATENCY;
+	session->productionFloor =
+	    session->productPolicy == GBA_LINK_V2_PRODUCT_STABLE
+	        ? GBA_LINK_INPUT_STABLE_FLOOR
+	        : GBA_LINK_INPUT_LOW_LATENCY_FLOOR;
+	if (session->productionFloor > maximum) {
+		GBALinkV2SessionFail(
+		    session, GBA_LINK_V2_REASON_POLICY_MISMATCH,
+		    "protocol-v2 latency policies do not overlap");
+		return false;
+	}
 	session->selectedChunkSize = session->config.maxChunkSize;
 	if (hello->maxChunkSize < session->selectedChunkSize) {
 		session->selectedChunkSize = hello->maxChunkSize;
@@ -506,6 +684,30 @@ static bool _tryInstall(struct GBALinkV2Session* session) {
 	return true;
 }
 
+static void _fillSummary(
+	struct GBALinkV2Session* session,
+	struct GBALinkV2CalibrationSummary* summary) {
+	memset(summary, 0, sizeof(*summary));
+	summary->generation = session->calibration.generation;
+	memcpy(summary->vectorDigest, session->selection.digest,
+	    sizeof(summary->vectorDigest));
+	summary->selectorPolicyVersion =
+	    session->calibration.selectorPolicyVersion;
+	summary->minimumRttUs = session->selection.minimumRttUs;
+	summary->p50RttUs = session->selection.p50RttUs;
+	summary->p95RttUs = session->selection.p95RttUs;
+	summary->maximumRttUs = session->selection.maximumRttUs;
+	summary->overlappingMinimum =
+	    session->selection.overlappingMinimum;
+	summary->overlappingMaximum =
+	    session->selection.overlappingMaximum;
+	summary->productionFloor = session->selection.productionFloor;
+	summary->selectionReason = session->selection.reason ==
+	        GBA_LINK_INPUT_SELECTION_RAISED_TO_MINIMUM
+	    ? GBA_LINK_V2_SELECTION_RAISED_TO_MINIMUM
+	    : GBA_LINK_V2_SELECTION_CALIBRATED;
+}
+
 static void _fillReady(
 	struct GBALinkV2Session* session, struct GBALinkV2SessionReady* ready) {
 	memset(ready, 0, sizeof(*ready));
@@ -515,6 +717,8 @@ static void _fillReady(
 	                GBA_LINK_V2_READY_FIXED_DELAY |
 	                GBA_LINK_V2_READY_BILATERAL_INSTALL;
 	ready->inputDelay = session->inputDelay;
+	ready->productPolicy = session->productPolicy;
+	_fillSummary(session, &ready->calibration);
 	memcpy(ready->playerDigests, session->playerDigests,
 	    sizeof(ready->playerDigests));
 }
@@ -558,27 +762,128 @@ static bool _trySendReady(struct GBALinkV2Session* session) {
 	return true;
 }
 
-static bool _handleHello(
-	struct GBALinkV2Session* session, const struct GBALinkV2Packet* packet) {
-	if (session->state != GBA_LINK_V2_SESSION_HELLO ||
-	    !_helloCompatible(session, &packet->payload.hello)) {
+static bool _calibrationTimely(
+	struct GBALinkV2Session* session, bool acceptPhase) {
+	uint64_t now;
+	enum GBALinkV2Reason clockReason = acceptPhase
+	    ? GBA_LINK_V2_REASON_ACCEPT_CLOCK_FAILURE
+	    : GBA_LINK_V2_REASON_CALIBRATION_CLOCK_FAILURE;
+	if (!_monotonicUs(
+	        session, &now, clockReason,
+	        acceptPhase ? "protocol-v2 accept clock failed"
+	                    : "protocol-v2 calibration clock failed")) {
 		return false;
 	}
-	session->remoteHello = packet->payload.hello;
-	if (session->localRole == GBA_LINK_ROLE_CLIENT) {
-		return true;
+	uint64_t deadline = acceptPhase
+	    ? session->acceptDeadlineAtUs
+	    : session->calibrationDeadlineAtUs;
+	if (!deadline || now >= deadline) {
+		GBALinkV2SessionFail(
+		    session,
+		    acceptPhase ? GBA_LINK_V2_REASON_ACCEPT_TIMEOUT
+		                : GBA_LINK_V2_REASON_CALIBRATION_TIMEOUT,
+		    acceptPhase ? "protocol-v2 calibrated accept timed out"
+		                : "protocol-v2 calibration timed out");
+		return false;
 	}
-	session->sessionId =
-	    (session->transportGeneration << 32) ^
-	    GBALinkTransportMonotonicTimeMs(session->transport) ^ UINT64_C(0x52504C32);
-	if (!session->sessionId) {
-		session->sessionId = 1;
+	return true;
+}
+
+static bool _sendCalibrationProbe(struct GBALinkV2Session* session) {
+	if (session->nextProbeOrdinal >= GBA_LINK_CALIBRATION_PROBES_PER_ROLE ||
+	    session->probeOutstanding) {
+		return false;
 	}
-	session->snapshotGeneration = session->sessionId;
-	session->firstFrame = 0;
+	if (session->nextPacketSequence == UINT64_MAX) {
+		GBALinkV2SessionFail(
+		    session, GBA_LINK_V2_REASON_SEQUENCE,
+		    "protocol-v2 calibration packet sequence exhausted");
+		return false;
+	}
+	struct GBALinkV2Packet packet;
+	memset(&packet, 0, sizeof(packet));
+	packet.header.type = GBA_LINK_V2_MESSAGE_LATENCY_PROBE;
+	packet.header.sessionId = session->sessionId;
+	packet.header.packetSequence = session->nextPacketSequence++;
+	packet.payload.latencyProbe.generation = session->calibration.generation;
+	packet.payload.latencyProbe.originRole = session->localRole;
+	packet.payload.latencyProbe.ordinal = session->nextProbeOrdinal;
+	packet.payload.latencyProbe.unit =
+	    GBA_LINK_INPUT_LATENCY_UNIT_MICROSECONDS;
+	uint8_t encoded[GBA_LINK_V2_HEADER_SIZE + 16];
+	size_t size = 0;
+	if (!GBALinkV2PacketEncode(
+	        &packet, encoded, sizeof(encoded), &size)) {
+		GBALinkV2SessionFail(
+		    session, GBA_LINK_V2_REASON_CALIBRATION_FIELD,
+		    "protocol-v2 calibration probe encode failed");
+		return false;
+	}
+	/* Commit the outstanding operation before T0 and the callback. */
+	session->probeOutstanding = true;
+	if (!_monotonicUs(
+	        session, &session->probeStartedAtUs,
+	        GBA_LINK_V2_REASON_CALIBRATION_CLOCK_FAILURE,
+	        "protocol-v2 calibration probe clock failed")) {
+		return false;
+	}
+	if (!GBALinkTransportSend(session->transport, encoded, size, true)) {
+		GBALinkV2SessionFail(
+		    session, GBA_LINK_V2_REASON_TRANSPORT_STOP,
+		    "protocol-v2 calibration probe send failed");
+		return false;
+	}
+	return true;
+}
+
+static bool _sendCalibrationReport(
+	struct GBALinkV2Session* session, enum GBALinkRole role) {
+	struct GBALinkV2Packet report;
+	memset(&report, 0, sizeof(report));
+	report.header.type = GBA_LINK_V2_MESSAGE_LATENCY_REPORT;
+	report.header.sessionId = session->sessionId;
+	report.payload.latencyReport.generation = session->calibration.generation;
+	report.payload.latencyReport.originRole = role;
+	report.payload.latencyReport.sampleCount =
+	    GBA_LINK_CALIBRATION_PROBES_PER_ROLE;
+	report.payload.latencyReport.unit =
+	    GBA_LINK_INPUT_LATENCY_UNIT_MICROSECONDS;
+	report.payload.latencyReport.calibrationPolicyVersion =
+	    GBA_LINK_CALIBRATION_POLICY_VERSION;
+	unsigned offset = role == GBA_LINK_ROLE_HOST
+	    ? 0
+	    : GBA_LINK_CALIBRATION_PROBES_PER_ROLE;
+	memcpy(report.payload.latencyReport.samples,
+	    &session->calibration.samples[offset],
+	    sizeof(report.payload.latencyReport.samples));
+	return _send(session, &report, true);
+}
+
+static bool _selectCalibration(struct GBALinkV2Session* session) {
+	enum GBALinkInputSelectionResult result =
+	    GBALinkInputSelectCalibratedDelay(
+	        &session->calibration,
+	        session->overlappingMinimumInputDelay,
+	        session->overlappingMaximumInputDelay,
+	        session->productionFloor, &session->selection);
+	if (result != GBA_LINK_INPUT_SELECTION_OK) {
+		GBALinkV2SessionFail(
+		    session,
+		    result == GBA_LINK_INPUT_SELECTION_OUT_OF_RANGE
+		        ? GBA_LINK_V2_REASON_CALIBRATED_TARGET_OUT_OF_RANGE
+		        : GBA_LINK_V2_REASON_CALIBRATION_FIELD,
+		    "protocol-v2 calibrated input target invalid");
+		return false;
+	}
+	session->inputDelay = session->selection.selectedDelay;
+	return true;
+}
+
+static bool _sendAccept(struct GBALinkV2Session* session) {
 	struct GBALinkV2Packet accept;
 	memset(&accept, 0, sizeof(accept));
 	accept.header.type = GBA_LINK_V2_MESSAGE_ACCEPT;
+	accept.header.sessionId = session->sessionId;
 	accept.payload.accept.proposedSessionId = session->sessionId;
 	accept.payload.accept.snapshotGeneration = session->snapshotGeneration;
 	accept.payload.accept.hostTransportId = 0;
@@ -588,31 +893,373 @@ static bool _handleHello(
 	accept.payload.accept.selectedChunkSize = session->selectedChunkSize;
 	accept.payload.accept.selectedEncoding = session->selectedEncoding;
 	accept.payload.accept.inputDelay = session->inputDelay;
-	session->acceptSentAtMs =
-	    GBALinkTransportMonotonicTimeMs(session->transport);
-	if (!_send(session, &accept, true)) {
+	accept.payload.accept.productPolicy = session->productPolicy;
+	_fillSummary(session, &accept.payload.accept.calibration);
+	uint64_t now;
+	if (!_monotonicUs(
+	        session, &now, GBA_LINK_V2_REASON_ACCEPT_CLOCK_FAILURE,
+	        "protocol-v2 ACCEPT_ACK deadline clock failed") ||
+	    !_absoluteDeadline(
+	        session, now, &session->acceptDeadlineAtUs,
+	        GBA_LINK_V2_REASON_ACCEPT_CLOCK_FAILURE,
+	        "protocol-v2 ACCEPT_ACK deadline overflow")) {
 		return false;
 	}
 	session->state = GBA_LINK_V2_SESSION_ACCEPTED;
+	session->calibrationDeadlineActive = false;
+	session->acceptDeadlineActive = true;
+	return _send(session, &accept, true);
+}
+
+static bool _startCalibration(struct GBALinkV2Session* session) {
+	if (!_allocateUnique(
+	        &_nextProvisionalSessionId, &session->sessionId) ||
+	    !_allocateUnique(
+	        &_nextCalibrationGeneration,
+	        &session->calibration.generation)) {
+		GBALinkV2SessionFail(
+		    session, GBA_LINK_V2_REASON_CALIBRATION_IDENTITY,
+		    "protocol-v2 calibration identity exhausted");
+		return false;
+	}
+	session->snapshotGeneration = session->sessionId;
+	session->calibration.hostConnectionNonce =
+	    session->localHello.connectionNonce;
+	session->calibration.clientConnectionNonce =
+	    session->remoteHello.connectionNonce;
+	session->calibration.provisionalSessionId = session->sessionId;
+	session->calibration.calibrationPolicyVersion =
+	    GBA_LINK_CALIBRATION_POLICY_VERSION;
+	session->calibration.selectorPolicyVersion =
+	    GBA_LINK_INPUT_SELECTOR_POLICY_VERSION;
+	uint64_t now;
+	if (!_monotonicUs(
+	        session, &now, GBA_LINK_V2_REASON_CALIBRATION_CLOCK_FAILURE,
+	        "protocol-v2 calibration deadline clock failed") ||
+	    !_absoluteDeadline(
+	        session, now, &session->calibrationDeadlineAtUs,
+	        GBA_LINK_V2_REASON_CALIBRATION_CLOCK_FAILURE,
+	        "protocol-v2 calibration deadline overflow")) {
+		return false;
+	}
+	session->calibrationDeadlineActive = true;
+	session->state = GBA_LINK_V2_SESSION_HOST_PROBES;
+	session->nextProbeOrdinal = 0;
+	session->nextRemoteProbeOrdinal = 0;
+	_setDeadline(session, GBA_LINK_V2_DEADLINE_NONE);
+	struct GBALinkV2Packet begin;
+	memset(&begin, 0, sizeof(begin));
+	begin.header.type = GBA_LINK_V2_MESSAGE_CALIBRATION_BEGIN;
+	begin.header.sessionId = session->sessionId;
+	begin.payload.calibrationBegin.generation =
+	    session->calibration.generation;
+	begin.payload.calibrationBegin.hostConnectionNonce =
+	    session->calibration.hostConnectionNonce;
+	begin.payload.calibrationBegin.clientConnectionNonce =
+	    session->calibration.clientConnectionNonce;
+	begin.payload.calibrationBegin.probeCount =
+	    GBA_LINK_CALIBRATION_PROBES_PER_ROLE;
+	begin.payload.calibrationBegin.unit =
+	    GBA_LINK_INPUT_LATENCY_UNIT_MICROSECONDS;
+	begin.payload.calibrationBegin.calibrationPolicyVersion =
+	    GBA_LINK_CALIBRATION_POLICY_VERSION;
+	begin.payload.calibrationBegin.selectorPolicyVersion =
+	    GBA_LINK_INPUT_SELECTOR_POLICY_VERSION;
+	return _send(session, &begin, true) && _sendCalibrationProbe(session);
+}
+
+static bool _handleHello(
+	struct GBALinkV2Session* session, const struct GBALinkV2Packet* packet) {
+	if (session->remoteHelloReceived) {
+		/* Semantic replay uses the next packet sequence but identical bytes. */
+		return session->state < GBA_LINK_V2_SESSION_ACCEPTED &&
+		       !memcmp(&session->remoteHello, &packet->payload.hello,
+		           sizeof(session->remoteHello));
+	}
+	if (session->state != GBA_LINK_V2_SESSION_HELLO ||
+	    !_helloCompatible(session, &packet->payload.hello)) {
+		return false;
+	}
+	session->remoteHello = packet->payload.hello;
+	session->remoteHelloReceived = true;
+	if (session->localRole == GBA_LINK_ROLE_CLIENT) {
+		session->state = GBA_LINK_V2_SESSION_CALIBRATION_BEGIN_WAIT;
+		return true;
+	}
+	return _startCalibration(session);
+}
+
+static bool _calibrationPayloadEqual(
+	const struct GBALinkV2Packet* left,
+	const struct GBALinkV2Packet* right) {
+	if (left->header.type != right->header.type) {
+		return false;
+	}
+	switch (left->header.type) {
+	case GBA_LINK_V2_MESSAGE_CALIBRATION_BEGIN:
+		return !memcmp(&left->payload.calibrationBegin,
+		    &right->payload.calibrationBegin,
+		    sizeof(left->payload.calibrationBegin));
+	case GBA_LINK_V2_MESSAGE_LATENCY_PROBE:
+		return !memcmp(&left->payload.latencyProbe,
+		    &right->payload.latencyProbe,
+		    sizeof(left->payload.latencyProbe));
+	case GBA_LINK_V2_MESSAGE_LATENCY_ACK:
+		return !memcmp(&left->payload.latencyAck,
+		    &right->payload.latencyAck,
+		    sizeof(left->payload.latencyAck));
+	case GBA_LINK_V2_MESSAGE_LATENCY_REPORT:
+		return !memcmp(&left->payload.latencyReport,
+		    &right->payload.latencyReport,
+		    sizeof(left->payload.latencyReport));
+	default:
+		return false;
+	}
+}
+
+static bool _isCalibrationReplay(
+	const struct GBALinkV2Session* session,
+	const struct GBALinkV2Packet* packet) {
+	return session->lastRemoteCalibrationValid &&
+	       _calibrationPayloadEqual(
+	           &session->lastRemoteCalibrationPacket, packet);
+}
+
+static bool _handleCalibrationBegin(
+	struct GBALinkV2Session* session, const struct GBALinkV2Packet* packet) {
+	const struct GBALinkV2CalibrationBegin* begin =
+	    &packet->payload.calibrationBegin;
+	if (_isCalibrationReplay(session, packet)) {
+		return true;
+	}
+	if (session->localRole != GBA_LINK_ROLE_CLIENT ||
+	    session->state != GBA_LINK_V2_SESSION_CALIBRATION_BEGIN_WAIT ||
+	    begin->hostConnectionNonce != session->remoteHello.connectionNonce ||
+	    begin->clientConnectionNonce != session->localHello.connectionNonce) {
+		return false;
+	}
+	session->sessionId = packet->header.sessionId;
+	session->snapshotGeneration = session->sessionId;
+	session->calibration.hostConnectionNonce = begin->hostConnectionNonce;
+	session->calibration.clientConnectionNonce = begin->clientConnectionNonce;
+	session->calibration.provisionalSessionId = session->sessionId;
+	session->calibration.generation = begin->generation;
+	session->calibration.calibrationPolicyVersion =
+	    begin->calibrationPolicyVersion;
+	session->calibration.selectorPolicyVersion = begin->selectorPolicyVersion;
+	uint64_t now;
+	if (!_monotonicUs(
+	        session, &now, GBA_LINK_V2_REASON_CALIBRATION_CLOCK_FAILURE,
+	        "protocol-v2 client calibration deadline clock failed") ||
+	    !_absoluteDeadline(
+	        session, now, &session->calibrationDeadlineAtUs,
+	        GBA_LINK_V2_REASON_CALIBRATION_CLOCK_FAILURE,
+	        "protocol-v2 client calibration deadline overflow")) {
+		return false;
+	}
+	session->calibrationDeadlineActive = true;
+	session->state = GBA_LINK_V2_SESSION_HOST_PROBES;
+	session->nextRemoteProbeOrdinal = 0;
+	_setDeadline(session, GBA_LINK_V2_DEADLINE_NONE);
 	return true;
+}
+
+static bool _handleLatencyProbe(
+	struct GBALinkV2Session* session, const struct GBALinkV2Packet* packet) {
+	const struct GBALinkV2LatencyProbe* probe = &packet->payload.latencyProbe;
+	if (_isCalibrationReplay(session, packet)) {
+		struct GBALinkV2Packet ack;
+		memset(&ack, 0, sizeof(ack));
+		ack.header.type = GBA_LINK_V2_MESSAGE_LATENCY_ACK;
+		ack.header.sessionId = session->sessionId;
+		ack.payload.latencyAck = *probe;
+		return _send(session, &ack, true);
+	}
+	enum GBALinkRole remoteRole = session->localRole == GBA_LINK_ROLE_HOST
+	    ? GBA_LINK_ROLE_CLIENT
+	    : GBA_LINK_ROLE_HOST;
+	if (!_calibrationTimely(session, false) ||
+	    probe->generation != session->calibration.generation ||
+	    probe->originRole != remoteRole ||
+	    probe->ordinal != session->nextRemoteProbeOrdinal ||
+	    ((remoteRole == GBA_LINK_ROLE_HOST &&
+	      session->state != GBA_LINK_V2_SESSION_HOST_PROBES) ||
+	     (remoteRole == GBA_LINK_ROLE_CLIENT &&
+	      session->state != GBA_LINK_V2_SESSION_CLIENT_PROBES))) {
+		return false;
+	}
+	++session->nextRemoteProbeOrdinal;
+	struct GBALinkV2Packet ack;
+	memset(&ack, 0, sizeof(ack));
+	ack.header.type = GBA_LINK_V2_MESSAGE_LATENCY_ACK;
+	ack.header.sessionId = session->sessionId;
+	ack.payload.latencyAck = *probe;
+	/* ACK precedes diagnostics or optional work by construction. */
+	return _send(session, &ack, true);
+}
+
+static bool _handleLatencyAck(
+	struct GBALinkV2Session* session, const struct GBALinkV2Packet* packet) {
+	const struct GBALinkV2LatencyProbe* ack = &packet->payload.latencyAck;
+	if (_isCalibrationReplay(session, packet)) {
+		return true;
+	}
+	if (!_calibrationTimely(session, false) || !session->probeOutstanding ||
+	    ack->generation != session->calibration.generation ||
+	    ack->originRole != session->localRole ||
+	    ack->ordinal != session->nextProbeOrdinal ||
+	    ((session->localRole == GBA_LINK_ROLE_HOST &&
+	      session->state != GBA_LINK_V2_SESSION_HOST_PROBES) ||
+	     (session->localRole == GBA_LINK_ROLE_CLIENT &&
+	      session->state != GBA_LINK_V2_SESSION_CLIENT_PROBES))) {
+		return false;
+	}
+	uint64_t now;
+	if (!_monotonicUs(
+	        session, &now, GBA_LINK_V2_REASON_CALIBRATION_CLOCK_FAILURE,
+	        "protocol-v2 calibration ACK clock failed")) {
+		return false;
+	}
+	if (now < session->probeStartedAtUs ||
+	    now - session->probeStartedAtUs > GBA_LINK_CALIBRATION_MAX_SAMPLE_US) {
+		GBALinkV2SessionFail(
+		    session, GBA_LINK_V2_REASON_CALIBRATION_CLOCK_FAILURE,
+		    "protocol-v2 calibration duration invalid");
+		return false;
+	}
+	unsigned offset = session->localRole == GBA_LINK_ROLE_HOST
+	    ? 0
+	    : GBA_LINK_CALIBRATION_PROBES_PER_ROLE;
+	session->calibration.samples[offset + session->nextProbeOrdinal] =
+	    now - session->probeStartedAtUs;
+	session->probeOutstanding = false;
+	++session->nextProbeOrdinal;
+	if (session->nextProbeOrdinal < GBA_LINK_CALIBRATION_PROBES_PER_ROLE) {
+		return _sendCalibrationProbe(session);
+	}
+	if (session->localRole == GBA_LINK_ROLE_HOST) {
+		session->state = GBA_LINK_V2_SESSION_CLIENT_PROBES;
+		session->nextRemoteProbeOrdinal = 0;
+		return _sendCalibrationReport(session, GBA_LINK_ROLE_HOST);
+	}
+	if (!_selectCalibration(session)) {
+		return false;
+	}
+	session->state = GBA_LINK_V2_SESSION_WAIT_ACCEPT;
+	if (!_sendCalibrationReport(session, GBA_LINK_ROLE_CLIENT)) {
+		return false;
+	}
+	if (!_monotonicUs(
+	        session, &now, GBA_LINK_V2_REASON_CALIBRATION_CLOCK_FAILURE,
+	        "protocol-v2 client report deadline clock failed")) {
+		return false;
+	}
+	if (!session->calibrationDeadlineAtUs ||
+	    now >= session->calibrationDeadlineAtUs) {
+		GBALinkV2SessionFail(
+		    session, GBA_LINK_V2_REASON_CALIBRATION_TIMEOUT,
+		    "protocol-v2 client report send crossed calibration deadline");
+		return false;
+	}
+	if (
+	    !_absoluteDeadline(
+	        session, now, &session->acceptDeadlineAtUs,
+	        GBA_LINK_V2_REASON_ACCEPT_CLOCK_FAILURE,
+	        "protocol-v2 accept deadline overflow")) {
+		return false;
+	}
+	session->calibrationDeadlineActive = false;
+	session->acceptDeadlineActive = true;
+	return true;
+}
+
+static bool _handleLatencyReport(
+	struct GBALinkV2Session* session, const struct GBALinkV2Packet* packet) {
+	const struct GBALinkV2LatencyReport* report =
+	    &packet->payload.latencyReport;
+	if (_isCalibrationReplay(session, packet)) {
+		return true;
+	}
+	if (!_calibrationTimely(session, false) ||
+	    report->generation != session->calibration.generation) {
+		return false;
+	}
+	if (report->originRole == GBA_LINK_ROLE_HOST) {
+		if (session->localRole != GBA_LINK_ROLE_CLIENT ||
+		    session->state != GBA_LINK_V2_SESSION_HOST_PROBES ||
+		    session->nextRemoteProbeOrdinal !=
+		        GBA_LINK_CALIBRATION_PROBES_PER_ROLE ||
+		    session->hostReportReceived) {
+			return false;
+		}
+		memcpy(session->calibration.samples, report->samples,
+		    sizeof(report->samples));
+		session->hostReportReceived = true;
+		session->state = GBA_LINK_V2_SESSION_CLIENT_PROBES;
+		session->nextProbeOrdinal = 0;
+		return _sendCalibrationProbe(session);
+	}
+	if (session->localRole != GBA_LINK_ROLE_HOST ||
+	    session->state != GBA_LINK_V2_SESSION_CLIENT_PROBES ||
+	    session->nextRemoteProbeOrdinal !=
+	        GBA_LINK_CALIBRATION_PROBES_PER_ROLE ||
+	    session->clientReportReceived) {
+		return false;
+	}
+	memcpy(&session->calibration.samples[
+	           GBA_LINK_CALIBRATION_PROBES_PER_ROLE],
+	    report->samples, sizeof(report->samples));
+	session->clientReportReceived = true;
+	if (!_selectCalibration(session)) {
+		return false;
+	}
+	session->state = GBA_LINK_V2_SESSION_CALIBRATED;
+	return _sendAccept(session);
+}
+
+static bool _summaryEqual(
+	const struct GBALinkV2CalibrationSummary* left,
+	const struct GBALinkV2CalibrationSummary* right) {
+	return left->generation == right->generation &&
+	       !memcmp(left->vectorDigest, right->vectorDigest,
+	           sizeof(left->vectorDigest)) &&
+	       left->selectorPolicyVersion == right->selectorPolicyVersion &&
+	       left->minimumRttUs == right->minimumRttUs &&
+	       left->p50RttUs == right->p50RttUs &&
+	       left->p95RttUs == right->p95RttUs &&
+	       left->maximumRttUs == right->maximumRttUs &&
+	       left->overlappingMinimum == right->overlappingMinimum &&
+	       left->overlappingMaximum == right->overlappingMaximum &&
+	       left->productionFloor == right->productionFloor &&
+	       left->selectionReason == right->selectionReason;
 }
 
 static bool _handleAccept(
 	struct GBALinkV2Session* session, const struct GBALinkV2Packet* packet) {
 	const struct GBALinkV2Accept* accept = &packet->payload.accept;
 	if (session->localRole != GBA_LINK_ROLE_CLIENT ||
-	    session->state != GBA_LINK_V2_SESSION_HELLO ||
+	    session->state != GBA_LINK_V2_SESSION_WAIT_ACCEPT ||
 	    !session->remoteHello.capabilities ||
+	    !_calibrationTimely(session, true) ||
 	    accept->selectedChunkSize != session->selectedChunkSize ||
 	    accept->selectedEncoding != session->selectedEncoding ||
+	    accept->productPolicy != session->productPolicy ||
 	    accept->inputDelay < session->overlappingMinimumInputDelay ||
 	    accept->inputDelay > session->overlappingMaximumInputDelay) {
 		return false;
 	}
+	struct GBALinkV2CalibrationSummary expectedSummary;
+	_fillSummary(session, &expectedSummary);
+	if (accept->inputDelay != session->selection.selectedDelay ||
+	    !_summaryEqual(&accept->calibration, &expectedSummary)) {
+		return false;
+	}
+	session->acceptDeadlineActive = false;
 	session->inputDelay = accept->inputDelay;
 	session->sessionId = accept->proposedSessionId;
 	session->snapshotGeneration = accept->snapshotGeneration;
 	session->firstFrame = 0;
+	session->state = GBA_LINK_V2_SESSION_ACCEPTED;
 	if (!_captureLocal(session)) {
 		return false;
 	}
@@ -636,20 +1283,12 @@ static bool _handleAcceptAck(
 	    session->state != GBA_LINK_V2_SESSION_ACCEPTED ||
 	    packet->payload.acceptAck.acceptedSessionId != session->sessionId ||
 	    packet->payload.acceptAck.snapshotGeneration !=
-	        session->snapshotGeneration || !_captureLocal(session)) {
+	        session->snapshotGeneration ||
+	    !_calibrationTimely(session, true)) {
 		return false;
 	}
-	uint64_t now = GBALinkTransportMonotonicTimeMs(session->transport);
-	uint64_t elapsed = now >= session->acceptSentAtMs
-	    ? now - session->acceptSentAtMs
-	    : 0;
-	session->handshakeRoundTripMs =
-	    elapsed > UINT32_MAX ? UINT32_MAX : elapsed;
-	session->inputDelay = GBALinkInputSelectDelay(
-	    session->overlappingMinimumInputDelay,
-	    session->overlappingMaximumInputDelay,
-	    session->handshakeRoundTripMs, session->config.estimatedJitterMs);
-	if (session->inputDelay == UINT16_MAX) {
+	session->acceptDeadlineActive = false;
+	if (!_captureLocal(session)) {
 		return false;
 	}
 	session->state = GBA_LINK_V2_SESSION_REPLICA_EXCHANGE;
@@ -823,6 +1462,14 @@ static bool _handlePacket(
 	switch (packet->header.type) {
 	case GBA_LINK_V2_MESSAGE_HELLO:
 		return _handleHello(session, packet);
+	case GBA_LINK_V2_MESSAGE_CALIBRATION_BEGIN:
+		return _handleCalibrationBegin(session, packet);
+	case GBA_LINK_V2_MESSAGE_LATENCY_PROBE:
+		return _handleLatencyProbe(session, packet);
+	case GBA_LINK_V2_MESSAGE_LATENCY_ACK:
+		return _handleLatencyAck(session, packet);
+	case GBA_LINK_V2_MESSAGE_LATENCY_REPORT:
+		return _handleLatencyReport(session, packet);
 	case GBA_LINK_V2_MESSAGE_ACCEPT:
 		return _handleAccept(session, packet);
 	case GBA_LINK_V2_MESSAGE_ACCEPT_ACK:
@@ -925,7 +1572,10 @@ static bool _processCopied(
 		return false;
 	}
 	++session->nextRemotePacketSequence;
-	if (packet.header.sessionId &&
+	bool establishesProvisional =
+	    packet.header.type == GBA_LINK_V2_MESSAGE_CALIBRATION_BEGIN &&
+	    session->localRole == GBA_LINK_ROLE_CLIENT && !session->sessionId;
+	if (packet.header.sessionId && !establishesProvisional &&
 	    packet.header.sessionId != session->sessionId) {
 		GBALinkV2SessionFail(
 		    session, GBA_LINK_V2_REASON_SEQUENCE,
@@ -939,6 +1589,11 @@ static bool _processCopied(
 		    "protocol-v2 message invalid in current state");
 		return false;
 	}
+	if (packet.header.type >= GBA_LINK_V2_MESSAGE_CALIBRATION_BEGIN &&
+	    packet.header.type <= GBA_LINK_V2_MESSAGE_LATENCY_REPORT) {
+		session->lastRemoteCalibrationPacket = packet;
+		session->lastRemoteCalibrationValid = true;
+	}
 	return session->state != GBA_LINK_V2_SESSION_FAILED;
 }
 
@@ -947,6 +1602,10 @@ static enum GBALinkV2Reason _deadlineReason(
 	switch (operation) {
 	case GBA_LINK_V2_DEADLINE_QUIESCENT:
 		return GBA_LINK_V2_REASON_ATTACHMENT_TIMEOUT;
+	case GBA_LINK_V2_DEADLINE_CALIBRATION:
+		return GBA_LINK_V2_REASON_CALIBRATION_TIMEOUT;
+	case GBA_LINK_V2_DEADLINE_ACCEPT:
+		return GBA_LINK_V2_REASON_ACCEPT_TIMEOUT;
 	case GBA_LINK_V2_DEADLINE_MANIFEST:
 	case GBA_LINK_V2_DEADLINE_CHUNKS:
 		return GBA_LINK_V2_REASON_REPLICA_TIMEOUT;
@@ -1005,6 +1664,14 @@ bool GBALinkV2SessionUpdate(
 		if (!processed) {
 			return false;
 		}
+	}
+	if (session->calibrationDeadlineActive &&
+	    !_calibrationTimely(session, false)) {
+		return false;
+	}
+	if (session->acceptDeadlineActive &&
+	    !_calibrationTimely(session, true)) {
+		return false;
 	}
 	if (session->deadlineOperation != GBA_LINK_V2_DEADLINE_NONE &&
 	    GBALinkTransportMonotonicTimeMs(session->transport) >=

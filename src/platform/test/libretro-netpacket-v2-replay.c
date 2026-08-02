@@ -6,6 +6,7 @@
 #include "util/test/suite.h"
 
 #include "../libretro/libretro.h"
+#include "../libretro/netpacket-v2.h"
 
 #include <mgba/core/core.h>
 #include <mgba/core/log.h>
@@ -24,6 +25,7 @@
 #define REPLAY_WIRE_CAPACITY 256
 #define REPLAY_ATTACH_LIMIT 4096
 #define REPLAY_ROM_SIZE 0x40001
+#define REPLAY_POLLS_PER_CLOCK_MILLISECOND 8
 
 #define DECLARE_REPLAY_ADAPTER(PREFIX) \
 	bool PREFIX##Register(retro_environment_t environment, \
@@ -36,7 +38,9 @@
 	void PREFIX##Unload(void); \
 	bool PREFIX##SessionActive(void); \
 	void PREFIX##TestSetTimeMs(uint64_t nowMs); \
-	struct mCore* PREFIX##TestPairCore(uint8_t player)
+	struct mCore* PREFIX##TestPairCore(uint8_t player); \
+	bool PREFIX##TestGetMetrics( \
+	    struct mLibretroNetpacketV2TestMetrics* metrics)
 
 DECLARE_REPLAY_ADAPTER(mLibretroNetpacketV2ReplayHost);
 DECLARE_REPLAY_ADAPTER(mLibretroNetpacketV2ReplayClient);
@@ -62,6 +66,7 @@ struct ReplayWireQueue {
 
 struct ReplayFrontend {
 	const struct retro_netpacket_callback* callbacks;
+	const char* latencyPolicy;
 };
 
 struct ReplayNetwork {
@@ -69,7 +74,8 @@ struct ReplayNetwork {
 	uint64_t now;
 	uint64_t sentPackets;
 	uint64_t deliveredPackets;
-	uint64_t typeCounts[GBA_LINK_V2_MESSAGE_REJECT + 1];
+	uint64_t typeCounts[GBA_LINK_V2_MESSAGE_LATENCY_REPORT + 1];
+	uint64_t jitterBase;
 	struct ReplayWireQueue inbound[REPLAY_ENDPOINT_COUNT];
 	enum GBALinkV2MessageType dropType;
 	enum ReplayEndpointId dropSender;
@@ -128,6 +134,15 @@ static bool _environment(
 	if (command == RETRO_ENVIRONMENT_SET_MESSAGE_EXT ||
 	    command == RETRO_ENVIRONMENT_SET_MESSAGE) {
 		return true;
+	}
+	if (command == RETRO_ENVIRONMENT_GET_VARIABLE) {
+		struct retro_variable* variable = data;
+		if (!strcmp(variable->key, "mgba_link_netplay_latency")) {
+			variable->value =
+			    _fixture->frontends[endpoint].latencyPolicy;
+			return variable->value != NULL;
+		}
+		return false;
 	}
 	return false;
 }
@@ -197,7 +212,7 @@ static void _wireSend(
 		return;
 	}
 	memcpy(copy, data, size);
-	uint64_t jitter = 1 + network->sentPackets % 5;
+	uint64_t jitter = network->jitterBase + network->sentPackets % 5;
 	uint64_t dueAt = network->now + jitter;
 	if (dueAt <= queue->lastDueAt) {
 		dueAt = queue->lastDueAt + 1;
@@ -245,7 +260,12 @@ static void _wirePoll(enum ReplayEndpointId receiver) {
 		++network->deliveredPackets;
 	}
 	MutexUnlock(&network->mutex);
-	_setEndpointTime(receiver, now);
+	/* Delivery ticks are intentionally finer than the injected monotonic
+	 * clock. A busy receive loop must not consume a three-second deadline
+	 * merely because its peer thread has not yet been scheduled by a parallel
+	 * test runner. */
+	_setEndpointTime(
+	    receiver, now / REPLAY_POLLS_PER_CLOCK_MILLISECOND);
 	if (!packet.data) {
 		return;
 	}
@@ -292,16 +312,20 @@ static void _clearWire(struct ReplayNetwork* network) {
 	}
 }
 
-static int _setup(void** state) {
+static int _setupFixture(void** state, bool rtcSafe) {
 	struct ReplayFixture* fixture = calloc(1, sizeof(*fixture));
 	assert_non_null(fixture);
 	assert_int_equal(MutexInit(&fixture->network.mutex), 0);
+	fixture->network.jitterBase = 1;
 	_fixture = fixture;
 	fixture->rom = malloc(REPLAY_ROM_SIZE);
 	assert_non_null(fixture->rom);
 	memset(fixture->rom, 0xFF, REPLAY_ROM_SIZE);
-	struct VFile* fixtureRom = VFileOpen(
-	    GBA_LINK_CONTINUOUS_ROM_PATH, O_RDONLY);
+	const char* replayRomPath = getenv("GBA_LINK_REPLAY_ROM_PATH");
+	if (!replayRomPath || !replayRomPath[0]) {
+		replayRomPath = GBA_LINK_CONTINUOUS_ROM_PATH;
+	}
+	struct VFile* fixtureRom = VFileOpen(replayRomPath, O_RDONLY);
 	assert_non_null(fixtureRom);
 	ssize_t fixtureSize = fixtureRom->size(fixtureRom);
 	assert_true(fixtureSize > 0);
@@ -309,8 +333,22 @@ static int _setup(void** state) {
 	assert_int_equal(fixtureRom->read(
 	    fixtureRom, fixture->rom, fixtureSize), fixtureSize);
 	assert_true(fixtureRom->close(fixtureRom));
+	if (rtcSafe) {
+		/* The link fixture's tiny entry routine overlaps the GBA cartridge
+		 * GPIO window. Use a ROM-resident idle loop for the RTC integration
+		 * run so instruction fetches cannot become GPIO reads. */
+		static const uint8_t branchToIdle[] = {
+			0x7E, 0x00, 0x00, 0xEA,
+		};
+		static const uint8_t idleLoop[] = {
+			0xFE, 0xFF, 0xFF, 0xEA,
+		};
+		memcpy(fixture->rom, branchToIdle, sizeof(branchToIdle));
+		memcpy(fixture->rom + 0x200, idleLoop, sizeof(idleLoop));
+	}
 	for (unsigned endpoint = 0; endpoint < REPLAY_ENDPOINT_COUNT;
 	     ++endpoint) {
+		fixture->frontends[endpoint].latencyPolicy = "stable";
 		fixture->cores[endpoint] = _createCore(fixture->rom);
 		fixture->saves[endpoint] = malloc(GBA_SIZE_FLASH1M);
 		assert_non_null(fixture->saves[endpoint]);
@@ -337,6 +375,14 @@ static int _setup(void** state) {
 	    GBA_LINK_V2_PROTOCOL_NAME);
 	*state = fixture;
 	return 0;
+}
+
+static int _setup(void** state) {
+	return _setupFixture(state, false);
+}
+
+static int _setupRtc(void** state) {
+	return _setupFixture(state, true);
 }
 
 static int _teardown(void** state) {
@@ -435,6 +481,28 @@ static void _assertReplicasMatch(void) {
 	}
 }
 
+static void _assertCableWorkRemainsLocal(void) {
+	struct mLibretroNetpacketV2TestMetrics hostMetrics;
+	struct mLibretroNetpacketV2TestMetrics clientMetrics;
+	assert_true(mLibretroNetpacketV2ReplayHostTestGetMetrics(&hostMetrics));
+	assert_true(mLibretroNetpacketV2ReplayClientTestGetMetrics(&clientMetrics));
+	assert_true(hostMetrics.cableTransferStarts > 0);
+	assert_int_equal(hostMetrics.cableTransferStarts,
+	    clientMetrics.cableTransferStarts);
+	assert_int_equal(hostMetrics.cableTransferCompletions,
+	    hostMetrics.cableTransferStarts);
+	assert_int_equal(clientMetrics.cableTransferCompletions,
+	    hostMetrics.cableTransferStarts);
+	assert_int_equal(hostMetrics.cableTransferredWords,
+	    clientMetrics.cableTransferredWords);
+
+	/* One packet per owner per authored frame, plus the initial records. */
+	assert_int_equal(_fixture->network.typeCounts[
+	    GBA_LINK_V2_MESSAGE_INPUT_BATCH], 252);
+	/* The replay wire accepts only protocol-v2 packets in _sendPacket(). */
+	assert_false(_fixture->network.failed);
+}
+
 M_TEST_DEFINE(realAdaptersReplayLatencyJitterInputsAndStateChecks) {
 	UNUSED(state);
 	_attach();
@@ -450,10 +518,86 @@ M_TEST_DEFINE(realAdaptersReplayLatencyJitterInputsAndStateChecks) {
 	}
 	assert_true(_bothReady());
 	_assertReplicasMatch();
+	_assertCableWorkRemainsLocal();
 	assert_int_equal(_fixture->network.typeCounts[
 	    GBA_LINK_V2_MESSAGE_STATE_CHECK], 4);
-	assert_int_equal(_fixture->network.typeCounts[
-	    GBA_LINK_V2_MESSAGE_INPUT_BATCH], 252);
+	struct mLibretroNetpacketV2TestMetrics hostMetrics;
+	struct mLibretroNetpacketV2TestMetrics clientMetrics;
+	assert_true(mLibretroNetpacketV2ReplayHostTestGetMetrics(&hostMetrics));
+	assert_true(mLibretroNetpacketV2ReplayClientTestGetMetrics(&clientMetrics));
+	assert_int_equal(hostMetrics.productPolicy,
+	    GBA_LINK_V2_PRODUCT_STABLE);
+	assert_int_equal(clientMetrics.productPolicy,
+	    GBA_LINK_V2_PRODUCT_STABLE);
+	assert_int_equal(hostMetrics.selectedDelay,
+	    GBA_LINK_INPUT_STABLE_FLOOR);
+	assert_int_equal(clientMetrics.selectedDelay,
+	    GBA_LINK_INPUT_STABLE_FLOOR);
+	assert_int_equal(hostMetrics.releasedFrames, 125);
+	assert_int_equal(clientMetrics.releasedFrames, 125);
+	assert_true(hostMetrics.inputWaitedFrames <= hostMetrics.releasedFrames);
+	assert_true(clientMetrics.inputWaitedFrames <= clientMetrics.releasedFrames);
+	assert_true(hostMetrics.inputWaitP95Us <= hostMetrics.inputWaitMaxUs);
+	assert_true(clientMetrics.inputWaitP95Us <= clientMetrics.inputWaitMaxUs);
+	assert_int_equal(hostMetrics.inputDeadlineMisses, 0);
+	assert_int_equal(clientMetrics.inputDeadlineMisses, 0);
+	assert_int_equal(hostMetrics.telemetryClockFailures, 0);
+	assert_int_equal(clientMetrics.telemetryClockFailures, 0);
+	assert_int_equal(hostMetrics.inputPollSendCount, 125);
+	assert_int_equal(clientMetrics.inputPollSendCount, 125);
+	assert_true(hostMetrics.inputInsertions[0] >= 125);
+	assert_true(hostMetrics.inputInsertions[1] >= 125);
+	assert_false(_fixture->network.failed);
+}
+
+M_TEST_DEFINE(lowLatencyPolicyRunsExactOneFrameMapping) {
+	UNUSED(state);
+	_fixture->frontends[REPLAY_HOST].latencyPolicy = "low_latency";
+	_fixture->frontends[REPLAY_CLIENT].latencyPolicy = "low_latency";
+	_attach();
+	for (unsigned frame = 0; frame < 125; ++frame) {
+		assert_true(_runPairedFrame(
+		    frame & 1 ? 1 : 0, frame & 2 ? 2 : 0));
+	}
+	_assertReplicasMatch();
+	_assertCableWorkRemainsLocal();
+	struct mLibretroNetpacketV2TestMetrics hostMetrics;
+	struct mLibretroNetpacketV2TestMetrics clientMetrics;
+	assert_true(mLibretroNetpacketV2ReplayHostTestGetMetrics(&hostMetrics));
+	assert_true(mLibretroNetpacketV2ReplayClientTestGetMetrics(&clientMetrics));
+	assert_int_equal(hostMetrics.productPolicy,
+	    GBA_LINK_V2_PRODUCT_LOW_LATENCY);
+	assert_int_equal(clientMetrics.productPolicy,
+	    GBA_LINK_V2_PRODUCT_LOW_LATENCY);
+	assert_int_equal(hostMetrics.selectedDelay,
+	    GBA_LINK_INPUT_LOW_LATENCY_FLOOR);
+	assert_int_equal(clientMetrics.selectedDelay,
+	    GBA_LINK_INPUT_LOW_LATENCY_FLOOR);
+	assert_int_equal(hostMetrics.releasedFrames, 125);
+	assert_int_equal(clientMetrics.releasedFrames, 125);
+	assert_false(_fixture->network.failed);
+}
+
+M_TEST_DEFINE(calibratedHigherDelayPreservesContinuousFixtureTrace) {
+	UNUSED(state);
+	_fixture->network.jitterBase = 280;
+	_beginFrontendSession();
+	_pumpAttachment(32768);
+	assert_true(_bothReady());
+	for (unsigned frame = 0; frame < 125; ++frame) {
+		assert_true(_runPairedFrame(
+		    frame & 1 ? 1 : 0, frame & 2 ? 2 : 0));
+	}
+	_assertReplicasMatch();
+	_assertCableWorkRemainsLocal();
+	struct mLibretroNetpacketV2TestMetrics hostMetrics;
+	struct mLibretroNetpacketV2TestMetrics clientMetrics;
+	assert_true(mLibretroNetpacketV2ReplayHostTestGetMetrics(&hostMetrics));
+	assert_true(mLibretroNetpacketV2ReplayClientTestGetMetrics(&clientMetrics));
+	assert_true(hostMetrics.selectedDelay > GBA_LINK_INPUT_STABLE_FLOOR);
+	assert_int_equal(hostMetrics.selectedDelay, clientMetrics.selectedDelay);
+	assert_int_equal(hostMetrics.releasedFrames, 125);
+	assert_int_equal(clientMetrics.releasedFrames, 125);
 	assert_false(_fixture->network.failed);
 }
 
@@ -479,12 +623,72 @@ M_TEST_DEFINE(inputAndStateCheckLossFailClosedAtRuntimeBoundaries) {
 	assert_false(mLibretroNetpacketV2ReplayClientOwnsExecution());
 }
 
+M_TEST_DEFINE(rtcSourcesNormalizePerPlayerAndRestoreOriginalSemantics) {
+	UNUSED(state);
+	struct GBA* hostGba = _fixture->cores[REPLAY_HOST]->board;
+	struct GBA* clientGba = _fixture->cores[REPLAY_CLIENT]->board;
+	hostGba->memory.hw.devices |= HW_RTC;
+	clientGba->memory.hw.devices |= HW_RTC;
+	_fixture->cores[REPLAY_HOST]->rtc.override = RTC_NO_OVERRIDE;
+	_fixture->cores[REPLAY_HOST]->rtc.value = 111;
+	_fixture->cores[REPLAY_CLIENT]->rtc.override = RTC_FIXED;
+	_fixture->cores[REPLAY_CLIENT]->rtc.value = 987654000;
+
+	_attach();
+	struct mCore* hostP0 =
+	    mLibretroNetpacketV2ReplayHostTestPairCore(0);
+	struct mCore* clientP0 =
+	    mLibretroNetpacketV2ReplayClientTestPairCore(0);
+	struct mCore* hostP1 =
+	    mLibretroNetpacketV2ReplayHostTestPairCore(1);
+	struct mCore* clientP1 =
+	    mLibretroNetpacketV2ReplayClientTestPairCore(1);
+	assert_int_equal(hostP0->rtc.override, RTC_FAKE_EPOCH);
+	assert_int_equal(clientP0->rtc.override, RTC_FAKE_EPOCH);
+	assert_int_equal(hostP0->rtc.value, clientP0->rtc.value);
+	assert_int_equal(hostP1->rtc.override, RTC_FIXED);
+	assert_int_equal(clientP1->rtc.override, RTC_FIXED);
+	assert_int_equal(hostP1->rtc.value, 987654000);
+	assert_int_equal(clientP1->rtc.value, 987654000);
+	time_t firstP0 = hostP0->rtc.d.unixTime(&hostP0->rtc.d);
+	for (unsigned frame = 0; frame < 185; ++frame) {
+		assert_true(_runPairedFrame(0, 0));
+		if (!(frame % 60)) {
+			assert_int_equal(hostP0->rtc.d.unixTime(&hostP0->rtc.d),
+			    clientP0->rtc.d.unixTime(&clientP0->rtc.d));
+			assert_int_equal(hostP1->rtc.d.unixTime(&hostP1->rtc.d),
+			    clientP1->rtc.d.unixTime(&clientP1->rtc.d));
+		}
+	}
+	assert_true(hostP0->rtc.d.unixTime(&hostP0->rtc.d) >= firstP0 + 3);
+	_fixture->frontends[REPLAY_CLIENT].callbacks->disconnected(0);
+	_fixture->frontends[REPLAY_HOST].callbacks->disconnected(1);
+	mLibretroNetpacketV2ReplayHostRunBegin();
+	mLibretroNetpacketV2ReplayClientRunBegin();
+	assert_false(mLibretroNetpacketV2ReplayHostOwnsExecution());
+	assert_false(mLibretroNetpacketV2ReplayClientOwnsExecution());
+	assert_int_equal(
+	    _fixture->cores[REPLAY_HOST]->rtc.override, RTC_NO_OVERRIDE);
+	assert_int_equal(_fixture->cores[REPLAY_HOST]->rtc.value, 111);
+	assert_int_equal(
+	    _fixture->cores[REPLAY_CLIENT]->rtc.override, RTC_FIXED);
+	assert_int_equal(
+	    _fixture->cores[REPLAY_CLIENT]->rtc.value, 987654000);
+}
+
 M_TEST_DEFINE(attachmentLossFailsClosedAtEveryWireBoundary) {
 	const struct {
 		enum GBALinkV2MessageType type;
 		enum ReplayEndpointId sender;
 	} boundaries[] = {
 		{ GBA_LINK_V2_MESSAGE_HELLO, REPLAY_CLIENT },
+		{ GBA_LINK_V2_MESSAGE_CALIBRATION_BEGIN, REPLAY_HOST },
+		{ GBA_LINK_V2_MESSAGE_LATENCY_PROBE, REPLAY_HOST },
+		{ GBA_LINK_V2_MESSAGE_LATENCY_ACK, REPLAY_CLIENT },
+		{ GBA_LINK_V2_MESSAGE_LATENCY_REPORT, REPLAY_HOST },
+		{ GBA_LINK_V2_MESSAGE_LATENCY_PROBE, REPLAY_CLIENT },
+		{ GBA_LINK_V2_MESSAGE_LATENCY_ACK, REPLAY_HOST },
+		{ GBA_LINK_V2_MESSAGE_LATENCY_REPORT, REPLAY_CLIENT },
 		{ GBA_LINK_V2_MESSAGE_ACCEPT, REPLAY_HOST },
 		{ GBA_LINK_V2_MESSAGE_ACCEPT_ACK, REPLAY_CLIENT },
 		{ GBA_LINK_V2_MESSAGE_REPLICA_MANIFEST, REPLAY_HOST },
@@ -551,8 +755,17 @@ M_TEST_SUITE_DEFINE_SETUP_TEARDOWN(LibretroNetpacketV2Replay,
 	    realAdaptersReplayLatencyJitterInputsAndStateChecks,
 	    _setup, _teardown),
 	cmocka_unit_test_setup_teardown(
+	    lowLatencyPolicyRunsExactOneFrameMapping,
+	    _setup, _teardown),
+	cmocka_unit_test_setup_teardown(
+	    calibratedHigherDelayPreservesContinuousFixtureTrace,
+	    _setup, _teardown),
+	cmocka_unit_test_setup_teardown(
 	    inputAndStateCheckLossFailClosedAtRuntimeBoundaries,
 	    _setup, _teardown),
+	cmocka_unit_test_setup_teardown(
+	    rtcSourcesNormalizePerPlayerAndRestoreOriginalSemantics,
+	    _setupRtc, _teardown),
 	cmocka_unit_test_setup_teardown(
 	    attachmentLossFailsClosedAtEveryWireBoundary,
 	    _setup, _teardown),

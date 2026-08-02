@@ -11,6 +11,22 @@
 #include <mgba-util/common.h>
 #include <mgba-util/image.h>
 
+struct mLibretroNetpacketV2TestMetrics {
+	uint16_t selectedDelay;
+	uint8_t productPolicy;
+	uint64_t releasedFrames;
+	uint64_t inputWaitedFrames;
+	uint64_t inputWaitP95Us;
+	uint64_t inputWaitMaxUs;
+	uint64_t inputDeadlineMisses;
+	uint64_t telemetryClockFailures;
+	uint64_t inputPollSendCount;
+	uint64_t inputInsertions[2];
+	uint64_t cableTransferStarts;
+	uint64_t cableTransferCompletions;
+	uint64_t cableTransferredWords;
+};
+
 #ifdef M_LIBRETRO_NETPACKET_V2_TEST
 #include <mgba/internal/gba/sio/netplay/protocol-v2.h>
 #endif
@@ -31,6 +47,7 @@ void mLibretroNetpacketV2Reset(void);
 void mLibretroNetpacketV2Unload(void);
 bool mLibretroNetpacketV2SessionActive(void);
 bool mLibretroNetpacketV2RejectOperation(const char* operation);
+bool mLibretroNetpacketV2RejectLatencyPolicyChange(const char* value);
 
 #ifdef M_LIBRETRO_NETPACKET_V2_TEST
 bool mLibretroNetpacketV2TestPollReceive(void);
@@ -46,6 +63,8 @@ struct mCore* mLibretroNetpacketV2TestPairCore(uint8_t player);
 bool mLibretroNetpacketV2TestCaptureCheckpoint(uint64_t frame);
 void mLibretroNetpacketV2TestFailNextCheckpointAllocation(void);
 void mLibretroNetpacketV2TestFail(enum GBALinkV2Reason reason);
+bool mLibretroNetpacketV2TestGetMetrics(
+	struct mLibretroNetpacketV2TestMetrics* metrics);
 #endif
 
 #endif

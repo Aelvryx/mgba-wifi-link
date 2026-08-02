@@ -25,6 +25,7 @@ struct GBALinkTransportVTable {
 	bool (*pollReceive)(void* context);
 	void (*yield)(void* context);
 	uint64_t (*monotonicTimeMs)(void* context);
+	bool (*monotonicTimeUs)(void* context, uint64_t* timestamp);
 	void (*diagnostic)(
 	    void* context, enum GBALinkDiagnosticLevel level,
 	    enum GBALinkReason reason, const char* message);
@@ -91,6 +92,8 @@ bool GBALinkTransportSend(
 bool GBALinkTransportPoll(struct GBALinkTransport* transport);
 uint64_t GBALinkTransportMonotonicTimeMs(
     const struct GBALinkTransport* transport);
+bool GBALinkTransportMonotonicTimeUs(
+	const struct GBALinkTransport* transport, uint64_t* timestamp);
 
 CXX_GUARD_END
 

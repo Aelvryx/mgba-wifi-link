@@ -13,7 +13,7 @@ struct V2Endpoint {
 	struct GBALinkTransport transport;
 	struct GBALinkV2Session session;
 	struct V2Endpoint* peer;
-	uint64_t now;
+	uint64_t nowUs;
 	bool quiescent;
 	bool paused;
 	bool installResult;
@@ -23,9 +23,22 @@ struct V2Endpoint {
 	enum GBALinkV2MessageType dropType;
 	enum GBALinkV2MessageType stopType;
 	enum GBALinkV2MessageType exhaustType;
+	enum GBALinkV2MessageType semanticReplayType;
+	enum GBALinkV2MessageType literalReplayType;
 	bool corruptChunk;
+	bool conflictReplay;
+	bool replayed;
 	bool stopDuringPoll;
+	bool clockFail;
+	bool dropAfterAcceptAck;
+	bool blackHole;
 	uint32_t acceptAckDelayMs;
+	uint32_t captureDelayMs;
+	uint32_t ackDeliveryDelayUs;
+	uint32_t clientReportSendDelayUs;
+	unsigned failClockCall;
+	unsigned clockCalls;
+	unsigned sentCounts[GBA_LINK_V2_MESSAGE_LATENCY_REPORT + 1];
 	unsigned captureCalls;
 	unsigned installCalls;
 	unsigned commitCalls;
@@ -56,11 +69,29 @@ static bool _sendReliable(
 		    "test synchronous stop");
 		return true;
 	}
+	if (endpoint->blackHole) {
+		return true;
+	}
+	if (packet.header.type == GBA_LINK_V2_MESSAGE_ACCEPT_ACK &&
+	    endpoint->dropAfterAcceptAck) {
+		endpoint->blackHole = true;
+		return true;
+	}
 	if (packet.header.type == endpoint->dropType) {
 		return true;
 	}
 	if (packet.header.type == GBA_LINK_V2_MESSAGE_ACCEPT_ACK) {
-		endpoint->peer->now += endpoint->acceptAckDelayMs;
+		endpoint->peer->nowUs += endpoint->acceptAckDelayMs * UINT64_C(1000);
+	}
+	if (packet.header.type == GBA_LINK_V2_MESSAGE_LATENCY_ACK) {
+		endpoint->peer->nowUs += endpoint->ackDeliveryDelayUs;
+	}
+	if (packet.header.type == GBA_LINK_V2_MESSAGE_LATENCY_REPORT &&
+	    packet.payload.latencyReport.originRole == GBA_LINK_ROLE_CLIENT) {
+		endpoint->nowUs += endpoint->clientReportSendDelayUs;
+	}
+	if (packet.header.type <= GBA_LINK_V2_MESSAGE_LATENCY_REPORT) {
+		++endpoint->sentCounts[packet.header.type];
 	}
 	if (packet.header.type == endpoint->exhaustType) {
 		const uint8_t filler = 0xFF;
@@ -89,9 +120,47 @@ static bool _sendReliable(
 		endpoint->corruptChunk = false;
 		return queued;
 	}
-	return GBALinkTransportQueueInbound(
+	bool queued = GBALinkTransportQueueInbound(
 	    &endpoint->peer->transport,
 	    endpoint->peer->transport.generation, data, size);
+	if (!queued || endpoint->replayed ||
+	    (packet.header.type != endpoint->semanticReplayType &&
+	     packet.header.type != endpoint->literalReplayType)) {
+		return queued;
+	}
+	endpoint->replayed = true;
+	if (packet.header.type == endpoint->literalReplayType) {
+		return GBALinkTransportQueueInbound(
+		    &endpoint->peer->transport,
+		    endpoint->peer->transport.generation, data, size);
+	}
+	assert_true(endpoint->session.nextPacketSequence < UINT64_MAX);
+	packet.header.packetSequence = endpoint->session.nextPacketSequence++;
+	if (endpoint->conflictReplay) {
+		switch (packet.header.type) {
+		case GBA_LINK_V2_MESSAGE_HELLO:
+			++packet.payload.hello.connectionNonce;
+			break;
+		case GBA_LINK_V2_MESSAGE_LATENCY_PROBE:
+			packet.payload.latencyProbe.ordinal ^= 1;
+			break;
+		case GBA_LINK_V2_MESSAGE_LATENCY_ACK:
+			packet.payload.latencyAck.ordinal ^= 1;
+			break;
+		case GBA_LINK_V2_MESSAGE_LATENCY_REPORT:
+			packet.payload.latencyReport.samples[0] ^= 1;
+			break;
+		default:
+			break;
+		}
+	}
+	uint8_t replay[GBA_LINK_V2_MAX_PACKET_SIZE];
+	size_t replaySize = 0;
+	assert_true(GBALinkV2PacketEncode(
+	    &packet, replay, sizeof(replay), &replaySize));
+	return GBALinkTransportQueueInbound(
+	    &endpoint->peer->transport,
+	    endpoint->peer->transport.generation, replay, replaySize);
 }
 
 static bool _pollReceive(void* context) {
@@ -105,7 +174,19 @@ static bool _pollReceive(void* context) {
 }
 
 static uint64_t _monotonicTimeMs(void* context) {
-	return ((struct V2Endpoint*) context)->now;
+	return ((struct V2Endpoint*) context)->nowUs / 1000;
+}
+
+static bool _monotonicTimeUs(void* context, uint64_t* timestamp) {
+	struct V2Endpoint* endpoint = context;
+	++endpoint->clockCalls;
+	if (!timestamp || endpoint->clockFail ||
+	    (endpoint->failClockCall &&
+	     endpoint->clockCalls == endpoint->failClockCall)) {
+		return false;
+	}
+	*timestamp = endpoint->nowUs;
+	return true;
 }
 
 static void _diagnostic(
@@ -125,6 +206,7 @@ static const struct GBALinkTransportVTable _transportVTable = {
 	.sendReliable = _sendReliable,
 	.pollReceive = _pollReceive,
 	.monotonicTimeMs = _monotonicTimeMs,
+	.monotonicTimeUs = _monotonicTimeUs,
 	.diagnostic = _diagnostic,
 	.stop = _stop,
 };
@@ -144,6 +226,11 @@ static enum GBAReplicaResult _captureReplica(
 	struct V2Endpoint* endpoint = context;
 	++endpoint->captureCalls;
 	endpoint->capturedPlayer = player;
+	endpoint->nowUs += endpoint->captureDelayMs * UINT64_C(1000);
+	if (endpoint->peer) {
+		endpoint->peer->nowUs +=
+		    endpoint->captureDelayMs * UINT64_C(1000);
+	}
 	if (encoding != GBA_REPLICA_ENCODING_NONE) {
 		return GBA_REPLICA_UNSUPPORTED;
 	}
@@ -256,6 +343,30 @@ static struct GBALinkV2SessionConfig _config(
 	config.maximumInputDelay = 8;
 	config.estimatedJitterMs = 5;
 	config.experimentalRuntime = true;
+	config.productPolicy = GBA_LINK_V2_PRODUCT_STABLE;
+	struct GBALinkV2DeterminismProfileInput profile = {
+		.biosMode = GBA_LINK_V2_BIOS_HLE,
+		.emulationCompatibilityVersion = 1,
+		.overclockQ16 = 0x10000,
+		.idlePolicy = GBA_LINK_V2_IDLE_DETECT,
+		.allowOpposingDirections = true,
+		.rtcNormalizationPolicyVersion = 1,
+		.fakeEpochArithmeticVersion = 1,
+		.rtcSemanticsModelVersion = 1,
+		.authoritativeInputFormatVersion = 1,
+		.cartridgeRequiredInputMask = GBA_LINK_V2_INPUT_DIGITAL,
+	};
+	assert_true(GBALinkV2DeterminismProfileBuild(
+	    &profile, &config.determinismProfile));
+	config.deterministicCapabilities =
+	    (struct GBALinkV2DeterminismCapabilities) {
+		.supportedRtcSourceMask = GBA_LINK_V2_RTC_SOURCE_KNOWN_MASK,
+		.timeSemanticsCapabilityMask =
+		    GBA_LINK_V2_TIME_SIGNED_64BIT_TIME_T_V1,
+		.authoritativePlayerRtcSource = RTC_NO_OVERRIDE,
+		.synchronizedInputCapabilityMask = GBA_LINK_V2_INPUT_DIGITAL,
+	};
+	config.cartridgeRequiredInputMask = GBA_LINK_V2_INPUT_DIGITAL;
 	GBALinkV2DeadlinePolicyInit(&config.deadlines);
 	config.callbacks = &_callbacks;
 	config.callbackContext = endpoint;
@@ -303,8 +414,8 @@ static void _pump(struct V2Pair* pair, unsigned count) {
 }
 
 static void _advance(struct V2Pair* pair, uint64_t milliseconds) {
-	pair->host.now += milliseconds;
-	pair->client.now += milliseconds;
+	pair->host.nowUs += milliseconds * UINT64_C(1000);
+	pair->client.nowUs += milliseconds * UINT64_C(1000);
 	_pump(pair, 2);
 }
 
@@ -319,7 +430,7 @@ M_TEST_DEFINE(bilateralBundlesInstallInCanonicalOrderAndReleaseAtomically) {
 	struct V2Pair pair;
 	_initPair(&pair);
 	_startPair(&pair);
-	_pump(&pair, 8);
+	_pump(&pair, 64);
 	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_READY);
 	assert_int_equal(pair.client.session.state, GBA_LINK_V2_SESSION_READY);
 	assert_false(pair.host.paused);
@@ -339,20 +450,238 @@ M_TEST_DEFINE(bilateralBundlesInstallInCanonicalOrderAndReleaseAtomically) {
 	_deinitPair(&pair);
 }
 
-M_TEST_DEFINE(handshakeRttAndJitterFreezeOneSharedInputDelay) {
+M_TEST_DEFINE(acceptAckDelayDoesNotAffectCalibratedInputDelay) {
 	struct V2Pair pair;
 	_initPair(&pair);
 	pair.client.acceptAckDelayMs = 40;
 	_startPair(&pair);
-	_pump(&pair, 8);
+	_pump(&pair, 64);
 	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_READY);
 	assert_int_equal(pair.client.session.state, GBA_LINK_V2_SESSION_READY);
-	assert_int_equal(pair.host.session.handshakeRoundTripMs, 40);
-	assert_int_equal(pair.host.session.inputDelay, 3);
-	assert_int_equal(pair.client.session.inputDelay, 3);
+	assert_int_equal(pair.host.session.handshakeRoundTripMs, 0);
+	assert_int_equal(pair.host.session.inputDelay, 2);
+	assert_int_equal(pair.client.session.inputDelay, 2);
 	assert_int_equal(pair.host.session.overlappingMinimumInputDelay, 2);
 	assert_int_equal(pair.host.session.overlappingMaximumInputDelay, 8);
 	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(replicaCaptureCannotInflateCalibratedInputDelay) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.host.captureDelayMs = 20;
+	pair.client.captureDelayMs = 20;
+	_startPair(&pair);
+	_pump(&pair, 64);
+	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_READY);
+	assert_int_equal(pair.client.session.state, GBA_LINK_V2_SESSION_READY);
+	assert_int_equal(pair.host.session.handshakeRoundTripMs, 0);
+	assert_int_equal(pair.host.session.inputDelay, 2);
+	assert_int_equal(pair.client.session.inputDelay, 2);
+	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(calibrationSamplesBothEndpointCallbackDirections) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.client.ackDeliveryDelayUs = 3000;
+	pair.host.ackDeliveryDelayUs = 7000;
+	_startPair(&pair);
+	_pump(&pair, 64);
+	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_READY);
+	assert_int_equal(pair.client.session.state, GBA_LINK_V2_SESSION_READY);
+	for (unsigned i = 0; i < GBA_LINK_CALIBRATION_PROBES_PER_ROLE; ++i) {
+		assert_int_equal(pair.host.session.calibration.samples[i], 3000);
+		assert_int_equal(pair.client.session.calibration.samples[i], 3000);
+		assert_int_equal(
+		    pair.host.session.calibration.samples[
+		        GBA_LINK_CALIBRATION_PROBES_PER_ROLE + i],
+		    7000);
+		assert_int_equal(
+		    pair.client.session.calibration.samples[
+		        GBA_LINK_CALIBRATION_PROBES_PER_ROLE + i],
+		    7000);
+	}
+	assert_memory_equal(pair.host.session.selection.digest,
+	    pair.client.session.selection.digest,
+	    sizeof(pair.host.session.selection.digest));
+	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(semanticHelloReplayDoesNotRestartCalibration) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.client.semanticReplayType = GBA_LINK_V2_MESSAGE_HELLO;
+	_startPair(&pair);
+	_pump(&pair, 64);
+	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_READY);
+	assert_int_equal(pair.client.session.state, GBA_LINK_V2_SESSION_READY);
+	assert_int_equal(
+	    pair.host.sentCounts[GBA_LINK_V2_MESSAGE_CALIBRATION_BEGIN], 1);
+	assert_true(pair.client.replayed);
+	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(semanticCalibrationReplayIsIdempotent) {
+	const enum GBALinkV2MessageType types[] = {
+		GBA_LINK_V2_MESSAGE_LATENCY_PROBE,
+		GBA_LINK_V2_MESSAGE_LATENCY_ACK,
+		GBA_LINK_V2_MESSAGE_LATENCY_REPORT,
+	};
+	for (unsigned i = 0; i < sizeof(types) / sizeof(*types); ++i) {
+		struct V2Pair pair;
+		_initPair(&pair);
+		struct V2Endpoint* sender = types[i] == GBA_LINK_V2_MESSAGE_LATENCY_ACK
+		    ? &pair.client
+		    : &pair.host;
+		sender->semanticReplayType = types[i];
+		_startPair(&pair);
+		_pump(&pair, 72);
+		assert_true(sender->replayed);
+		assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_READY);
+		assert_int_equal(pair.client.session.state, GBA_LINK_V2_SESSION_READY);
+		assert_int_equal(pair.host.captureCalls, 1);
+		assert_int_equal(pair.client.captureCalls, 1);
+		_deinitPair(&pair);
+	}
+}
+
+M_TEST_DEFINE(literalOldPacketSequenceReplayFailsBeforeDispatch) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.client.literalReplayType = GBA_LINK_V2_MESSAGE_HELLO;
+	_startPair(&pair);
+	_pump(&pair, 4);
+	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
+	assert_int_equal(pair.host.failureReason, GBA_LINK_V2_REASON_SEQUENCE);
+	assert_int_equal(pair.host.captureCalls + pair.client.captureCalls, 0);
+	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(conflictingSemanticReplayFailsClosed) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.client.semanticReplayType = GBA_LINK_V2_MESSAGE_HELLO;
+	pair.client.conflictReplay = true;
+	_startPair(&pair);
+	_pump(&pair, 4);
+	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
+	assert_int_equal(
+	    pair.host.failureReason, GBA_LINK_V2_REASON_INVALID_TRANSITION);
+	assert_int_equal(pair.host.captureCalls + pair.client.captureCalls, 0);
+	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(calibrationDeadlineIsAbsoluteAndReportCannotRefreshIt) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.client.dropType = GBA_LINK_V2_MESSAGE_LATENCY_REPORT;
+	_startPair(&pair);
+	_pump(&pair, 64);
+	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_CLIENT_PROBES);
+	assert_int_equal(pair.client.session.state, GBA_LINK_V2_SESSION_WAIT_ACCEPT);
+	_advance(&pair, 3000);
+	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
+	assert_int_equal(
+	    pair.host.failureReason, GBA_LINK_V2_REASON_CALIBRATION_TIMEOUT);
+	assert_int_equal(pair.client.session.state, GBA_LINK_V2_SESSION_FAILED);
+	assert_int_equal(pair.client.failureReason, GBA_LINK_V2_REASON_ACCEPT_TIMEOUT);
+	assert_int_equal(pair.host.captureCalls + pair.client.captureCalls, 0);
+	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(clientReportSendMustFinishBeforeCalibrationDeadline) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.client.clientReportSendDelayUs = UINT32_C(3000000);
+	_startPair(&pair);
+	_pump(&pair, 64);
+	assert_int_equal(
+	    pair.client.session.state, GBA_LINK_V2_SESSION_FAILED);
+	assert_int_equal(
+	    pair.client.failureReason, GBA_LINK_V2_REASON_CALIBRATION_TIMEOUT);
+	assert_false(pair.client.session.acceptDeadlineActive);
+	assert_int_equal(pair.client.captureCalls, 0);
+	assert_int_equal(pair.client.installCalls, 0);
+	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(hostAcceptAckDeadlineBoundsSilentPeer) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.client.dropAfterAcceptAck = true;
+	pair.client.semanticReplayType = GBA_LINK_V2_MESSAGE_LATENCY_REPORT;
+	_startPair(&pair);
+	_pump(&pair, 64);
+	assert_true(pair.client.replayed);
+	assert_int_equal(
+	    pair.host.session.state, GBA_LINK_V2_SESSION_ACCEPTED);
+	assert_true(pair.host.session.acceptDeadlineActive);
+	uint64_t deadline = pair.host.session.acceptDeadlineAtUs;
+	_advance(&pair, 2999);
+	assert_int_equal(
+	    pair.host.session.state, GBA_LINK_V2_SESSION_ACCEPTED);
+	assert_int_equal(pair.host.session.acceptDeadlineAtUs, deadline);
+	_advance(&pair, 1);
+	assert_int_equal(
+	    pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
+	assert_int_equal(
+	    pair.host.failureReason, GBA_LINK_V2_REASON_ACCEPT_TIMEOUT);
+	assert_int_equal(pair.host.captureCalls, 0);
+	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(hostAcceptAckDeadlineUsesAbsoluteBoundary) {
+	const uint32_t delays[] = { 2999, 3000, 3001 };
+	for (unsigned i = 0; i < sizeof(delays) / sizeof(*delays); ++i) {
+		struct V2Pair pair;
+		_initPair(&pair);
+		pair.client.acceptAckDelayMs = delays[i];
+		_startPair(&pair);
+		_pump(&pair, 64);
+		if (delays[i] < 3000) {
+			assert_int_equal(
+			    pair.host.session.state, GBA_LINK_V2_SESSION_READY);
+			assert_false(pair.host.session.acceptDeadlineActive);
+		} else {
+			assert_int_equal(
+			    pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
+			assert_int_equal(pair.host.failureReason,
+			    GBA_LINK_V2_REASON_ACCEPT_TIMEOUT);
+			assert_int_equal(pair.host.captureCalls, 0);
+		}
+		_deinitPair(&pair);
+	}
+}
+
+M_TEST_DEFINE(synchronousStopDuringAcceptUsesCommittedState) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.host.stopType = GBA_LINK_V2_MESSAGE_ACCEPT;
+	_startPair(&pair);
+	_pump(&pair, 64);
+	assert_int_equal(
+	    pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
+	assert_int_equal(
+	    pair.host.failureReason, GBA_LINK_V2_REASON_TRANSPORT_STOP);
+	assert_int_equal(pair.host.captureCalls, 0);
+	assert_false(pair.host.transport.active);
+	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(fallibleCalibrationClockDistinguishesDeadlineT0AndT1) {
+	for (unsigned call = 1; call <= 3; ++call) {
+		struct V2Pair pair;
+		_initPair(&pair);
+		pair.host.failClockCall = call;
+		_startPair(&pair);
+		_pump(&pair, 8);
+		assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
+		assert_int_equal(pair.host.failureReason,
+		    GBA_LINK_V2_REASON_CALIBRATION_CLOCK_FAILURE);
+		assert_int_equal(pair.host.captureCalls + pair.client.captureCalls, 0);
+		_deinitPair(&pair);
+	}
 }
 
 M_TEST_DEFINE(attachmentDeadlineBeginsBeforeQuiescentCapture) {
@@ -401,12 +730,160 @@ M_TEST_DEFINE(experimentalPolicyMismatchFailsBeforeReplicaExchange) {
 	_deinitPair(&pair);
 }
 
+M_TEST_DEFINE(profileMismatchFailsBeforeCalibrationOrReplicaExchange) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.client.session.config.determinismProfile.records[3].digest[0] ^= 1;
+	_startPair(&pair);
+	_pump(&pair, 4);
+	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
+	assert_int_equal(
+	    pair.host.failureReason, GBA_LINK_V2_REASON_PROFILE_CATEGORY);
+	assert_int_equal(pair.host.session.profileMismatchCategory,
+	    GBA_LINK_V2_PROFILE_INPUT_POLICY);
+	char detail[256];
+	assert_true(GBALinkV2SessionFormatFailureDetail(
+	    &pair.host.session, pair.host.failureReason,
+	    detail, sizeof(detail)) > 0);
+	assert_non_null(strstr(detail, "profile-category=input-policy(4)"));
+	assert_non_null(strstr(detail, "schema=1/1"));
+	assert_int_equal(pair.host.sentCounts[
+	    GBA_LINK_V2_MESSAGE_CALIBRATION_BEGIN], 0);
+	assert_int_equal(pair.host.captureCalls + pair.client.captureCalls, 0);
+	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(requiredExternalInputMustBeSynchronizedByBothPeers) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	struct GBALinkV2DeterminismProfileInput profile = {
+		.biosMode = GBA_LINK_V2_BIOS_HLE,
+		.emulationCompatibilityVersion = 1,
+		.overclockQ16 = 0x10000,
+		.idlePolicy = GBA_LINK_V2_IDLE_DETECT,
+		.allowOpposingDirections = true,
+		.rtcNormalizationPolicyVersion = 1,
+		.fakeEpochArithmeticVersion = 1,
+		.rtcSemanticsModelVersion = 1,
+		.authoritativeInputFormatVersion = 1,
+		.cartridgeRequiredInputMask =
+		    GBA_LINK_V2_INPUT_DIGITAL | GBA_LINK_V2_INPUT_TILT,
+	};
+	assert_true(GBALinkV2DeterminismProfileBuild(
+	    &profile, &pair.host.session.config.determinismProfile));
+	pair.client.session.config.determinismProfile =
+	    pair.host.session.config.determinismProfile;
+	pair.host.session.config.cartridgeRequiredInputMask =
+	    profile.cartridgeRequiredInputMask;
+	pair.client.session.config.cartridgeRequiredInputMask =
+	    profile.cartridgeRequiredInputMask;
+	pair.host.session.config.deterministicCapabilities
+	    .synchronizedInputCapabilityMask = profile.cartridgeRequiredInputMask;
+	_startPair(&pair);
+	_pump(&pair, 4);
+	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
+	assert_int_equal(
+	    pair.host.failureReason, GBA_LINK_V2_REASON_EXTERNAL_INPUT);
+	assert_int_equal(pair.host.session.capabilityMismatch,
+	    GBA_LINK_V2_CAPABILITY_EXTERNAL_INPUT);
+	assert_int_equal(pair.host.session.missingRequiredInputMask,
+	    GBA_LINK_V2_INPUT_TILT);
+	char detail[256];
+	assert_true(GBALinkV2SessionFormatFailureDetail(
+	    &pair.host.session, pair.host.failureReason,
+	    detail, sizeof(detail)) > 0);
+	assert_non_null(strstr(detail, "capability=external-input(5)"));
+	assert_non_null(strstr(detail, "missing-input=0000000000000002"));
+	assert_int_equal(pair.host.captureCalls + pair.client.captureCalls, 0);
+	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(rtcContentRequiresCommonTimeSemanticsBeforeCalibration) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.host.session.config.deterministicCapabilities.contentRequiresRtc =
+	    true;
+	pair.client.session.config.deterministicCapabilities.contentRequiresRtc =
+	    true;
+	pair.client.session.config.deterministicCapabilities
+	    .timeSemanticsCapabilityMask = 0;
+	_startPair(&pair);
+	_pump(&pair, 4);
+	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
+	assert_int_equal(
+	    pair.host.failureReason, GBA_LINK_V2_REASON_RTC_TIME_SEMANTICS);
+	assert_int_equal(pair.host.session.capabilityMismatch,
+	    GBA_LINK_V2_CAPABILITY_RTC_TIME_SEMANTICS);
+	char detail[256];
+	assert_true(GBALinkV2SessionFormatFailureDetail(
+	    &pair.host.session, pair.host.failureReason,
+	    detail, sizeof(detail)) > 0);
+	assert_non_null(strstr(detail, "capability=rtc-time-semantics(3)"));
+	assert_int_equal(pair.host.captureCalls + pair.client.captureCalls, 0);
+	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(rtcSourceMismatchIsActionableBeforeCalibration) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.client.session.config.deterministicCapabilities
+	    .supportedRtcSourceMask = GBA_LINK_V2_RTC_SOURCE_FIXED;
+	pair.client.session.config.deterministicCapabilities
+	    .authoritativePlayerRtcSource = RTC_FIXED;
+	_startPair(&pair);
+	_pump(&pair, 4);
+	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
+	assert_int_equal(
+	    pair.host.failureReason, GBA_LINK_V2_REASON_RTC_SOURCE);
+	assert_int_equal(pair.host.session.capabilityMismatch,
+	    GBA_LINK_V2_CAPABILITY_RTC_SOURCE);
+	char detail[256];
+	assert_true(GBALinkV2SessionFormatFailureDetail(
+	    &pair.host.session, pair.host.failureReason,
+	    detail, sizeof(detail)) > 0);
+	assert_non_null(strstr(detail, "capability=rtc-source(4)"));
+	assert_int_equal(pair.host.captureCalls + pair.client.captureCalls, 0);
+	_deinitPair(&pair);
+}
+
+M_TEST_DEFINE(productPolicyNegotiatesStricterFloorAndThenFreezes) {
+	struct V2Pair pair;
+	_initPair(&pair);
+	pair.host.session.config.productPolicy = GBA_LINK_V2_PRODUCT_LOW_LATENCY;
+	pair.host.session.config.minimumInputDelay = 1;
+	pair.client.session.config.productPolicy = GBA_LINK_V2_PRODUCT_LOW_LATENCY;
+	pair.client.session.config.minimumInputDelay = 1;
+	_startPair(&pair);
+	_pump(&pair, 64);
+	assert_int_equal(pair.host.session.productPolicy,
+	    GBA_LINK_V2_PRODUCT_LOW_LATENCY);
+	assert_int_equal(pair.client.session.productPolicy,
+	    GBA_LINK_V2_PRODUCT_LOW_LATENCY);
+	assert_int_equal(pair.host.session.inputDelay, 1);
+	assert_int_equal(pair.client.session.inputDelay, 1);
+	pair.client.session.config.productPolicy = GBA_LINK_V2_PRODUCT_STABLE;
+	pair.client.session.config.minimumInputDelay = 2;
+	assert_int_equal(pair.client.session.inputDelay, 1);
+	_deinitPair(&pair);
+
+	_initPair(&pair);
+	pair.host.session.config.productPolicy = GBA_LINK_V2_PRODUCT_LOW_LATENCY;
+	pair.host.session.config.minimumInputDelay = 1;
+	_startPair(&pair);
+	_pump(&pair, 64);
+	assert_int_equal(
+	    pair.host.session.productPolicy, GBA_LINK_V2_PRODUCT_STABLE);
+	assert_int_equal(pair.host.session.inputDelay, 2);
+	assert_int_equal(pair.client.session.inputDelay, 2);
+	_deinitPair(&pair);
+}
+
 M_TEST_DEFINE(corruptReplicaFailsBeforeProvisionalInstallation) {
 	struct V2Pair pair;
 	_initPair(&pair);
 	pair.client.corruptChunk = true;
 	_startPair(&pair);
-	_pump(&pair, 5);
+	_pump(&pair, 64);
 	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
 	assert_int_equal(pair.host.failureReason,
 	    GBA_LINK_V2_REASON_REPLICA_INVALID);
@@ -420,7 +897,7 @@ M_TEST_DEFINE(missingFinalAckDiscardsOnlyProvisionalPairs) {
 	_initPair(&pair);
 	pair.client.dropType = GBA_LINK_V2_MESSAGE_SESSION_READY_ACK;
 	_startPair(&pair);
-	_pump(&pair, 7);
+	_pump(&pair, 64);
 	assert_true(pair.host.pairInstalled);
 	assert_true(pair.client.pairInstalled);
 	assert_false(pair.host.pairCommitted);
@@ -450,7 +927,7 @@ M_TEST_DEFINE(synchronousStopAtEveryReplicaBoundaryFailsClosed) {
 		        : &pair.host;
 		sender->stopType = boundaries[i];
 		_startPair(&pair);
-		_pump(&pair, 10);
+		_pump(&pair, 64);
 		assert_true(sender->failureCalls);
 		assert_false(sender->pairCommitted);
 		_deinitPair(&pair);
@@ -462,7 +939,7 @@ M_TEST_DEFINE(queueExhaustionDuringManifestSendFailsClosed) {
 	_initPair(&pair);
 	pair.client.exhaustType = GBA_LINK_V2_MESSAGE_REPLICA_MANIFEST;
 	_startPair(&pair);
-	_pump(&pair, 4);
+	_pump(&pair, 64);
 	assert_int_equal(pair.client.session.state, GBA_LINK_V2_SESSION_FAILED);
 	assert_int_equal(pair.client.failureReason,
 	    GBA_LINK_V2_REASON_TRANSPORT_STOP);
@@ -476,7 +953,7 @@ M_TEST_DEFINE(pairInstallationFailureRetainsOriginalAndStopsSession) {
 	_initPair(&pair);
 	pair.host.installResult = false;
 	_startPair(&pair);
-	_pump(&pair, 5);
+	_pump(&pair, 64);
 	assert_int_equal(pair.host.session.state, GBA_LINK_V2_SESSION_FAILED);
 	assert_int_equal(pair.host.failureReason,
 	    GBA_LINK_V2_REASON_INSTALL_FAILED);
@@ -505,7 +982,7 @@ M_TEST_DEFINE(runtimeInputDeadlineFailsWithSpecificReason) {
 	struct V2Pair pair;
 	_initPair(&pair);
 	_startPair(&pair);
-	_pump(&pair, 8);
+	_pump(&pair, 64);
 	assert_int_equal(
 	    pair.host.session.state, GBA_LINK_V2_SESSION_READY);
 
@@ -521,7 +998,7 @@ M_TEST_DEFINE(runtimeInputDeadlineFailsWithSpecificReason) {
 	assert_true(GBALinkV2SessionSendRuntime(
 	    &pair.host.session, &packet,
 	    GBA_LINK_V2_DEADLINE_INPUT));
-	pair.host.now += 3001;
+	pair.host.nowUs += UINT64_C(3001000);
 	assert_false(GBALinkV2SessionUpdate(
 	    &pair.host.session, false));
 	assert_int_equal(
@@ -533,11 +1010,28 @@ M_TEST_DEFINE(runtimeInputDeadlineFailsWithSpecificReason) {
 
 M_TEST_SUITE_DEFINE(GBALinkSessionV2,
 	cmocka_unit_test(bilateralBundlesInstallInCanonicalOrderAndReleaseAtomically),
-	cmocka_unit_test(handshakeRttAndJitterFreezeOneSharedInputDelay),
+	cmocka_unit_test(acceptAckDelayDoesNotAffectCalibratedInputDelay),
+	cmocka_unit_test(replicaCaptureCannotInflateCalibratedInputDelay),
+	cmocka_unit_test(calibrationSamplesBothEndpointCallbackDirections),
+	cmocka_unit_test(semanticHelloReplayDoesNotRestartCalibration),
+	cmocka_unit_test(semanticCalibrationReplayIsIdempotent),
+	cmocka_unit_test(literalOldPacketSequenceReplayFailsBeforeDispatch),
+	cmocka_unit_test(conflictingSemanticReplayFailsClosed),
+	cmocka_unit_test(calibrationDeadlineIsAbsoluteAndReportCannotRefreshIt),
+	cmocka_unit_test(clientReportSendMustFinishBeforeCalibrationDeadline),
+	cmocka_unit_test(hostAcceptAckDeadlineBoundsSilentPeer),
+	cmocka_unit_test(hostAcceptAckDeadlineUsesAbsoluteBoundary),
+	cmocka_unit_test(synchronousStopDuringAcceptUsesCommittedState),
+	cmocka_unit_test(fallibleCalibrationClockDistinguishesDeadlineT0AndT1),
 	cmocka_unit_test(attachmentDeadlineBeginsBeforeQuiescentCapture),
 	cmocka_unit_test(identityMismatchPreservesBothOriginalCores),
 	cmocka_unit_test(
 	    experimentalPolicyMismatchFailsBeforeReplicaExchange),
+	cmocka_unit_test(profileMismatchFailsBeforeCalibrationOrReplicaExchange),
+	cmocka_unit_test(requiredExternalInputMustBeSynchronizedByBothPeers),
+	cmocka_unit_test(rtcContentRequiresCommonTimeSemanticsBeforeCalibration),
+	cmocka_unit_test(rtcSourceMismatchIsActionableBeforeCalibration),
+	cmocka_unit_test(productPolicyNegotiatesStricterFloorAndThenFreezes),
 	cmocka_unit_test(corruptReplicaFailsBeforeProvisionalInstallation),
 	cmocka_unit_test(missingFinalAckDiscardsOnlyProvisionalPairs),
 	cmocka_unit_test(synchronousStopAtEveryReplicaBoundaryFailsClosed),

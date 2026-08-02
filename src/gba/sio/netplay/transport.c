@@ -280,3 +280,13 @@ uint64_t GBALinkTransportMonotonicTimeMs(
 	}
 	return transport->vtable->monotonicTimeMs(transport->context);
 }
+
+bool GBALinkTransportMonotonicTimeUs(
+	const struct GBALinkTransport* transport, uint64_t* timestamp) {
+	if (!timestamp || !transport || !transport->vtable ||
+	    !transport->vtable->monotonicTimeUs) {
+		return false;
+	}
+	return transport->vtable->monotonicTimeUs(
+	    transport->context, timestamp);
+}

@@ -33,6 +33,88 @@ TIMING = re.compile(
     r"fps-milli=(?P<fps_milli>\d+) rv-p50=(?P<rv_p50_ms>\d+)ms "
     r"rv-p95=(?P<rv_p95_ms>\d+)ms rv-max=(?P<rv_max_ms>\d+)ms"
 )
+CALIBRATION_LEGACY = re.compile(
+    r"calibration P(?P<role>[01]) provisional=(?P<provisional>\d+) "
+    r"generation=(?P<generation>\d+) samples=(?P<samples>\d+) "
+    r"min=(?P<minimum_us>\d+)us p50=(?P<p50_us>\d+)us "
+    r"p95=(?P<p95_us>\d+)us max=(?P<maximum_us>\d+)us "
+    r"selector=(?P<selector>\d+) floor=(?P<floor>\d+) "
+    r"range=(?P<range_min>\d+)-(?P<range_max>\d+) "
+    r"delay=(?P<delay>\d+) reason=(?P<reason>\d+) "
+    r"digest=(?P<digest>[0-9a-f]{64})"
+)
+CALIBRATION_IDENTITY = re.compile(
+    r"calibration P(?P<role>[01]) provisional=(?P<provisional>\d+) "
+    r"generation=(?P<generation>\d+) samples=(?P<samples>\d+)"
+)
+CALIBRATION_RTT = re.compile(
+    r"cal-rtt P(?P<role>[01]) s=(?P<session>\d+) min=(?P<minimum_us>\d+)us "
+    r"p50=(?P<p50_us>\d+)us p95=(?P<p95_us>\d+)us "
+    r"max=(?P<maximum_us>\d+)us"
+)
+CALIBRATION_SELECT = re.compile(
+    r"cal-select P(?P<role>[01]) s=(?P<session>\d+) selector=(?P<selector>\d+) "
+    r"floor=(?P<floor>\d+) range=(?P<range_min>\d+)-(?P<range_max>\d+) "
+    r"delay=(?P<delay>\d+) reason=(?P<reason>\d+)"
+)
+CALIBRATION_DIGEST_A = re.compile(
+    r"cal-digest-a P(?P<role>[01]) s=(?P<session>\d+) d=(?P<digest_a>[0-9a-f]{32})"
+)
+CALIBRATION_DIGEST_B = re.compile(
+    r"cal-digest-b P(?P<role>[01]) s=(?P<session>\d+) d=(?P<digest_b>[0-9a-f]{32})"
+)
+INPUT_WAIT_LEGACY = re.compile(
+    r"periodic input-wait P(?P<role>[01]) released=(?P<released>\d+) "
+    r"waited=(?P<waited>\d+) wait-free-ppm=(?P<wait_free_ppm>\d+) "
+    r"p95=(?P<input_wait_p95_us>\d+)us max=(?P<input_wait_max_us>\d+)us "
+    r"total=(?P<input_wait_total_us>\d+)us "
+    r"deadline-miss=(?P<input_deadline_misses>\d+) "
+    r"clock-failure=(?P<telemetry_clock_failures>\d+) "
+    r"poll-send=(?P<poll_send_count>\d+)/(?P<poll_send_average_us>\d+)/"
+    r"(?P<poll_send_max_us>\d+)us"
+)
+INPUT_WAIT = re.compile(
+    r"periodic input-wait P(?P<role>[01]) released=(?P<released>\d+) "
+    r"waited=(?P<waited>\d+) wait-free-ppm=(?P<wait_free_ppm>\d+)"
+)
+INPUT_TAIL = re.compile(
+    r"periodic input-tail P(?P<role>[01]) p95=(?P<input_wait_p95_us>\d+)us "
+    r"max=(?P<input_wait_max_us>\d+)us total=(?P<input_wait_total_us>\d+)us"
+)
+INPUT_HEALTH = re.compile(
+    r"periodic input-health P(?P<role>[01]) "
+    r"deadline-miss=(?P<input_deadline_misses>\d+) "
+    r"clock-failure=(?P<telemetry_clock_failures>\d+)"
+)
+POLL_SEND = re.compile(
+    r"periodic poll-send P(?P<role>[01]) count=(?P<poll_send_count>\d+) "
+    r"avg=(?P<poll_send_average_us>\d+)us max=(?P<poll_send_max_us>\d+)us"
+)
+INPUT_LEAD_LEGACY = re.compile(
+    r"periodic input-lead P(?P<role>[01]) "
+    r"inserts=(?P<input_insertions0>\d+)/(?P<input_insertions1>\d+) "
+    r"frames-avg=(?P<input_lead_frames_average0>\d+)/"
+    r"(?P<input_lead_frames_average1>\d+) "
+    r"frames-max=(?P<input_lead_frames_max0>\d+)/"
+    r"(?P<input_lead_frames_max1>\d+) "
+    r"us-avg=(?P<input_lead_us_average0>\d+)/"
+    r"(?P<input_lead_us_average1>\d+) "
+    r"us-max=(?P<input_lead_us_max0>\d+)/(?P<input_lead_us_max1>\d+)"
+)
+INPUT_LEAD_FRAME = re.compile(
+    r"periodic input-lead-frame P(?P<role>[01]) "
+    r"inserts=(?P<input_insertions0>\d+)/(?P<input_insertions1>\d+) "
+    r"frames-avg=(?P<input_lead_frames_average0>\d+)/"
+    r"(?P<input_lead_frames_average1>\d+) "
+    r"frames-max=(?P<input_lead_frames_max0>\d+)/"
+    r"(?P<input_lead_frames_max1>\d+)"
+)
+INPUT_LEAD_TIME = re.compile(
+    r"periodic input-lead-time P(?P<role>[01]) "
+    r"us-avg=(?P<input_lead_us_average0>\d+)/"
+    r"(?P<input_lead_us_average1>\d+) "
+    r"us-max=(?P<input_lead_us_max0>\d+)/(?P<input_lead_us_max1>\d+)"
+)
 FIXTURE = re.compile(
     r"periodic fixture P(?P<role>[01]) "
     r"status=(?P<status0>[0-9a-fA-F]{8})/(?P<status1>[0-9a-fA-F]{8}) "
@@ -73,6 +155,46 @@ class Summary:
     rv_p50_ms: int = 0
     rv_p95_ms: int = 0
     rv_max_ms: int = 0
+    released: int = 0
+    waited: int = 0
+    wait_free_ppm: int = 0
+    input_wait_p95_us: int = 0
+    input_wait_max_us: int = 0
+    input_wait_total_us: int = 0
+    input_deadline_misses: int = 0
+    telemetry_clock_failures: int = 0
+    poll_send_count: int = 0
+    poll_send_average_us: int = 0
+    poll_send_max_us: int = 0
+    input_insertions0: int = 0
+    input_insertions1: int = 0
+    input_lead_frames_average0: int = 0
+    input_lead_frames_average1: int = 0
+    input_lead_frames_max0: int = 0
+    input_lead_frames_max1: int = 0
+    input_lead_us_average0: int = 0
+    input_lead_us_average1: int = 0
+    input_lead_us_max0: int = 0
+    input_lead_us_max1: int = 0
+
+
+@dataclasses.dataclass(frozen=True)
+class Calibration:
+    role: int
+    provisional: int
+    generation: int
+    samples: int
+    minimum_us: int
+    p50_us: int
+    p95_us: int
+    maximum_us: int
+    selector: int
+    floor: int
+    range_min: int
+    range_max: int
+    delay: int
+    reason: int
+    digest: str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -95,6 +217,7 @@ class Log:
     fixtures: dict[int, FixtureStatus] = dataclasses.field(default_factory=dict)
     divergence_lines: list[str] = dataclasses.field(default_factory=list)
     failure_lines: list[str] = dataclasses.field(default_factory=list)
+    calibration: Calibration | None = None
 
 
 def _values(match: re.Match[str]) -> dict[str, int]:
@@ -109,6 +232,7 @@ def parse(path: Path) -> Log:
     result = Log()
     pending_frame: int | None = None
     pending_runtime: dict[str, int] | None = None
+    calibration_parts: dict[str, int | str] = {}
     for raw in path.read_text(errors="replace").splitlines():
         if "divergence frame=" in raw or "canonical state digest mismatch" in raw:
             result.divergence_lines.append(raw)
@@ -117,6 +241,52 @@ def parse(path: Path) -> Log:
             or "GBA replicated link: protocol-v2 session failed:" in raw
         ):
             result.failure_lines.append(raw)
+        match = CALIBRATION_LEGACY.search(raw)
+        if match:
+            values = match.groupdict()
+            result.calibration = Calibration(
+                **{
+                    key: value if key == "digest" else int(value)
+                    for key, value in values.items()
+                }
+            )
+            continue
+        match = CALIBRATION_IDENTITY.search(raw)
+        if match:
+            calibration_parts = _values(match)
+            continue
+        for pattern in (
+            CALIBRATION_RTT,
+            CALIBRATION_SELECT,
+            CALIBRATION_DIGEST_A,
+            CALIBRATION_DIGEST_B,
+        ):
+            match = pattern.search(raw)
+            if not match or not calibration_parts:
+                continue
+            values = match.groupdict()
+            if int(values["role"]) != calibration_parts.get("role"):
+                raise ValueError(f"{path}: calibration role changed within one summary")
+            if int(values["session"]) != calibration_parts.get("provisional"):
+                raise ValueError(f"{path}: calibration session changed within one summary")
+            calibration_parts.update(
+                {
+                    key: value if key in ("digest_a", "digest_b") else int(value)
+                    for key, value in values.items()
+                    if key not in ("role", "session")
+                }
+            )
+            if "digest_a" in calibration_parts and "digest_b" in calibration_parts:
+                calibration_parts["digest"] = (
+                    str(calibration_parts["digest_a"])
+                    + str(calibration_parts["digest_b"])
+                )
+            required = {field.name for field in dataclasses.fields(Calibration)}
+            if required <= calibration_parts.keys():
+                result.calibration = Calibration(
+                    **{key: calibration_parts[key] for key in required}
+                )
+            break
         match = SUMMARY.search(raw)
         if match:
             values = _values(match)
@@ -152,6 +322,60 @@ def parse(path: Path) -> Log:
                 raise ValueError(f"{path}: timing role changed at frame {pending_frame}")
             del values["role"]
             result.summaries[pending_frame] = dataclasses.replace(current, **values)
+            continue
+        match = INPUT_WAIT_LEGACY.search(raw)
+        if match and pending_frame is not None:
+            values = _values(match)
+            current = result.summaries[pending_frame]
+            if values["role"] != current.role:
+                raise ValueError(f"{path}: input-wait role changed at frame {pending_frame}")
+            del values["role"]
+            result.summaries[pending_frame] = dataclasses.replace(current, **values)
+            continue
+        for pattern, label in (
+            (INPUT_WAIT, "input-wait"),
+            (INPUT_TAIL, "input-tail"),
+            (INPUT_HEALTH, "input-health"),
+            (POLL_SEND, "poll-send"),
+        ):
+            match = pattern.search(raw)
+            if not match or pending_frame is None:
+                continue
+            values = _values(match)
+            current = result.summaries[pending_frame]
+            if values["role"] != current.role:
+                raise ValueError(f"{path}: {label} role changed at frame {pending_frame}")
+            del values["role"]
+            result.summaries[pending_frame] = dataclasses.replace(current, **values)
+            break
+        else:
+            match = None
+        if match:
+            continue
+        match = INPUT_LEAD_LEGACY.search(raw)
+        if match and pending_frame is not None:
+            values = _values(match)
+            current = result.summaries[pending_frame]
+            if values["role"] != current.role:
+                raise ValueError(f"{path}: input-lead role changed at frame {pending_frame}")
+            del values["role"]
+            result.summaries[pending_frame] = dataclasses.replace(current, **values)
+            continue
+        for pattern, label in (
+            (INPUT_LEAD_FRAME, "input-lead-frame"),
+            (INPUT_LEAD_TIME, "input-lead-time"),
+        ):
+            match = pattern.search(raw)
+            if not match or pending_frame is None:
+                continue
+            values = _values(match)
+            current = result.summaries[pending_frame]
+            if values["role"] != current.role:
+                raise ValueError(f"{path}: {label} role changed at frame {pending_frame}")
+            del values["role"]
+            result.summaries[pending_frame] = dataclasses.replace(current, **values)
+            break
+        if match:
             continue
         match = FIXTURE.search(raw)
         if match and pending_frame is not None:
@@ -190,12 +414,35 @@ def validate(
     minimum_frames: int,
     baseline: tuple[int, int] | None,
     require_fixture: bool = True,
+    expected_policy: int | None = None,
+    expected_delay: int | None = None,
+    one_frame_gate: bool = False,
 ) -> list[str]:
     errors: list[str] = []
     if host.divergence_lines or client.divergence_lines:
         errors.append("a log contains an explicit replica divergence")
     if host.failure_lines or client.failure_lines:
         errors.append("a log contains an explicit replicated-link failure")
+    if expected_policy is not None or expected_delay is not None or one_frame_gate:
+        if not host.calibration or not client.calibration:
+            errors.append("calibration summary is missing on one or both endpoints")
+        elif host.calibration != dataclasses.replace(
+            client.calibration, role=host.calibration.role
+        ):
+            errors.append("calibration summaries differ between endpoints")
+        else:
+            if host.calibration.samples != 24:
+                errors.append("calibration does not contain 24 samples")
+            if expected_policy is not None and host.calibration.floor != expected_policy:
+                errors.append(
+                    f"calibration floor is {host.calibration.floor}; "
+                    f"expected {expected_policy}"
+                )
+            if expected_delay is not None and host.calibration.delay != expected_delay:
+                errors.append(
+                    f"selected delay is {host.calibration.delay}; "
+                    f"expected {expected_delay}"
+                )
     host_only = sorted(host.summaries.keys() - client.summaries.keys())
     client_only = sorted(client.summaries.keys() - host.summaries.keys())
     if host_only:
@@ -257,6 +504,49 @@ def validate(
             errors.append(
                 f"{label} ran at {summary.fps_milli / 1000:.3f} FPS; need 59 FPS"
             )
+        if summary.waited > summary.released:
+            errors.append(f"{label} input waited-frame count exceeds released frames")
+        expected_wait_free = (
+            (summary.released - summary.waited) * 1_000_000
+            // summary.released
+            if summary.released and summary.waited <= summary.released
+            else 0
+        )
+        if summary.wait_free_ppm != expected_wait_free:
+            errors.append(f"{label} input wait-free ratio is internally inconsistent")
+        if summary.input_wait_p95_us > summary.input_wait_max_us:
+            errors.append(f"{label} input-wait percentiles are malformed")
+        if not summary.waited and (
+            summary.input_wait_p95_us
+            or summary.input_wait_max_us
+            or summary.input_wait_total_us
+        ):
+            errors.append(f"{label} zero-wait run reports a nonzero input-wait duration")
+        if summary.input_deadline_misses:
+            errors.append(f"{label} reported an input deadline miss")
+        if summary.telemetry_clock_failures:
+            errors.append(f"{label} reported a telemetry clock failure")
+        if one_frame_gate:
+            if summary.released < 106_200:
+                errors.append(
+                    f"{label} released {summary.released} frames; need 106200"
+                )
+            if summary.elapsed_ms < 1_800_000:
+                errors.append(
+                    f"{label} ran for {summary.elapsed_ms}ms; need 1800000ms"
+                )
+            if summary.wait_free_ppm < 990_000:
+                errors.append(
+                    f"{label} wait-free ratio is {summary.wait_free_ppm}ppm"
+                )
+            if summary.input_wait_p95_us > 8_000:
+                errors.append(
+                    f"{label} input-wait p95 is {summary.input_wait_p95_us}us"
+                )
+            if summary.input_wait_max_us > 16_743:
+                errors.append(
+                    f"{label} input-wait maximum is {summary.input_wait_max_us}us"
+                )
         fixture = (host if label == "host" else client).fixtures.get(final_frame)
         if require_fixture and not fixture:
             errors.append(f"{label} is missing the continuous-fixture summary")
@@ -306,6 +596,9 @@ def main() -> int:
         action="store_true",
         help="validate a real-game run without the CC0 fixture result block",
     )
+    parser.add_argument("--expected-floor", type=int, choices=(1, 2))
+    parser.add_argument("--expected-delay", type=int)
+    parser.add_argument("--one-frame-gate", action="store_true")
     args = parser.parse_args()
     try:
         host = parse(args.host)
@@ -320,6 +613,9 @@ def main() -> int:
         args.minimum_frames,
         baseline,
         require_fixture=not args.commercial,
+        expected_policy=args.expected_floor,
+        expected_delay=args.expected_delay,
+        one_frame_gate=args.one_frame_gate,
     )
     common_frames = sorted(host.summaries.keys() & client.summaries.keys())
     if common_frames:
@@ -350,6 +646,11 @@ def main() -> int:
             f"rv_p50={left.rv_p50_ms}/{right.rv_p50_ms}ms "
             f"rv_p95={left.rv_p95_ms}/{right.rv_p95_ms}ms "
             f"rv_max={left.rv_max_ms}/{right.rv_max_ms}ms "
+            f"input_wait={left.waited}/{right.waited} "
+            f"input_p95={left.input_wait_p95_us}/"
+            f"{right.input_wait_p95_us}us "
+            f"input_max={left.input_wait_max_us}/"
+            f"{right.input_wait_max_us}us "
             f"packet_rate={host_pps:.3f}/{client_pps:.3f}pps "
             f"byte_rate={host_bytes_per_second:.1f}/"
             f"{client_bytes_per_second:.1f}Bps "

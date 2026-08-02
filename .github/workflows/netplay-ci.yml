@@ -126,6 +126,7 @@ jobs:
             test-gba-netplay-integration \
             test-gba-netplay-protocol \
             test-gba-netplay-protocol-v2 \
+            test-gba-netplay-rtc-sync \
             test-gba-netplay-session \
             test-gba-netplay-session-v2 \
             test-gba-netplay-transport \

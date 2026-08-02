@@ -29,6 +29,8 @@ struct V2Frontend {
 	uint16_t lastTarget;
 	uint8_t lastPacket[GBA_LINK_V2_MAX_PACKET_SIZE];
 	size_t lastPacketSize;
+	const char* latencyPolicy;
+	const char* solarLevel;
 };
 
 struct V2AdapterFixture {
@@ -101,6 +103,18 @@ static bool RETRO_CALLCONV _environment(
 	case RETRO_ENVIRONMENT_SET_MESSAGE_EXT:
 		++_frontend->messages;
 		return true;
+	case RETRO_ENVIRONMENT_GET_VARIABLE: {
+		struct retro_variable* variable = data;
+		if (!strcmp(variable->key, "mgba_link_netplay_latency")) {
+			variable->value = _frontend->latencyPolicy;
+			return variable->value != NULL;
+		}
+		if (!strcmp(variable->key, "mgba_solar_sensor_level")) {
+			variable->value = _frontend->solarLevel;
+			return variable->value != NULL;
+		}
+		return false;
+	}
 	default:
 		return false;
 	}
@@ -123,6 +137,8 @@ static int _setup(void** state) {
 	    calloc(1, sizeof(*fixture));
 	assert_non_null(fixture);
 	fixture->frontend.supported = true;
+	fixture->frontend.latencyPolicy = "stable";
+	fixture->frontend.solarLevel = "sensor";
 	_frontend = &fixture->frontend;
 	_makeRom(fixture->rom, sizeof(fixture->rom));
 	fixture->core = GBACoreCreate();
@@ -190,6 +206,103 @@ M_TEST_DEFINE(clientStartsWithReliableFlushedV2Hello) {
 	assert_int_equal(
 	    packet.header.type, GBA_LINK_V2_MESSAGE_HELLO);
 	assert_int_equal(packet.header.sessionId, 0);
+	assert_int_equal(packet.payload.hello.runtimeCompatibilityVersion,
+	    GBA_LINK_V2_RUNTIME_COMPATIBILITY_VERSION);
+	assert_int_equal(packet.payload.hello.productPolicy,
+	    GBA_LINK_V2_PRODUCT_STABLE);
+	assert_int_equal(packet.payload.hello.minimumInputDelay,
+	    GBA_LINK_INPUT_STABLE_FLOOR);
+	assert_true(GBALinkV2DeterminismProfileValidate(
+	    &packet.payload.hello.profile));
+	assert_int_equal(packet.payload.hello.profile.recordCount,
+	    GBA_LINK_V2_PROFILE_REQUIRED_RECORDS);
+	assert_int_equal(
+	    packet.payload.hello.deterministicCapabilities
+	        .synchronizedInputCapabilityMask,
+	    GBA_LINK_V2_INPUT_DIGITAL);
+}
+
+M_TEST_DEFINE(effectiveLoadedPolicyAndHardwareShapeHello) {
+	struct V2AdapterFixture* fixture = *state;
+	struct GBA* gba = fixture->core->board;
+	gba->idleOptimization = IDLE_LOOP_DETECT;
+	gba->allowOpposingDirections = true;
+	gba->memory.hw.devices = HW_LIGHT_SENSOR | HW_RUMBLE;
+	fixture->frontend.latencyPolicy = "low_latency";
+	fixture->frontend.solarLevel = "5";
+	assert_true(mLibretroNetpacketV2Register(
+	    _environment, fixture->core, fixture->save,
+	    sizeof(fixture->save)));
+	fixture->frontend.callbacks.start(1, _send, _pollReceive);
+	struct GBALinkV2Packet packet;
+	assert_int_equal(GBALinkV2PacketDecode(
+	    fixture->frontend.lastPacket, fixture->frontend.lastPacketSize,
+	    GBA_LINK_ROLE_CLIENT, &packet), GBA_LINK_DECODE_OK);
+	assert_int_equal(packet.payload.hello.productPolicy,
+	    GBA_LINK_V2_PRODUCT_LOW_LATENCY);
+	assert_int_equal(packet.payload.hello.minimumInputDelay,
+	    GBA_LINK_INPUT_LOW_LATENCY_FLOOR);
+	assert_int_equal(packet.payload.hello.deterministicCapabilities
+	    .synchronizedInputCapabilityMask, GBA_LINK_V2_INPUT_DIGITAL);
+
+	struct GBALinkV2DeterminismProfileInput expectedInput = {
+		.biosMode = GBA_LINK_V2_BIOS_HLE,
+		.emulationCompatibilityVersion =
+		    GBA_REPLICA_EMULATION_COMPATIBILITY_VERSION,
+		.timingModelFlags =
+		    (fixture->core->opts.skipBios ? 1U : 0U) |
+		    (fixture->core->opts.useBios ? 2U : 0U),
+		.overclockQ16 = 0x10000,
+		.idlePolicy = GBA_LINK_V2_IDLE_DETECT,
+		.allowOpposingDirections = true,
+		.rtcNormalizationPolicyVersion = 1,
+		.fakeEpochArithmeticVersion = 1,
+		.rtcSemanticsModelVersion = 1,
+		.authoritativeInputFormatVersion = 1,
+		.cartridgeRequiredInputMask =
+		    GBA_LINK_V2_INPUT_DIGITAL |
+		    GBA_LINK_V2_INPUT_LUMINANCE,
+	};
+	struct GBALinkV2DeterminismProfile expected;
+	assert_true(GBALinkV2DeterminismProfileBuild(
+	    &expectedInput, &expected));
+	assert_true(GBALinkV2DeterminismProfilesCompatible(
+	    &packet.payload.hello.profile, &expected, NULL));
+	assert_false(mLibretroNetpacketV2RejectLatencyPolicyChange(
+	    "low_latency"));
+	assert_true(mLibretroNetpacketV2RejectLatencyPolicyChange(
+	    "stable"));
+}
+
+M_TEST_DEFINE(eReaderFailsBeforeHelloWhileRumbleOnlyProceeds) {
+	struct V2AdapterFixture* fixture = *state;
+	struct GBA* gba = fixture->core->board;
+	gba->memory.hw.devices = HW_RUMBLE;
+	assert_true(mLibretroNetpacketV2Register(
+	    _environment, fixture->core, fixture->save,
+	    sizeof(fixture->save)));
+	fixture->frontend.callbacks.start(1, _send, _pollReceive);
+	assert_true(mLibretroNetpacketV2SessionActive());
+	assert_int_equal(fixture->frontend.sends, 1);
+	mLibretroNetpacketV2Unload();
+
+	const uint32_t hardware[] = {
+		HW_EREADER,
+		HW_EREADER | HW_RUMBLE,
+	};
+	for (unsigned i = 0; i < sizeof(hardware) / sizeof(*hardware); ++i) {
+		fixture->frontend.sends = 0;
+		fixture->frontend.messages = 0;
+		gba->memory.hw.devices = hardware[i];
+		assert_true(mLibretroNetpacketV2Register(
+		    _environment, fixture->core, fixture->save,
+		    sizeof(fixture->save)));
+		fixture->frontend.callbacks.start(1, _send, _pollReceive);
+		assert_false(mLibretroNetpacketV2SessionActive());
+		assert_int_equal(fixture->frontend.sends, 0);
+		assert_true(fixture->frontend.messages > 0);
+		mLibretroNetpacketV2Unload();
+	}
 }
 
 M_TEST_DEFINE(hostAdmissionBoundsProvisionalTraffic) {
@@ -455,6 +568,10 @@ M_TEST_SUITE_DEFINE_SETUP_TEARDOWN(LibretroNetpacketV2,
 	    registersExactReplicatedProtocol, _setup, _teardown),
 	cmocka_unit_test_setup_teardown(
 	    clientStartsWithReliableFlushedV2Hello, _setup, _teardown),
+	cmocka_unit_test_setup_teardown(
+	    effectiveLoadedPolicyAndHardwareShapeHello, _setup, _teardown),
+	cmocka_unit_test_setup_teardown(
+	    eReaderFailsBeforeHelloWhileRumbleOnlyProceeds, _setup, _teardown),
 	cmocka_unit_test_setup_teardown(
 	    hostAdmissionBoundsProvisionalTraffic, _setup, _teardown),
 	cmocka_unit_test_setup_teardown(

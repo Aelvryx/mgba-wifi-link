@@ -65,6 +65,15 @@ static uint64_t _monotonicTimeMs(void* context) {
 	return fake->now;
 }
 
+static bool _monotonicTimeUs(void* context, uint64_t* timestamp) {
+	struct FakeTransport* fake = context;
+	if (!timestamp || fake->now > UINT64_MAX / 1000) {
+		return false;
+	}
+	*timestamp = fake->now * 1000;
+	return true;
+}
+
 static void _diagnostic(
     void* context, enum GBALinkDiagnosticLevel level,
     enum GBALinkReason reason, const char* message) {
@@ -84,6 +93,7 @@ static const struct GBALinkTransportVTable _vtable = {
 	.sendReliable = _sendReliable,
 	.pollReceive = _pollReceive,
 	.monotonicTimeMs = _monotonicTimeMs,
+	.monotonicTimeUs = _monotonicTimeUs,
 	.diagnostic = _diagnostic,
 	.stop = _stop,
 };
@@ -267,6 +277,10 @@ M_TEST_DEFINE(oldGenerationCannotEnterNewSession) {
 	assert_false(GBALinkTransportPopInbound(&transport, &copied));
 	assert_true(transport.active);
 	assert_int_equal(GBALinkTransportMonotonicTimeMs(&transport), 1234);
+	uint64_t nowUs = 0;
+	assert_true(GBALinkTransportMonotonicTimeUs(&transport, &nowUs));
+	assert_int_equal(nowUs, 1234000);
+	assert_false(GBALinkTransportMonotonicTimeUs(&transport, NULL));
 	GBALinkTransportDeinit(&transport);
 }
 

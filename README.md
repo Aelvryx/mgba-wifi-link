@@ -19,6 +19,11 @@ Status
   Netpacket command-78 callback contract.
 - Exact effective-ROM matching, with independent saves and inputs.
 - Replicated P0/P1 execution with one input packet per player per frame.
+- Canonical deterministic-policy negotiation, per-player RTC normalization,
+  and fail-fast rejection of unsynchronized cartridge sensors and e-Reader
+  card input.
+- Clean bilateral network calibration with a stable two-frame default and an
+  unpublished one-frame experimental qualification option.
 - Sixty-frame canonical state verification and bounded failure handling.
 - Linux libretro and Android `arm64-v8a`, `armeabi-v7a`, `x86`, and `x86_64`
   builds.
@@ -32,6 +37,9 @@ Status
 - Zelda: Four Swords passed a two-device discovery and shared-gameplay retest
   on the exact alpha.2 runtime at 60.28 FPS. The run reached 27,000 synchronized
   frames and 110,852 completed transfers with matching traces and normal audio.
+  A later determinism/calibration candidate also completed about 45 minutes of
+  the tutorial and first area smoothly; recovered logs identify that session
+  honestly as stable two-frame operation.
 
 Compatibility is still experimental. The cable model is generic, but this
 alpha does not claim that every Multi-Pak title has been qualified:
@@ -42,7 +50,7 @@ alpha does not claim that every Multi-Pak title has been qualified:
 | LinkCable compatibility workload | Verified |
 | Mario Kart: Super Circuit | Verified — complete three-lap VS race |
 | Advance Wars | User playtest passed |
-| Zelda: Four Swords | Verified — discovery and brief shared gameplay |
+| Zelda: Four Swords | Verified — discovery and extended shared gameplay |
 | Other Multi-Pak games | Untested |
 
 The first release intentionally excludes Single-Pak multiboot, the GBA
@@ -51,9 +59,11 @@ sessions, internet relay/NAT traversal, reconnection, host migration, and
 savestates during a live link session.
 
 The v2 wire/runtime contract remains experimental and may change between
-alpha builds. Cartridge sensor inputs and wall-clock-dependent RTC behavior
-are not yet synchronized between endpoints; titles requiring them are not
-qualified and may terminate at the periodic divergence check.
+alpha builds. Wall-clock-backed RTC sources are normalized to deterministic
+per-player epochs during a session. Cartridge tilt, gyro, and solar/luminance
+inputs and e-Reader card data are not synchronized, so affected titles fail
+before attachment rather than diverging later. Current cartridge hardware
+metadata exposes no equivalent GBA camera or microphone flag in this path.
 
 Quick start
 -----------
@@ -81,6 +91,17 @@ To play:
    `GBA replicated link ready: player 2` on the client.
 4. Return to the game without closing content. Enter its Multi-Pak mode on
    both devices; player one makes any leader-only selections.
+
+The default **GBA Link Netplay Latency → Auto (Stable)** policy negotiates at
+least two frames of buffering. Both devices may select **Auto (Low Latency,
+Experimental)** to permit one frame, but that mode is not release-qualified
+until the exact Android artifact passes the documented long-run latency gate.
+The measured network target may select more than the chosen floor.
+
+The current Thor/Odin qualification selected two frames under both policies on
+the tested mesh Wi-Fi path. Stable two-frame operation is the qualified result;
+the low-latency option remains experimental and makes no one-frame compatibility
+or performance claim.
 
 This alpha supports exactly one host and one client. Do not choose Single-Pak,
 Wireless Adapter, or RetroArch's ordinary input-synchronizing netplay modes.

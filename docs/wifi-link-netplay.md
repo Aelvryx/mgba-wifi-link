@@ -37,7 +37,7 @@ architecture:
 | LinkCable compatibility workload | Verified |
 | Mario Kart: Super Circuit Multi-Pak | Verified — full race |
 | Advance Wars | User playtest passed |
-| Zelda: Four Swords | Verified — discovery and brief shared gameplay |
+| Zelda: Four Swords | Verified — discovery and extended shared gameplay |
 | Other Multi-Pak titles | Untested |
 
 ## Why protocol v2 is real-time
@@ -106,13 +106,17 @@ floor negotiated at connection:
 - **Auto (Stable)** is the default and requires at least two GBA frames of
   input buffering (about 33.5 ms before display/audio pipeline latency).
 - **Auto (Low Latency, Experimental)** permits a one-frame floor (about 16.7
-  ms) only when both peers choose it. It remains an unpublished qualification
-  candidate until the exact Android artifact passes the documented 30-minute
-  wait-tail and commercial-game gates.
+  ms) only when both peers choose it. A one-frame result remains unqualified
+  until an exact Android artifact passes the documented 30-minute wait-tail
+  and commercial-game gates.
 
 The measured network target can still select a larger delay. If either peer
 uses Stable, the negotiated floor is two frames. Changing the option while a
 session is live cannot alter that session; disconnect first.
+
+The recorded Thor/Odin mesh-Wi-Fi run selected two frames under both policies.
+That is the current qualified outcome: Low Latency was active, but its clean
+calibration correctly declined to commit one frame on that network path.
 
 RetroArch assigns Netpacket client ID zero to the host and one to the client.
 The core maps those roles to GBA P0/primary and P1/secondary respectively.
@@ -123,6 +127,14 @@ On Android, the host IP address is the device's IPv4 address on the active
 Wi-Fi network. It is normally shown in Android's details for that network.
 RetroArch LAN discovery may avoid entering it manually. The core itself does
 not open a separate socket or provide another address.
+
+An Android local hotspot is also an ordinary supported IP LAN: one handheld
+hosts the hotspot and Netplay server, the other joins it, and the client uses
+the hotspot owner's address. This can reduce forwarding or mesh-backhaul
+jitter, but calibration remains authoritative. Wi-Fi Direct is present on the
+qualified devices, but stock RetroArch does not create or manage a Wi-Fi Direct
+group; Android would first need to expose such a link as mutually reachable IP
+interfaces. Prefer a 5 GHz hotspot for a future controlled A/B test.
 
 Connect before entering the game's cable menu, but after both devices have
 loaded content. In games with leader-driven menus, player two may show `WAIT`

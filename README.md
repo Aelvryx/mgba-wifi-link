@@ -37,6 +37,9 @@ Status
 - Zelda: Four Swords passed a two-device discovery and shared-gameplay retest
   on the exact alpha.2 runtime at 60.28 FPS. The run reached 27,000 synchronized
   frames and 110,852 completed transfers with matching traces and normal audio.
+  A later determinism/calibration candidate also completed about 45 minutes of
+  the tutorial and first area smoothly; recovered logs identify that session
+  honestly as stable two-frame operation.
 
 Compatibility is still experimental. The cable model is generic, but this
 alpha does not claim that every Multi-Pak title has been qualified:
@@ -47,7 +50,7 @@ alpha does not claim that every Multi-Pak title has been qualified:
 | LinkCable compatibility workload | Verified |
 | Mario Kart: Super Circuit | Verified — complete three-lap VS race |
 | Advance Wars | User playtest passed |
-| Zelda: Four Swords | Verified — discovery and brief shared gameplay |
+| Zelda: Four Swords | Verified — discovery and extended shared gameplay |
 | Other Multi-Pak games | Untested |
 
 The first release intentionally excludes Single-Pak multiboot, the GBA
@@ -94,6 +97,11 @@ least two frames of buffering. Both devices may select **Auto (Low Latency,
 Experimental)** to permit one frame, but that mode is not release-qualified
 until the exact Android artifact passes the documented long-run latency gate.
 The measured network target may select more than the chosen floor.
+
+The current Thor/Odin qualification selected two frames under both policies on
+the tested mesh Wi-Fi path. Stable two-frame operation is the qualified result;
+the low-latency option remains experimental and makes no one-frame compatibility
+or performance claim.
 
 This alpha supports exactly one host and one client. Do not choose Single-Pak,
 Wireless Adapter, or RetroArch's ordinary input-synchronizing netplay modes.

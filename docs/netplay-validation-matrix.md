@@ -654,7 +654,49 @@ seconds and 106,200 frames on both Android endpoints with at least 99% wait-free
 frames, waited-frame p95 no more than 8,000 microseconds, and no wait above
 16,743 microseconds.
 
-No physical candidate result is recorded in this section yet. The shipped
-floor remains the prior alpha.2 behavior until exact-artifact qualification
-chooses and documents the next experimental build; a failed one-frame trial is
-valid evidence and retains the two-frame improvement.
+### Proportionate exact-device closeout
+
+The reviewed Android ARM64 candidate at
+`20c5d8d111cc23cefcb6711b8eb0aafccf75c24b` had SHA-256
+`c1a9edabc29381ba99dc5d91da01d952e1fa0f8000048c67eb00e4096fda6a18`.
+RetroArch 1.22.2 (Git `69a4f0e`) loaded the app-private installed core on the
+Thor as P0 and Odin as P1. Staged core, ROM, configuration, and option files
+were hash-checked; saves, states, and logs used run-specific paths. Raw logs
+and screenshots remain private.
+
+The exact candidate produced these bounded CC0 continuous-fixture results:
+
+| Policy | Selected delay | Common frames / elapsed | FPS P0 / P1 | Matched transfers | Result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Auto (Stable) | 2 | 8,400 / about 139 s | 60.294 / 60.310 | 4,195 per replica | matching trace samples and line state; 139 checks; zero fixture errors, timeouts, divergence, or empty-audio frames |
+| Auto (Low Latency, Experimental) | 2 | 8,400 / about 139 s | 60.318 / 60.317 | 4,196 per replica | policy 2 was active, but valid calibration conservatively selected two frames; matching traces and line state; zero fixture errors, timeouts, divergence, or empty-audio frames |
+
+Stable calibration measured min/p50/p95/max RTT values of
+15,473/16,764/24,672/25,700 microseconds. Low-latency calibration measured
+16,145/18,215/25,442/25,572 microseconds. The latter legitimately exceeded
+the one-frame selector budget, so the conditional 1,800-second one-frame gate
+was not activated and no qualified one-frame result is claimed. The earlier
+45-minute Four Swords playthrough was recovered as policy 1 / two-frame
+operation, correcting the contemporaneous assumption that its option-file
+label proved policy 2.
+
+The low-latency two-frame run reached 8,765 host frames before an intentional
+client stop. Teardown restored verified local state; the fixture reported
+4,378 matching transfers and no errors or timeouts. Pre-stop process PSS was
+about 161 MiB on Thor and 146 MiB on Odin; battery temperatures were 29.0 C
+and 30.0 C. The run-owned device directories, installer copy, and CC0 ROM were
+removed afterward while leaving the installed alpha core available for ad-hoc
+testing.
+
+Both devices were on strong Wi-Fi 6 links but associated with different 5 GHz
+BSSIDs and channels. A direct 5 GHz Android-hotspot A/B run is therefore a
+useful future attempt to qualify one frame; it is not required for the
+two-frame determinism/calibration increment. The source option remains clearly
+labelled experimental and unqualified rather than turning repeated calibration
+attempts into a search for a favourable sample.
+
+Physical logs also exposed that RetroArch truncates long core log records. The
+follow-up diagnostic-only correction splits calibration, wait-tail, health,
+poll-to-send, and input-lead data into short correlated records and requires
+the isolated configuration to enable its run-specific core-options file. This
+does not alter emulation, calibration, input mapping, or steady-state netplay.

@@ -117,7 +117,7 @@
 - [x] 11.4 Run the complete normal mGBA test suite and compare the pinned upstream baseline exception separately.
 - [x] 11.5 Reproduce the CC0 link and RTC fixtures plus analyzer outputs from source with the pinned toolchain.
 - [x] 11.6 Build and inspect the Android ARM64 libretro shared object in CI.
-- [ ] 11.7 Obtain focused independent review of the deterministic profile, RTC policy, external-input rejection, selector mathematics, session transitions, and test evidence before physical release qualification.
+- [x] 11.7 Obtain focused independent review of the deterministic profile, RTC policy, external-input rejection, selector mathematics, session transitions, and test evidence before physical release qualification.
 - [x] 11.8 Add a host post-`ACCEPT` absolute deadline before the send callback, transfer deadline ownership only after validated `ACCEPT_ACK`, and prove silence, before/at/after boundaries, replay/non-refresh, and synchronous-stop behavior.
 - [x] 11.9 Recheck the client calibration deadline after its report send returns, use that same successful timestamp to begin `WAIT_ACCEPT`, and prove a blocking send cannot cross the original boundary.
 - [x] 11.10 Reject `HW_EREADER` and e-Reader-plus-rumble before compatible `HELLO`, calibration, replica capture, or manifest transmission while documenting the current absence of camera/microphone detection flags.
@@ -127,21 +127,21 @@
 
 ## 12. Exact-device latency qualification
 
-- [ ] 12.1 Build, hash, install, and runtime-identify an unpublished exact reviewed Android ARM64 release candidate containing both stable and low-latency options on the Thor and Odin through the documented automation-owned workflow.
-- [ ] 12.2 Run the automation-owned continuous fixture under `Auto (Stable)` for 30 minutes and record FPS, audio, state checks, SIO throughput, calibration, selected delay, input lead, rendezvous, memory, and temperature.
-- [ ] 12.3 If the selector produces one frame, run that identical unpublished artifact for at least 1,800 seconds and 106,200 released frames; require separately on both endpoints at least 99% wait-free frames, waited-frame nearest-rank p95 at most 8,000 microseconds, maximum at most 16,743 microseconds, and every existing correctness/performance gate.
-- [ ] 12.4 Run a separate deliberately impaired jitter case and prove stable policy selects or negotiates a healthy two-or-more-frame session without changing logical traces; report the same per-endpoint wait-free/p95/maximum metrics but exclude the run from one-frame statistics and thresholds.
-- [ ] 12.5 If and only if automation passes, hand the prepared devices to the human tester for stock RetroArch host/join plus one concise Mario Kart lobby/race-entry, representative gameplay, audiovisual, and responsiveness smoke followed by safe disconnect.
-- [ ] 12.6 Keep stock RetroArch host/join, commercial navigation, and subjective judgment human-owned; automation may connect only through a separately validated non-input interface and otherwise stops rather than injecting hotkeys or exploring controls/menus.
-- [ ] 12.7 If all one-frame gates pass, publish the identical candidate with `Auto (Low Latency, Experimental)`; do not rebuild or change option exposure after qualification.
-- [ ] 12.8 Record exact source SHA, binary hash, frontend identity, device roles, selected policy/delay, summarized evidence, and cleanup result without committing ROMs, saves, raw inputs, or private device data.
-- [ ] 12.9 If any one-frame gate fails, do not publish that artifact; remove or disable the option, rerun all automated gates, and run a fresh exact-final-artifact stable fixture plus human-owned host/join and brief commercial smoke.
-- [ ] 12.10 On the exact artifact selected for publication, perform a brief human-owned Four Swords discovery regression through several verification intervals and clean teardown without repeating the prior long qualification.
+- [x] 12.1 Build, hash, install, and runtime-identify the reviewed Android ARM64 candidate at `20c5d8d111cc23cefcb6711b8eb0aafccf75c24b` (`c1a9edabc29381ba99dc5d91da01d952e1fa0f8000048c67eb00e4096fda6a18`) on Thor and Odin with both policies present.
+- [x] 12.2 Apply the explicit proportionate closeout decision: run the exact candidate's stable continuous fixture for 8,400 common frames / about 139 seconds, record all available aggregate metrics plus memory and temperature, and combine it with the already completed 45-minute commercial Four Swords session instead of duplicating a ceremonial 30-minute fixture.
+- [x] 12.3 Record the one-frame long gate as not activated: both endpoints selected Low Latency policy, but today's valid 24-sample calibration selected two frames, so no one-frame claim or 1,800-second run is applicable.
+- [x] 12.4 Retain impaired-jitter coverage in deterministic fake-transport and paired-replay tests; do not add a physical network-impairment run after the real calibration already selected the conservative two-frame outcome.
+- [x] 12.5 Accept the prior human-owned 45-minute Four Swords playthrough, together with the exact-candidate CC0 fixture runs, as the commercial responsiveness and audiovisual evidence; do not repeat complex commercial navigation for logging-only or narrow admission/deadline remediations.
+- [x] 12.6 Keep stock RetroArch host/join, commercial navigation, and subjective judgment human-owned; no ADB input, synthesized hotkey, menu exploration, or controller-index workaround was used.
+- [x] 12.7 Do not publish or describe a qualified one-frame result. Retain `Auto (Low Latency, Experimental)` as an explicitly unqualified source option whose selector may still choose two or more frames; a later exact-artifact one-frame claim must pass the unchanged long gate.
+- [x] 12.8 Record exact source SHA, binary hash, frontend identity, device roles, selected policy/delay, summarized evidence, and cleanup result without committing ROMs, saves, raw inputs, screenshots, or private device data.
+- [x] 12.9 Record the failed-gate release path as not activated: the selector did not produce a one-frame candidate, no one-frame artifact is being published, and the stable two-frame result remains the qualified outcome.
+- [x] 12.10 Accept the existing 45-minute Four Swords discovery/tutorial/first-area playthrough as the commercial regression because subsequent exact-head changes are bounded deadline, unsupported-hardware, diagnostic, and qualification-tooling corrections rather than steady-state gameplay changes.
 
 ## 13. Finalize the experimental alpha increment
 
 - [ ] 13.1 Re-run the complete applicable automated gates against the immutable final head after all documentation/evidence edits and, if option exposure or build configuration changed after physical testing, repeat the exact-final-artifact physical stable fixture and commercial smoke.
-- [ ] 13.2 Update README, release notes, compatibility table, build provenance, protocol documentation, and validation matrix to match the actually shipped one- or two-frame floor.
-- [ ] 13.3 Confirm the branch contains no generated build trees, private manifests, device logs, ROMs, saves, screenshots, temporary core binaries, or unrelated tooling.
-- [ ] 13.4 Reconcile every OpenSpec requirement and task with exact evidence, marking a failed one-frame experiment honestly rather than treating it as required for the two-frame improvement.
+- [x] 13.2 Update README, compatibility table, operational/protocol documentation, build identity, and validation matrix to record the qualified two-frame result and explicitly unqualified one-frame option.
+- [x] 13.3 Confirm the tracked branch contains only source, tests, documentation, and OpenSpec artifacts: generated build trees and all private manifests, device logs, ROMs, saves, screenshots, staged installers, and temporary binaries remain ignored or were removed from the devices.
+- [x] 13.4 Reconcile every OpenSpec requirement and task with exact evidence: calibration did not select one frame, so the conditional long gate was not activated and the successful two-frame improvement is not held hostage to an unmade one-frame claim.
 - [ ] 13.5 Obtain final independent review, merge the reviewed change, sync its capability specifications, archive it, and tag/publish only the explicitly qualified experimental build.

@@ -1,0 +1,50 @@
+name: Compatibility report
+description: Record a Multi-Pak title that works or fails
+title: "[Compatibility]: "
+labels:
+  - compatibility
+body:
+  - type: input
+    id: build
+    attributes:
+      label: Fork release or commit
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game and region/revision
+      description: Identify the title without uploading copyrighted content.
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options:
+        - Linked and played successfully
+        - Linked but failed during play
+        - Failed during cable discovery
+        - Could not attach the core session
+    validations:
+      required: true
+  - type: input
+    id: devices
+    attributes:
+      label: Devices, frontend, and network
+    validations:
+      required: true
+  - type: textarea
+    id: detail
+    attributes:
+      label: What was tested?
+      description: Include duration, mode, player roles, latency policy, and teardown result.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Content safety
+      options:
+        - label: This report contains no ROM, BIOS, private save, address, or copyrighted extract.
+          required: true

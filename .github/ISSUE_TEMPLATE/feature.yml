@@ -1,0 +1,34 @@
+name: Feature proposal
+description: Suggest a scoped improvement to the fork
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the user outcome, not only a preferred implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed direction
+    validations:
+      required: true
+  - type: textarea
+    id: tradeoffs
+    attributes:
+      label: Correctness, compatibility, and failure tradeoffs
+  - type: dropdown
+    id: horizon
+    attributes:
+      label: Roadmap horizon
+      options:
+        - Now
+        - Next
+        - Later / research
+        - Not sure
+    validations:
+      required: true

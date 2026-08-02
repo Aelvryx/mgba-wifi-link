@@ -7,7 +7,7 @@
 
 #include <mgba/core/core.h>
 #include <mgba/gba/core.h>
-#include <mgba/internal/gba/sio/netplay/identity.h>
+#include <mgba/internal/gba/sio/netplay/identity-v1.h>
 #include <mgba-util/sha1.h>
 #include <mgba-util/vfs.h>
 

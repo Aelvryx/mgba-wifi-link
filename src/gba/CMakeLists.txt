@@ -48,7 +48,8 @@ set(NETPLAY_FILES
 	sio/netplay/session.c
 	sio/netplay/session-v2.c
 	sio/netplay/timeline.c
-	sio/netplay/transport.c)
+	sio/netplay/transport.c
+	sio/netplay/types.c)
 
 set(LOCKSTEP_FILES
 	sio/lockstep.c)

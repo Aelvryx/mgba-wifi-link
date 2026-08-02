@@ -5,7 +5,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "util/test/suite.h"
 
-#include <mgba/internal/gba/sio/netplay/identity.h>
+#include <mgba/internal/gba/sio/netplay/identity-v1.h>
 #include <mgba/internal/gba/sio/netplay/session.h>
 #include <mgba/internal/gba/sio/netplay/timeline.h>
 #include <mgba/internal/gba/sio/netplay/transport.h>

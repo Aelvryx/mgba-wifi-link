@@ -8,7 +8,7 @@
 
 #include <mgba-util/common.h>
 
-#include <mgba/internal/gba/sio/netplay/identity.h>
+#include <mgba/internal/gba/sio/netplay/identity-v1.h>
 #include <mgba/internal/gba/sio/netplay/protocol.h>
 
 CXX_GUARD_START

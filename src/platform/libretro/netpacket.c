@@ -19,7 +19,7 @@
 #include <mgba/core/log.h>
 #include <mgba/internal/gba/gba.h>
 #include <mgba/internal/gba/sio/netplay/driver.h>
-#include <mgba/internal/gba/sio/netplay/identity.h>
+#include <mgba/internal/gba/sio/netplay/identity-v1.h>
 #include <mgba/internal/gba/sio/netplay/session.h>
 #include <mgba/internal/gba/sio/netplay/transport.h>
 #include <mgba-util/sha1.h>

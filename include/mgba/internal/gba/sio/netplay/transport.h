@@ -8,7 +8,7 @@
 
 #include <mgba-util/common.h>
 
-#include <mgba/internal/gba/sio/netplay/protocol.h>
+#include <mgba/internal/gba/sio/netplay/types.h>
 
 CXX_GUARD_START
 

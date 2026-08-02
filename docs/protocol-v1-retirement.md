@@ -25,6 +25,7 @@ gba-netplay-transport
 gba-replica
 gba-replicated-pair
 gba-sio
+libretro-replicated-pair-spike
 libretro-netpacket-v2
 libretro-netpacket-v2-replay
 ```

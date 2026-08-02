@@ -63,7 +63,7 @@
 ## 8. Review and land the removal
 
 - [x] 8.1 Organize the patch so neutral/v2 dependency extraction is reviewable separately from the mechanical v1 deletion and documentation updates.
-- [ ] 8.2 Obtain focused review of the removal boundary, migrated test ownership, static absence result, and claim that protocol-v2 behaviour and wire bytes are unchanged.
+- [x] 8.2 Obtain focused review of the removal boundary, migrated test ownership, static absence result, and claim that protocol-v2 behaviour and wire bytes are unchanged.
 - [x] 8.3 Open the implementation PR linked to GitHub issue #6 and record exact-head local validation plus the expected protected CI matrix.
-- [ ] 8.4 Require all protected GitHub checks to pass on the immutable reviewed head; no physical commercial rerun is required unless review finds a production v2 behaviour change.
-- [ ] 8.5 Sync the approved delta specifications, archive `remove-protocol-v1-runtime`, merge through protected `master`, close issue #6, and leave the workspace clean.
+- [x] 8.4 Require all protected GitHub checks to pass on the immutable reviewed head; no physical commercial rerun is required unless review finds a production v2 behaviour change.
+- [x] 8.5 Sync the approved delta specifications, archive `remove-protocol-v1-runtime`, merge through protected `master`, close issue #6, and leave the workspace clean.

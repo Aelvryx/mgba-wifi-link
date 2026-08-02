@@ -320,12 +320,12 @@ For the normal one-frame run, the denominator SHALL be every successfully releas
 - **THEN** automation does not inject host/join hotkeys or controller events and hands connection to the human
 
 ### Requirement: Latency policy is protocol-versioned
-Calibration message formats, selection policy, production-floor identity, and committed input delay SHALL be covered by the experimental runtime compatibility version. Older protocol-v2 peers SHALL fail during `HELLO`; there SHALL be no automatic downgrade or mixed delay policy.
+Calibration message formats, selection policy, production-floor identity, and committed input delay SHALL be covered by the experimental protocol-v2 runtime compatibility version. Peers with an older or incompatible protocol-v2 policy SHALL fail during `HELLO`; the shipped core SHALL provide no alternate GBA link runtime and SHALL NOT automatically downgrade or attach with a mixed delay policy.
 
 #### Scenario: Mixed latency policies reject
 - **WHEN** peers advertise different required calibration or selection-policy versions
 - **THEN** attachment fails before calibration or replica capture
 
-#### Scenario: Legacy diagnostic runtime is unchanged
-- **WHEN** protocol-v1 distributed-SIO diagnostic mode is selected explicitly
-- **THEN** it retains its existing wire and timing behavior and cannot attach to protocol v2
+#### Scenario: Retired protocol-v1 peer cannot attach
+- **WHEN** a peer advertises or sends the retired distributed-SIO protocol v1 during attachment to a current core
+- **THEN** protocol-v2 validation rejects the attachment before mutable state exchange and no fallback runtime is selected

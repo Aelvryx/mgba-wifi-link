@@ -5,7 +5,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "util/test/suite.h"
 
-#include "../libretro/replicated-pair-spike.h"
+#include "../libretro/replicated-pair-frontend.h"
 
 #include <mgba/core/core.h>
 #include <mgba/core/log.h>
@@ -28,7 +28,7 @@
 #define TEST_VIDEO_WIDTH 256
 #define TEST_VIDEO_HEIGHT 224
 
-struct PairSpikeFixture {
+struct PairFrontendFixture {
 	struct mCore* core;
 	struct VFile* save;
 	mColor* video;
@@ -47,7 +47,7 @@ static void _discardLog(
 }
 
 static int _setup(void** state) {
-	struct PairSpikeFixture* fixture =
+	struct PairFrontendFixture* fixture =
 	    calloc(1, sizeof(*fixture));
 	assert_non_null(fixture);
 	fixture->core = GBACoreCreate();
@@ -73,8 +73,8 @@ static int _setup(void** state) {
 }
 
 static int _teardown(void** state) {
-	struct PairSpikeFixture* fixture = *state;
-	mLibretroReplicatedPairSpikeStop();
+	struct PairFrontendFixture* fixture = *state;
+	mLibretroReplicatedPairFrontendStop();
 	mCoreConfigDeinit(&fixture->core->config);
 	fixture->core->deinit(fixture->core);
 	assert_true(fixture->save->close(fixture->save));
@@ -84,11 +84,11 @@ static int _teardown(void** state) {
 }
 
 M_TEST_DEFINE(runsOneFreshPairedFramePerCall) {
-	struct PairSpikeFixture* fixture = *state;
-	assert_true(mLibretroReplicatedPairSpikeStart(fixture->core));
-	assert_true(mLibretroReplicatedPairSpikeIsActive());
+	struct PairFrontendFixture* fixture = *state;
+	assert_true(mLibretroReplicatedPairFrontendStart(fixture->core));
+	assert_true(mLibretroReplicatedPairFrontendIsActive());
 	for (uint32_t frame = 1; frame <= 600; ++frame) {
-		assert_true(mLibretroReplicatedPairSpikeRunFrame(0));
+		assert_true(mLibretroReplicatedPairFrontendRunFrame(0));
 		assert_int_equal(
 		    fixture->core->frameCounter(fixture->core), frame);
 	}
@@ -111,18 +111,18 @@ M_TEST_DEFINE(runsOneFreshPairedFramePerCall) {
 	 * assertion to the former unpaced fixture's 619-transfer count.
 	 */
 	assert_in_range(transfers, MIN_EXPECTED_TRANSFERS, UINT32_MAX);
-	mLibretroReplicatedPairSpikeStop();
-	assert_false(mLibretroReplicatedPairSpikeIsActive());
+	mLibretroReplicatedPairFrontendStop();
+	assert_false(mLibretroReplicatedPairFrontendIsActive());
 	assert_null(((struct GBA*) fixture->core->board)->sio.driver);
 }
 
 M_TEST_DEFINE(rejectsUnsupportedCoreAndIsIdempotent) {
-	struct PairSpikeFixture* fixture = *state;
-	assert_false(mLibretroReplicatedPairSpikeStart(NULL));
-	assert_true(mLibretroReplicatedPairSpikeStart(fixture->core));
-	assert_true(mLibretroReplicatedPairSpikeStart(fixture->core));
-	mLibretroReplicatedPairSpikeStop();
-	mLibretroReplicatedPairSpikeStop();
+	struct PairFrontendFixture* fixture = *state;
+	assert_false(mLibretroReplicatedPairFrontendStart(NULL));
+	assert_true(mLibretroReplicatedPairFrontendStart(fixture->core));
+	assert_true(mLibretroReplicatedPairFrontendStart(fixture->core));
+	mLibretroReplicatedPairFrontendStop();
+	mLibretroReplicatedPairFrontendStop();
 }
 
 int main(void) {

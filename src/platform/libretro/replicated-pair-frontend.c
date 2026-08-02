@@ -3,7 +3,7 @@
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-#include "replicated-pair-spike.h"
+#include "replicated-pair-frontend.h"
 
 #include <mgba/core/core.h>
 #include <mgba/core/log.h>
@@ -15,14 +15,14 @@
 
 #include <time.h>
 
-#define PAIR_SPIKE_MAX_RUN_LOOPS 2000000
-#define PAIR_SPIKE_VIDEO_WIDTH 256
-#define PAIR_SPIKE_VIDEO_HEIGHT 224
+#define PAIR_FRONTEND_MAX_RUN_LOOPS 2000000
+#define PAIR_FRONTEND_VIDEO_WIDTH 256
+#define PAIR_FRONTEND_VIDEO_HEIGHT 224
 #define LINK_RESULT_ADDRESS 0x02000000
 #define LINK_RESULT_MAGIC 0x31544B4C
 #define LINK_RESULT_TRANSFERS_OFFSET 24
 
-struct PairSpikeUser {
+struct PairFrontendUser {
 	struct mLockstepUser d;
 	int requestedId;
 	bool asleep;
@@ -30,7 +30,7 @@ struct PairSpikeUser {
 	uint64_t wakes;
 };
 
-struct PairSpikeState {
+struct PairFrontendState {
 	bool active;
 	bool coordinatorInitialized;
 	bool shadowInitialized;
@@ -42,7 +42,7 @@ struct PairSpikeState {
 	mColor* shadowVideo;
 	struct GBASIOLockstepCoordinator coordinator;
 	struct GBASIOLockstepDriver drivers[2];
-	struct PairSpikeUser users[2];
+	struct PairFrontendUser users[2];
 	uint64_t runLoops;
 	uint64_t presentedFrames;
 	uint64_t startedAtNanoseconds;
@@ -50,22 +50,22 @@ struct PairSpikeState {
 	uint64_t maximumFrameNanoseconds;
 };
 
-static struct PairSpikeState _pair;
+static struct PairFrontendState _pair;
 
 static int _requestedId(struct mLockstepUser* user) {
-	return ((struct PairSpikeUser*) user)->requestedId;
+	return ((struct PairFrontendUser*) user)->requestedId;
 }
 
 static void _sleep(struct mLockstepUser* user) {
-	struct PairSpikeUser* pairUser =
-	    (struct PairSpikeUser*) user;
+	struct PairFrontendUser* pairUser =
+	    (struct PairFrontendUser*) user;
 	pairUser->asleep = true;
 	++pairUser->sleeps;
 }
 
 static void _wake(struct mLockstepUser* user) {
-	struct PairSpikeUser* pairUser =
-	    (struct PairSpikeUser*) user;
+	struct PairFrontendUser* pairUser =
+	    (struct PairFrontendUser*) user;
 	pairUser->asleep = false;
 	++pairUser->wakes;
 }
@@ -165,7 +165,7 @@ static bool _cloneEffectiveRom(
 }
 
 static void _createDriver(unsigned index, struct mCore* core) {
-	struct PairSpikeUser* user = &_pair.users[index];
+	struct PairFrontendUser* user = &_pair.users[index];
 	user->requestedId = (int) index;
 	user->d.requestedId = _requestedId;
 	user->d.sleep = _sleep;
@@ -242,7 +242,7 @@ static void _logSummary(void) {
 	    serialWordsPerSecondMilli);
 }
 
-bool mLibretroReplicatedPairSpikeStart(struct mCore* primary) {
+bool mLibretroReplicatedPairFrontendStart(struct mCore* primary) {
 	if (_pair.active) {
 		return _pair.primary == primary;
 	}
@@ -261,7 +261,7 @@ bool mLibretroReplicatedPairSpikeStart(struct mCore* primary) {
 	if (!_pair.shadow || !_pair.shadow->init(_pair.shadow)) {
 		mLOG(STATUS, ERROR,
 		     "replicated-pair diagnostic could not initialize shadow core");
-		mLibretroReplicatedPairSpikeStop();
+		mLibretroReplicatedPairFrontendStop();
 		return false;
 	}
 	_pair.shadowInitialized = true;
@@ -270,7 +270,7 @@ bool mLibretroReplicatedPairSpikeStart(struct mCore* primary) {
 	if (!_copyOptions(&_pair.shadow->opts, &primary->opts)) {
 		mLOG(STATUS, ERROR,
 		     "replicated-pair diagnostic could not clone core options");
-		mLibretroReplicatedPairSpikeStop();
+		mLibretroReplicatedPairFrontendStop();
 		return false;
 	}
 	mCoreLoadForeignConfig(_pair.shadow, &primary->config);
@@ -278,7 +278,7 @@ bool mLibretroReplicatedPairSpikeStart(struct mCore* primary) {
 	if (!_cloneEffectiveRom(primaryGba, romSize)) {
 		mLOG(STATUS, ERROR,
 		     "replicated-pair diagnostic could not clone effective ROM");
-		mLibretroReplicatedPairSpikeStop();
+		mLibretroReplicatedPairFrontendStop();
 		return false;
 	}
 	struct VFile* shadowRom = VFileFromMemory(
@@ -290,7 +290,7 @@ bool mLibretroReplicatedPairSpikeStart(struct mCore* primary) {
 		}
 		mLOG(STATUS, ERROR,
 		     "replicated-pair diagnostic could not load cloned ROM");
-		mLibretroReplicatedPairSpikeStop();
+		mLibretroReplicatedPairFrontendStop();
 		return false;
 	}
 	if (primaryGba->biosVf) {
@@ -303,7 +303,7 @@ bool mLibretroReplicatedPairSpikeStart(struct mCore* primary) {
 			}
 			mLOG(STATUS, ERROR,
 			     "replicated-pair diagnostic could not clone BIOS");
-			mLibretroReplicatedPairSpikeStop();
+			mLibretroReplicatedPairFrontendStop();
 			return false;
 		}
 	}
@@ -313,21 +313,21 @@ bool mLibretroReplicatedPairSpikeStart(struct mCore* primary) {
 	        _pair.shadow, _pair.shadowSave)) {
 		mLOG(STATUS, ERROR,
 		     "replicated-pair diagnostic could not create shadow save");
-		mLibretroReplicatedPairSpikeStop();
+		mLibretroReplicatedPairFrontendStop();
 		return false;
 	}
 	_pair.shadowVideo = malloc(
-	    PAIR_SPIKE_VIDEO_WIDTH * PAIR_SPIKE_VIDEO_HEIGHT *
+	    PAIR_FRONTEND_VIDEO_WIDTH * PAIR_FRONTEND_VIDEO_HEIGHT *
 	    sizeof(*_pair.shadowVideo));
 	if (!_pair.shadowVideo) {
 		mLOG(STATUS, ERROR,
 		     "replicated-pair diagnostic could not allocate shadow video");
-		mLibretroReplicatedPairSpikeStop();
+		mLibretroReplicatedPairFrontendStop();
 		return false;
 	}
 	_pair.shadow->setVideoBuffer(
 	    _pair.shadow, _pair.shadowVideo,
-	    PAIR_SPIKE_VIDEO_WIDTH);
+	    PAIR_FRONTEND_VIDEO_WIDTH);
 	_pair.shadow->setAudioBufferSize(
 	    _pair.shadow, primary->getAudioBufferSize(primary));
 	_pair.shadow->reset(_pair.shadow);
@@ -340,7 +340,7 @@ bool mLibretroReplicatedPairSpikeStart(struct mCore* primary) {
 	    _pair.drivers[1].d.deviceId(&_pair.drivers[1].d) != 1) {
 		mLOG(STATUS, ERROR,
 		     "replicated-pair diagnostic could not assign local players");
-		mLibretroReplicatedPairSpikeStop();
+		mLibretroReplicatedPairFrontendStop();
 		return false;
 	}
 	_pair.active = true;
@@ -351,7 +351,7 @@ bool mLibretroReplicatedPairSpikeStart(struct mCore* primary) {
 	return true;
 }
 
-bool mLibretroReplicatedPairSpikeRunFrame(uint16_t keys) {
+bool mLibretroReplicatedPairFrontendRunFrame(uint16_t keys) {
 	if (!_pair.active) {
 		return false;
 	}
@@ -377,7 +377,7 @@ bool mLibretroReplicatedPairSpikeRunFrame(uint16_t keys) {
 			++frameRunLoops;
 			ran = true;
 		}
-		if (!ran || frameRunLoops >= PAIR_SPIKE_MAX_RUN_LOOPS) {
+		if (!ran || frameRunLoops >= PAIR_FRONTEND_MAX_RUN_LOOPS) {
 			mLOG(
 			    STATUS, ERROR,
 			    "replicated-pair diagnostic stalled at frame %u/%u",
@@ -401,11 +401,11 @@ bool mLibretroReplicatedPairSpikeRunFrame(uint16_t keys) {
 	       _pair.shadow->frameCounter(_pair.shadow) == target1;
 }
 
-bool mLibretroReplicatedPairSpikeIsActive(void) {
+bool mLibretroReplicatedPairFrontendIsActive(void) {
 	return _pair.active;
 }
 
-void mLibretroReplicatedPairSpikeStop(void) {
+void mLibretroReplicatedPairFrontendStop(void) {
 	if (_pair.active) {
 		_logSummary();
 	}

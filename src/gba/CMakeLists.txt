@@ -73,7 +73,7 @@ set(TEST_FILES
 	test/netplay-transport.c
 	test/replica.c
 	test/replicated-pair.c
-	test/replicated-pair-spike.c
+	test/replicated-pair-scheduler.c
 	test/sio.c)
 
 source_group("GBA board" FILES ${SOURCE_FILES})

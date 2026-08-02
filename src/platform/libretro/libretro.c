@@ -27,7 +27,7 @@
 #include <mgba-util/vfs.h>
 
 #include "libretro_core_options.h"
-#include "netpacket-v2.h"
+#include "gba-wifi-link.h"
 
 #define GB_SAMPLES 512
 /* An alpha factor of 1/180 is *somewhat* equivalent
@@ -548,7 +548,7 @@ void retro_run(void) {
 	if (deferredSetup) {
 		_doDeferredSetup();
 	}
-	mLibretroNetpacketV2RunBegin();
+	mLibretroGBAWifiLinkRunBegin();
 	uint16_t keys;
 
 	inputPollCallback();
@@ -564,7 +564,7 @@ void retro_run(void) {
 		if (environCallback(
 		        RETRO_ENVIRONMENT_GET_VARIABLE, &latencyVar) &&
 		    latencyVar.value) {
-			mLibretroNetpacketV2RejectLatencyPolicyChange(
+			mLibretroGBAWifiLinkRejectLatencyPolicyChange(
 			    latencyVar.value);
 		}
 
@@ -573,7 +573,7 @@ void retro_run(void) {
 			.value = 0
 		};
 		if (environCallback(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value &&
-		    !mLibretroNetpacketV2RejectOperation(
+		    !mLibretroGBAWifiLinkRejectOperation(
 		        "Changing input-direction settings")) {
 			mCoreConfigSetIntValue(&core->config, "allowOpposingDirections", strcmp(var.value, "yes") == 0);
 			core->reloadConfigOption(core, "allowOpposingDirections", NULL);
@@ -604,7 +604,7 @@ void retro_run(void) {
 			keys |= (!!inputCallback(0, RETRO_DEVICE_JOYPAD, 0, keymap[i])) << i;
 		}
 	}
-	if (!mLibretroNetpacketV2OwnsExecution()) {
+	if (!mLibretroGBAWifiLinkOwnsExecution()) {
 		core->setKeys(core, keys);
 	}
 
@@ -630,16 +630,16 @@ void retro_run(void) {
 		}
 	}
 
-	if (mLibretroNetpacketV2OwnsExecution()) {
-		mLibretroNetpacketV2RunFrame(keys);
-	} else if (!mLibretroNetpacketV2ExecutionBlocked()) {
+	if (mLibretroGBAWifiLinkOwnsExecution()) {
+		mLibretroGBAWifiLinkRunFrame(keys);
+	} else if (!mLibretroGBAWifiLinkExecutionBlocked()) {
 		core->runFrame(core);
 	}
 	struct mCore* presentedCore =
-	    mLibretroNetpacketV2PresentedCore();
+	    mLibretroGBAWifiLinkPresentedCore();
 	bool replicatedPresentation = presentedCore != NULL;
 	mColor* presentedVideo =
-	    mLibretroNetpacketV2PresentedVideo();
+	    mLibretroGBAWifiLinkPresentedVideo();
 	if (!presentedCore) {
 		presentedCore = core;
 		presentedVideo = outputBuffer;
@@ -684,7 +684,7 @@ void retro_run(void) {
 		}
 	}
 	if (replicatedPresentation) {
-		mLibretroNetpacketV2ReportAudio(
+		mLibretroGBAWifiLinkReportAudio(
 		    replicatedAudioSamples);
 	}
 #endif
@@ -878,7 +878,7 @@ static void _setupMaps(struct mCore* core) {
 }
 
 void retro_reset(void) {
-	mLibretroNetpacketV2Reset();
+	mLibretroGBAWifiLinkReset();
 	core->reset(core);
 	mRumbleIntegratorReset(&rumble);
 	_setupMaps(core);
@@ -1034,7 +1034,7 @@ bool retro_load_game(const struct retro_game_info* game) {
 	core->reset(core);
 	_setupMaps(core);
 
-	mLibretroNetpacketV2Register(
+	mLibretroGBAWifiLinkRegister(
 	    environCallback, core, savedata,
 	    GBA_SIZE_FLASH1M);
 	gameLoaded = true;
@@ -1043,7 +1043,7 @@ bool retro_load_game(const struct retro_game_info* game) {
 
 void retro_unload_game(void) {
 	gameLoaded = false;
-	mLibretroNetpacketV2Unload();
+	mLibretroGBAWifiLinkUnload();
 	if (!core) {
 		return;
 	}
@@ -1056,7 +1056,7 @@ void retro_unload_game(void) {
 }
 
 size_t retro_serialize_size(void) {
-	if (mLibretroNetpacketV2SessionActive()) {
+	if (mLibretroGBAWifiLinkSessionActive()) {
 		return 0;
 	}
 	if (deferredSetup) {
@@ -1070,7 +1070,7 @@ size_t retro_serialize_size(void) {
 }
 
 bool retro_serialize(void* data, size_t size) {
-	if (mLibretroNetpacketV2RejectOperation("Saving state")) {
+	if (mLibretroGBAWifiLinkRejectOperation("Saving state")) {
 		return false;
 	}
 	if (deferredSetup) {
@@ -1091,7 +1091,7 @@ bool retro_serialize(void* data, size_t size) {
 }
 
 bool retro_unserialize(const void* data, size_t size) {
-	if (mLibretroNetpacketV2RejectOperation("Loading state")) {
+	if (mLibretroGBAWifiLinkRejectOperation("Loading state")) {
 		return false;
 	}
 	if (deferredSetup) {
@@ -1104,14 +1104,14 @@ bool retro_unserialize(const void* data, size_t size) {
 }
 
 void retro_cheat_reset(void) {
-	if (mLibretroNetpacketV2RejectOperation("Changing cheats")) {
+	if (mLibretroGBAWifiLinkRejectOperation("Changing cheats")) {
 		return;
 	}
 	mCheatDeviceClear(core->cheatDevice(core));
 }
 
 void retro_cheat_set(unsigned index, bool enabled, const char* code) {
-	if (mLibretroNetpacketV2RejectOperation("Changing cheats")) {
+	if (mLibretroGBAWifiLinkRejectOperation("Changing cheats")) {
 		return;
 	}
 	UNUSED(index);

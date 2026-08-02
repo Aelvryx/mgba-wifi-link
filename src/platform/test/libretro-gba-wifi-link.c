@@ -5,7 +5,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "util/test/suite.h"
 
-#include "../libretro/netpacket-v2.h"
+#include "../libretro/gba-wifi-link.h"
 
 #include <mgba/core/core.h>
 #include <mgba/core/log.h>
@@ -19,7 +19,7 @@
 
 #include "../../gba/test/netplay-legacy-wire-fixture.h"
 
-struct V2Frontend {
+struct GBAWifiLinkFrontend {
 	struct retro_netpacket_callback callbacks;
 	bool supported;
 	bool stopDuringPoll;
@@ -35,23 +35,23 @@ struct V2Frontend {
 	const char* solarLevel;
 };
 
-struct V2AdapterFixture {
-	struct V2Frontend frontend;
+struct GBAWifiLinkFixture {
+	struct GBAWifiLinkFrontend frontend;
 	struct mCore* core;
 	uint8_t rom[0x200];
 	uint8_t save[GBA_SIZE_FLASH1M];
 };
 
-enum V2TeardownAction {
-	V2_TEARDOWN_CLEAN,
-	V2_TEARDOWN_TIMEOUT,
-	V2_TEARDOWN_STOP,
-	V2_TEARDOWN_RESET,
-	V2_TEARDOWN_UNLOAD,
-	V2_TEARDOWN_LEGACY_PACKET,
+enum GBAWifiLinkTeardownAction {
+	GBA_WIFI_LINK_TEARDOWN_CLEAN,
+	GBA_WIFI_LINK_TEARDOWN_TIMEOUT,
+	GBA_WIFI_LINK_TEARDOWN_STOP,
+	GBA_WIFI_LINK_TEARDOWN_RESET,
+	GBA_WIFI_LINK_TEARDOWN_UNLOAD,
+	GBA_WIFI_LINK_TEARDOWN_LEGACY_PACKET,
 };
 
-static struct V2Frontend* _frontend;
+static struct GBAWifiLinkFrontend* _frontend;
 static struct mLogger _silentLogger;
 
 static void _discardLog(
@@ -64,13 +64,13 @@ static void _discardLog(
 	UNUSED(args);
 }
 
-M_TEST_SUITE_SETUP(LibretroNetpacketV2) {
+M_TEST_SUITE_SETUP(LibretroGBAWifiLink) {
 	_silentLogger.log = _discardLog;
 	mLogSetDefaultLogger(&_silentLogger);
 	return 0;
 }
 
-M_TEST_SUITE_TEARDOWN(LibretroNetpacketV2) {
+M_TEST_SUITE_TEARDOWN(LibretroGBAWifiLink) {
 	mLogSetDefaultLogger(NULL);
 	return 0;
 }
@@ -131,12 +131,17 @@ static void _makeRom(uint8_t* rom, size_t size) {
 	rom[1] = 0xFF;
 	rom[2] = 0xFF;
 	rom[3] = 0xEA;
-	memcpy(&rom[0xA0], "NETPACKETV2", 11);
-	memcpy(&rom[0xAC], "NPV2", 4);
+	memcpy(&rom[0xA0], "GBAWIFILINK", 11);
+	memcpy(&rom[0xAC], "GWFL", 4);
+}
+
+static enum mPlatform _nonGbaPlatform(const struct mCore* core) {
+	UNUSED(core);
+	return mPLATFORM_GB;
 }
 
 static int _setup(void** state) {
-	struct V2AdapterFixture* fixture =
+	struct GBAWifiLinkFixture* fixture =
 	    calloc(1, sizeof(*fixture));
 	assert_non_null(fixture);
 	fixture->frontend.supported = true;
@@ -153,14 +158,14 @@ static int _setup(void** state) {
 	    VFileFromConstMemory(
 	        fixture->rom, sizeof(fixture->rom))));
 	fixture->core->reset(fixture->core);
-	mLibretroNetpacketV2TestSetTimeMs(100);
+	mLibretroGBAWifiLinkTestSetTimeMs(100);
 	*state = fixture;
 	return 0;
 }
 
 static int _teardown(void** state) {
-	struct V2AdapterFixture* fixture = *state;
-	mLibretroNetpacketV2Unload();
+	struct GBAWifiLinkFixture* fixture = *state;
+	mLibretroGBAWifiLinkUnload();
 	mCoreConfigDeinit(&fixture->core->config);
 	fixture->core->deinit(fixture->core);
 	free(fixture);
@@ -169,30 +174,65 @@ static int _teardown(void** state) {
 }
 
 M_TEST_DEFINE(registersExactReplicatedProtocol) {
-	struct V2AdapterFixture* fixture = *state;
-	assert_true(mLibretroNetpacketV2Register(
+	struct GBAWifiLinkFixture* fixture = *state;
+	assert_true(mLibretroGBAWifiLinkRegister(
 	    _environment, fixture->core, fixture->save,
 	    sizeof(fixture->save)));
 	assert_int_equal(fixture->frontend.registrations, 1);
 	assert_string_equal(
 	    fixture->frontend.callbacks.protocol_version,
 	    GBA_LINK_V2_PROTOCOL_NAME);
-	assert_false(mLibretroNetpacketV2OwnsExecution());
-	assert_null(mLibretroNetpacketV2PresentedCore());
-	assert_int_equal(mLibretroNetpacketV2TestPlayerForRole(
+	assert_false(mLibretroGBAWifiLinkOwnsExecution());
+	assert_null(mLibretroGBAWifiLinkPresentedCore());
+	assert_int_equal(mLibretroGBAWifiLinkTestPlayerForRole(
 	    GBA_LINK_ROLE_HOST), 0);
-	assert_int_equal(mLibretroNetpacketV2TestPlayerForRole(
+	assert_int_equal(mLibretroGBAWifiLinkTestPlayerForRole(
 	    GBA_LINK_ROLE_CLIENT), 1);
 }
 
+M_TEST_DEFINE(optionalFrontendOwnershipFailsOpen) {
+	struct GBAWifiLinkFixture* fixture = *state;
+	fixture->frontend.supported = false;
+	assert_false(mLibretroGBAWifiLinkRegister(
+	    _environment, fixture->core, fixture->save,
+	    sizeof(fixture->save)));
+	assert_false(mLibretroGBAWifiLinkSessionActive());
+	assert_false(mLibretroGBAWifiLinkOwnsExecution());
+	assert_false(mLibretroGBAWifiLinkExecutionBlocked());
+	assert_false(mLibretroGBAWifiLinkRunFrame(0));
+	assert_null(mLibretroGBAWifiLinkPresentedCore());
+
+	fixture->frontend.supported = true;
+	assert_true(mLibretroGBAWifiLinkRegister(
+	    _environment, fixture->core, fixture->save,
+	    sizeof(fixture->save)));
+	assert_false(mLibretroGBAWifiLinkSessionActive());
+	assert_false(mLibretroGBAWifiLinkOwnsExecution());
+	assert_false(mLibretroGBAWifiLinkExecutionBlocked());
+	assert_false(mLibretroGBAWifiLinkRunFrame(0));
+	assert_null(mLibretroGBAWifiLinkPresentedCore());
+}
+
+M_TEST_DEFINE(nonGbaCoreCannotRegisterOrOwnExecution) {
+	struct GBAWifiLinkFixture* fixture = *state;
+	fixture->core->platform = _nonGbaPlatform;
+	assert_false(mLibretroGBAWifiLinkRegister(
+	    _environment, fixture->core, fixture->save,
+	    sizeof(fixture->save)));
+	assert_int_equal(fixture->frontend.registrations, 0);
+	assert_false(mLibretroGBAWifiLinkSessionActive());
+	assert_false(mLibretroGBAWifiLinkOwnsExecution());
+	assert_false(mLibretroGBAWifiLinkExecutionBlocked());
+}
+
 M_TEST_DEFINE(clientStartsWithReliableFlushedV2Hello) {
-	struct V2AdapterFixture* fixture = *state;
-	assert_true(mLibretroNetpacketV2Register(
+	struct GBAWifiLinkFixture* fixture = *state;
+	assert_true(mLibretroGBAWifiLinkRegister(
 	    _environment, fixture->core, fixture->save,
 	    sizeof(fixture->save)));
 	fixture->frontend.callbacks.start(
 	    1, _send, _pollReceive);
-	assert_true(mLibretroNetpacketV2SessionActive());
+	assert_true(mLibretroGBAWifiLinkSessionActive());
 	assert_int_equal(fixture->frontend.sends, 1);
 	assert_int_equal(fixture->frontend.lastTarget, 0);
 	assert_true(
@@ -226,14 +266,14 @@ M_TEST_DEFINE(clientStartsWithReliableFlushedV2Hello) {
 }
 
 M_TEST_DEFINE(effectiveLoadedPolicyAndHardwareShapeHello) {
-	struct V2AdapterFixture* fixture = *state;
+	struct GBAWifiLinkFixture* fixture = *state;
 	struct GBA* gba = fixture->core->board;
 	gba->idleOptimization = IDLE_LOOP_DETECT;
 	gba->allowOpposingDirections = true;
 	gba->memory.hw.devices = HW_LIGHT_SENSOR | HW_RUMBLE;
 	fixture->frontend.latencyPolicy = "low_latency";
 	fixture->frontend.solarLevel = "5";
-	assert_true(mLibretroNetpacketV2Register(
+	assert_true(mLibretroGBAWifiLinkRegister(
 	    _environment, fixture->core, fixture->save,
 	    sizeof(fixture->save)));
 	fixture->frontend.callbacks.start(1, _send, _pollReceive);
@@ -271,23 +311,23 @@ M_TEST_DEFINE(effectiveLoadedPolicyAndHardwareShapeHello) {
 	    &expectedInput, &expected));
 	assert_true(GBALinkV2DeterminismProfilesCompatible(
 	    &packet.payload.hello.profile, &expected, NULL));
-	assert_false(mLibretroNetpacketV2RejectLatencyPolicyChange(
+	assert_false(mLibretroGBAWifiLinkRejectLatencyPolicyChange(
 	    "low_latency"));
-	assert_true(mLibretroNetpacketV2RejectLatencyPolicyChange(
+	assert_true(mLibretroGBAWifiLinkRejectLatencyPolicyChange(
 	    "stable"));
 }
 
 M_TEST_DEFINE(eReaderFailsBeforeHelloWhileRumbleOnlyProceeds) {
-	struct V2AdapterFixture* fixture = *state;
+	struct GBAWifiLinkFixture* fixture = *state;
 	struct GBA* gba = fixture->core->board;
 	gba->memory.hw.devices = HW_RUMBLE;
-	assert_true(mLibretroNetpacketV2Register(
+	assert_true(mLibretroGBAWifiLinkRegister(
 	    _environment, fixture->core, fixture->save,
 	    sizeof(fixture->save)));
 	fixture->frontend.callbacks.start(1, _send, _pollReceive);
-	assert_true(mLibretroNetpacketV2SessionActive());
+	assert_true(mLibretroGBAWifiLinkSessionActive());
 	assert_int_equal(fixture->frontend.sends, 1);
-	mLibretroNetpacketV2Unload();
+	mLibretroGBAWifiLinkUnload();
 
 	const uint32_t hardware[] = {
 		HW_EREADER,
@@ -297,20 +337,20 @@ M_TEST_DEFINE(eReaderFailsBeforeHelloWhileRumbleOnlyProceeds) {
 		fixture->frontend.sends = 0;
 		fixture->frontend.messages = 0;
 		gba->memory.hw.devices = hardware[i];
-		assert_true(mLibretroNetpacketV2Register(
+		assert_true(mLibretroGBAWifiLinkRegister(
 		    _environment, fixture->core, fixture->save,
 		    sizeof(fixture->save)));
 		fixture->frontend.callbacks.start(1, _send, _pollReceive);
-		assert_false(mLibretroNetpacketV2SessionActive());
+		assert_false(mLibretroGBAWifiLinkSessionActive());
 		assert_int_equal(fixture->frontend.sends, 0);
 		assert_true(fixture->frontend.messages > 0);
-		mLibretroNetpacketV2Unload();
+		mLibretroGBAWifiLinkUnload();
 	}
 }
 
 M_TEST_DEFINE(hostAdmissionBoundsProvisionalTraffic) {
-	struct V2AdapterFixture* fixture = *state;
-	assert_true(mLibretroNetpacketV2Register(
+	struct GBAWifiLinkFixture* fixture = *state;
+	assert_true(mLibretroGBAWifiLinkRegister(
 	    _environment, fixture->core, fixture->save,
 	    sizeof(fixture->save)));
 	fixture->frontend.callbacks.start(
@@ -319,31 +359,31 @@ M_TEST_DEFINE(hostAdmissionBoundsProvisionalTraffic) {
 	fixture->frontend.callbacks.receive(
 	    provisional, sizeof(provisional), 1);
 	assert_int_equal(
-	    mLibretroNetpacketV2TestPendingPacketCount(), 1);
+	    mLibretroGBAWifiLinkTestPendingPacketCount(), 1);
 	assert_true(fixture->frontend.callbacks.connected(1));
-	assert_true(mLibretroNetpacketV2SessionActive());
+	assert_true(mLibretroGBAWifiLinkSessionActive());
 	assert_int_equal(fixture->frontend.sends, 0);
 	assert_false(fixture->frontend.callbacks.connected(2));
-	mLibretroNetpacketV2RunBegin();
+	mLibretroGBAWifiLinkRunBegin();
 	assert_int_equal(fixture->frontend.sends, 1);
 	assert_int_equal(fixture->frontend.lastTarget, 1);
-	assert_false(mLibretroNetpacketV2SessionActive());
+	assert_false(mLibretroGBAWifiLinkSessionActive());
 	assert_int_equal(
-	    mLibretroNetpacketV2TestPendingPacketCount(), 0);
+	    mLibretroGBAWifiLinkTestPendingPacketCount(), 0);
 }
 
 M_TEST_DEFINE(hostHelloWaitsUntilConnectedCallbackReturns) {
-	struct V2AdapterFixture* fixture = *state;
-	assert_true(mLibretroNetpacketV2Register(
+	struct GBAWifiLinkFixture* fixture = *state;
+	assert_true(mLibretroGBAWifiLinkRegister(
 	    _environment, fixture->core, fixture->save,
 	    sizeof(fixture->save)));
 	fixture->frontend.callbacks.start(
 	    0, _send, _pollReceive);
 	assert_true(fixture->frontend.callbacks.connected(1));
-	assert_true(mLibretroNetpacketV2SessionActive());
+	assert_true(mLibretroGBAWifiLinkSessionActive());
 	assert_int_equal(fixture->frontend.sends, 0);
 
-	mLibretroNetpacketV2RunBegin();
+	mLibretroGBAWifiLinkRunBegin();
 	assert_int_equal(fixture->frontend.sends, 1);
 	assert_int_equal(fixture->frontend.lastTarget, 1);
 	struct GBALinkV2Packet packet;
@@ -357,29 +397,29 @@ M_TEST_DEFINE(hostHelloWaitsUntilConnectedCallbackReturns) {
 }
 
 M_TEST_DEFINE(missingPollingAndSynchronousStopFailClosed) {
-	struct V2AdapterFixture* fixture = *state;
-	assert_true(mLibretroNetpacketV2Register(
+	struct GBAWifiLinkFixture* fixture = *state;
+	assert_true(mLibretroGBAWifiLinkRegister(
 	    _environment, fixture->core, fixture->save,
 	    sizeof(fixture->save)));
 	fixture->frontend.callbacks.start(1, _send, NULL);
-	assert_false(mLibretroNetpacketV2SessionActive());
+	assert_false(mLibretroGBAWifiLinkSessionActive());
 	assert_true(fixture->frontend.messages);
 
 	fixture->frontend.callbacks.start(
 	    1, _send, _pollReceive);
 	uint64_t generation =
-	    mLibretroNetpacketV2TestCallbackGeneration();
+	    mLibretroGBAWifiLinkTestCallbackGeneration();
 	fixture->frontend.stopDuringPoll = true;
-	assert_false(mLibretroNetpacketV2TestPollReceive());
+	assert_false(mLibretroGBAWifiLinkTestPollReceive());
 	assert_int_equal(fixture->frontend.polls, 1);
 	assert_true(
-	    mLibretroNetpacketV2TestCallbackGeneration() != generation);
-	mLibretroNetpacketV2RunBegin();
-	assert_false(mLibretroNetpacketV2SessionActive());
+	    mLibretroGBAWifiLinkTestCallbackGeneration() != generation);
+	mLibretroGBAWifiLinkRunBegin();
+	assert_false(mLibretroGBAWifiLinkSessionActive());
 }
 
 static struct mCore* _secondCore(
-		struct V2AdapterFixture* fixture) {
+		struct GBAWifiLinkFixture* fixture) {
 	struct mCore* core = GBACoreCreate();
 	assert_non_null(core);
 	assert_true(core->init(core));
@@ -391,10 +431,10 @@ static struct mCore* _secondCore(
 }
 
 static void _teardownPairAction(
-		struct V2AdapterFixture* fixture, enum GBALinkRole role,
-		enum V2TeardownAction action) {
+		struct GBAWifiLinkFixture* fixture, enum GBALinkRole role,
+		enum GBAWifiLinkTeardownAction action) {
 	memset(fixture->save, 0xFF, sizeof(fixture->save));
-	assert_true(mLibretroNetpacketV2Register(
+	assert_true(mLibretroGBAWifiLinkRegister(
 	    _environment, fixture->core, fixture->save,
 	    sizeof(fixture->save)));
 	struct mCore* second = _secondCore(fixture);
@@ -425,13 +465,13 @@ static void _teardownPairAction(
 		payloads[player].data = bundles[player].encodedData;
 		payloads[player].size = bundles[player].encodedSize;
 	}
-	assert_true(mLibretroNetpacketV2TestInstallPair(
+	assert_true(mLibretroGBAWifiLinkTestInstallPair(
 	    manifests, payloads, role, 77));
 	uint8_t localPlayer = role == GBA_LINK_ROLE_HOST ? 0 : 1;
 	uint8_t shadowPlayer = localPlayer ^ 1;
-	struct GBA* local = mLibretroNetpacketV2TestPairCore(
+	struct GBA* local = mLibretroGBAWifiLinkTestPairCore(
 	    localPlayer)->board;
-	struct GBA* shadow = mLibretroNetpacketV2TestPairCore(
+	struct GBA* shadow = mLibretroGBAWifiLinkTestPairCore(
 	    shadowPlayer)->board;
 	GBASavedataForceType(
 	    &local->memory.savedata, GBA_SAVEDATA_SRAM);
@@ -444,25 +484,25 @@ static void _teardownPairAction(
 	    role == GBA_LINK_ROLE_HOST ? 0xA0 : 0xB1);
 
 	switch (action) {
-	case V2_TEARDOWN_CLEAN:
-		mLibretroNetpacketV2TestFail(
+	case GBA_WIFI_LINK_TEARDOWN_CLEAN:
+		mLibretroGBAWifiLinkTestFail(
 		    GBA_LINK_V2_REASON_USER_DISCONNECT);
 		break;
-	case V2_TEARDOWN_TIMEOUT:
-		mLibretroNetpacketV2TestFail(
+	case GBA_WIFI_LINK_TEARDOWN_TIMEOUT:
+		mLibretroGBAWifiLinkTestFail(
 		    GBA_LINK_V2_REASON_INPUT_TIMEOUT);
 		break;
-	case V2_TEARDOWN_STOP:
+	case GBA_WIFI_LINK_TEARDOWN_STOP:
 		fixture->frontend.callbacks.stop();
 		break;
-	case V2_TEARDOWN_RESET:
-		mLibretroNetpacketV2Reset();
+	case GBA_WIFI_LINK_TEARDOWN_RESET:
+		mLibretroGBAWifiLinkReset();
 		break;
-	case V2_TEARDOWN_UNLOAD:
-		mLibretroNetpacketV2Unload();
+	case GBA_WIFI_LINK_TEARDOWN_UNLOAD:
+		mLibretroGBAWifiLinkUnload();
 		break;
-	case V2_TEARDOWN_LEGACY_PACKET:
-		assert_false(mLibretroNetpacketV2TestInjectInbound(
+	case GBA_WIFI_LINK_TEARDOWN_LEGACY_PACKET:
+		assert_false(mLibretroGBAWifiLinkTestInjectInbound(
 		    GBALinkTestLegacyV1Header,
 		    sizeof(GBALinkTestLegacyV1Header)));
 		break;
@@ -481,8 +521,10 @@ static void _teardownPairAction(
 		    original->memory.io[GBA_REG(SIOMULTI0) + i],
 		    0x4400 + i);
 	}
-	assert_null(mLibretroNetpacketV2TestPairCore(0));
-	assert_null(mLibretroNetpacketV2TestPairCore(1));
+	assert_null(mLibretroGBAWifiLinkTestPairCore(0));
+	assert_null(mLibretroGBAWifiLinkTestPairCore(1));
+	assert_false(mLibretroGBAWifiLinkOwnsExecution());
+	assert_false(mLibretroGBAWifiLinkExecutionBlocked());
 
 	for (unsigned player = 0; player < 2; ++player) {
 		GBAReplicaBundleDeinit(&bundles[player]);
@@ -492,28 +534,28 @@ static void _teardownPairAction(
 }
 
 M_TEST_DEFINE(failureBeforeVerificationRestoresAttachmentSave) {
-	struct V2AdapterFixture* fixture = *state;
+	struct GBAWifiLinkFixture* fixture = *state;
 	for (enum GBALinkRole role = GBA_LINK_ROLE_HOST;
 	     role <= GBA_LINK_ROLE_CLIENT; ++role) {
-		for (enum V2TeardownAction action = V2_TEARDOWN_CLEAN;
-		     action <= V2_TEARDOWN_UNLOAD; ++action) {
+		for (enum GBAWifiLinkTeardownAction action = GBA_WIFI_LINK_TEARDOWN_CLEAN;
+		     action <= GBA_WIFI_LINK_TEARDOWN_UNLOAD; ++action) {
 			_teardownPairAction(fixture, role, action);
-			mLibretroNetpacketV2Unload();
+			mLibretroGBAWifiLinkUnload();
 		}
 	}
 }
 
 M_TEST_DEFINE(legacyV1HeaderAfterReadinessRestoresAttachmentCheckpoint) {
-	struct V2AdapterFixture* fixture = *state;
+	struct GBAWifiLinkFixture* fixture = *state;
 	_teardownPairAction(
 	    fixture, GBA_LINK_ROLE_HOST,
-	    V2_TEARDOWN_LEGACY_PACKET);
+	    GBA_WIFI_LINK_TEARDOWN_LEGACY_PACKET);
 }
 
 M_TEST_DEFINE(verifiedRollbackRestoresStateAndSaveAtomically) {
-	struct V2AdapterFixture* fixture = *state;
+	struct GBAWifiLinkFixture* fixture = *state;
 	memset(fixture->save, 0x31, sizeof(fixture->save));
-	assert_true(mLibretroNetpacketV2Register(
+	assert_true(mLibretroGBAWifiLinkRegister(
 	    _environment, fixture->core, fixture->save,
 	    sizeof(fixture->save)));
 	struct mCore* second = _secondCore(fixture);
@@ -533,9 +575,9 @@ M_TEST_DEFINE(verifiedRollbackRestoresStateAndSaveAtomically) {
 		payloads[player].data = bundles[player].encodedData;
 		payloads[player].size = bundles[player].encodedSize;
 	}
-	assert_true(mLibretroNetpacketV2TestInstallPair(
+	assert_true(mLibretroGBAWifiLinkTestInstallPair(
 	    manifests, payloads, GBA_LINK_ROLE_HOST, 77));
-	struct GBA* local = mLibretroNetpacketV2TestPairCore(0)->board;
+	struct GBA* local = mLibretroGBAWifiLinkTestPairCore(0)->board;
 	GBASavedataForceType(
 	    &local->memory.savedata, GBA_SAVEDATA_SRAM);
 	local->cpu->gprs[0] = 0x12345678;
@@ -543,13 +585,13 @@ M_TEST_DEFINE(verifiedRollbackRestoresStateAndSaveAtomically) {
 	local->memory.savedata.command = 0x55;
 	fixture->save[23] = 0xA5;
 	fixture->save[sizeof(fixture->save) - 1] = 0xC3;
-	assert_true(mLibretroNetpacketV2TestCaptureCheckpoint(60));
+	assert_true(mLibretroGBAWifiLinkTestCaptureCheckpoint(60));
 
 	local->cpu->gprs[0] = 0x22222222;
 	local->memory.wram[17] = 0xB5;
 	fixture->save[23] = 0xB6;
-	mLibretroNetpacketV2TestFailNextCheckpointAllocation();
-	assert_false(mLibretroNetpacketV2TestCaptureCheckpoint(120));
+	mLibretroGBAWifiLinkTestFailNextCheckpointAllocation();
+	assert_false(mLibretroGBAWifiLinkTestCaptureCheckpoint(120));
 
 	local->cpu->gprs[0] = 0xDEADBEEF;
 	local->memory.wram[17] = 0x19;
@@ -557,7 +599,7 @@ M_TEST_DEFINE(verifiedRollbackRestoresStateAndSaveAtomically) {
 	fixture->save[sizeof(fixture->save) - 1] = 0x7D;
 	GBASavedataForceType(
 	    &local->memory.savedata, GBA_SAVEDATA_FLASH1M);
-	mLibretroNetpacketV2TestFail(GBA_LINK_V2_REASON_DIVERGENCE);
+	mLibretroGBAWifiLinkTestFail(GBA_LINK_V2_REASON_DIVERGENCE);
 
 	struct GBA* restored = fixture->core->board;
 	assert_int_equal(restored->cpu->gprs[0], 0x12345678);
@@ -568,8 +610,8 @@ M_TEST_DEFINE(verifiedRollbackRestoresStateAndSaveAtomically) {
 	assert_int_equal(fixture->save[23], 0xA5);
 	assert_int_equal(
 	    fixture->save[sizeof(fixture->save) - 1], 0xC3);
-	assert_null(mLibretroNetpacketV2TestPairCore(0));
-	assert_null(mLibretroNetpacketV2TestPairCore(1));
+	assert_null(mLibretroGBAWifiLinkTestPairCore(0));
+	assert_null(mLibretroGBAWifiLinkTestPairCore(1));
 
 	for (unsigned player = 0; player < 2; ++player) {
 		GBAReplicaBundleDeinit(&bundles[player]);
@@ -578,9 +620,13 @@ M_TEST_DEFINE(verifiedRollbackRestoresStateAndSaveAtomically) {
 	second->deinit(second);
 }
 
-M_TEST_SUITE_DEFINE_SETUP_TEARDOWN(LibretroNetpacketV2,
+M_TEST_SUITE_DEFINE_SETUP_TEARDOWN(LibretroGBAWifiLink,
 	cmocka_unit_test_setup_teardown(
 	    registersExactReplicatedProtocol, _setup, _teardown),
+	cmocka_unit_test_setup_teardown(
+	    optionalFrontendOwnershipFailsOpen, _setup, _teardown),
+	cmocka_unit_test_setup_teardown(
+	    nonGbaCoreCannotRegisterOrOwnExecution, _setup, _teardown),
 	cmocka_unit_test_setup_teardown(
 	    clientStartsWithReliableFlushedV2Hello, _setup, _teardown),
 	cmocka_unit_test_setup_teardown(

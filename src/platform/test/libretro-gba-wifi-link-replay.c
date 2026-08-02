@@ -6,7 +6,7 @@
 #include "util/test/suite.h"
 
 #include "../libretro/libretro.h"
-#include "../libretro/netpacket-v2.h"
+#include "../libretro/gba-wifi-link.h"
 
 #include <mgba/core/core.h>
 #include <mgba/core/log.h>
@@ -40,10 +40,10 @@
 	void PREFIX##TestSetTimeMs(uint64_t nowMs); \
 	struct mCore* PREFIX##TestPairCore(uint8_t player); \
 	bool PREFIX##TestGetMetrics( \
-	    struct mLibretroNetpacketV2TestMetrics* metrics)
+	    struct mLibretroGBAWifiLinkTestMetrics* metrics)
 
-DECLARE_REPLAY_ADAPTER(mLibretroNetpacketV2ReplayHost);
-DECLARE_REPLAY_ADAPTER(mLibretroNetpacketV2ReplayClient);
+DECLARE_REPLAY_ADAPTER(mLibretroGBAWifiLinkReplayHost);
+DECLARE_REPLAY_ADAPTER(mLibretroGBAWifiLinkReplayClient);
 
 enum ReplayEndpointId {
 	REPLAY_HOST,
@@ -109,13 +109,13 @@ static void _discardLog(
 	UNUSED(args);
 }
 
-M_TEST_SUITE_SETUP(LibretroNetpacketV2Replay) {
+M_TEST_SUITE_SETUP(LibretroGBAWifiLinkReplay) {
 	_silentLogger.log = _discardLog;
 	mLogSetDefaultLogger(&_silentLogger);
 	return 0;
 }
 
-M_TEST_SUITE_TEARDOWN(LibretroNetpacketV2Replay) {
+M_TEST_SUITE_TEARDOWN(LibretroGBAWifiLinkReplay) {
 	mLogSetDefaultLogger(NULL);
 	return 0;
 }
@@ -160,9 +160,9 @@ static bool RETRO_CALLCONV _clientEnvironment(
 static void _setEndpointTime(
 		enum ReplayEndpointId endpoint, uint64_t now) {
 	if (endpoint == REPLAY_HOST) {
-		mLibretroNetpacketV2ReplayHostTestSetTimeMs(now);
+		mLibretroGBAWifiLinkReplayHostTestSetTimeMs(now);
 	} else {
-		mLibretroNetpacketV2ReplayClientTestSetTimeMs(now);
+		mLibretroGBAWifiLinkReplayClientTestSetTimeMs(now);
 	}
 }
 
@@ -357,14 +357,14 @@ static int _setupFixture(void** state, bool rtcSafe) {
 		    fixture->cores[endpoint], VFileFromMemory(
 		        fixture->saves[endpoint], GBA_SIZE_FLASH1M)));
 	}
-	assert_true(mLibretroNetpacketV2ReplayHostRegister(
+	assert_true(mLibretroGBAWifiLinkReplayHostRegister(
 	    _hostEnvironment, fixture->cores[REPLAY_HOST],
 	    fixture->saves[REPLAY_HOST], GBA_SIZE_FLASH1M));
-	assert_true(mLibretroNetpacketV2ReplayClientRegister(
+	assert_true(mLibretroGBAWifiLinkReplayClientRegister(
 	    _clientEnvironment, fixture->cores[REPLAY_CLIENT],
 	    fixture->saves[REPLAY_CLIENT], GBA_SIZE_FLASH1M));
-	mLibretroNetpacketV2ReplayHostTestSetTimeMs(0);
-	mLibretroNetpacketV2ReplayClientTestSetTimeMs(0);
+	mLibretroGBAWifiLinkReplayHostTestSetTimeMs(0);
+	mLibretroGBAWifiLinkReplayClientTestSetTimeMs(0);
 	assert_non_null(fixture->frontends[REPLAY_HOST].callbacks);
 	assert_non_null(fixture->frontends[REPLAY_CLIENT].callbacks);
 	assert_string_equal(
@@ -387,8 +387,8 @@ static int _setupRtc(void** state) {
 
 static int _teardown(void** state) {
 	struct ReplayFixture* fixture = *state;
-	mLibretroNetpacketV2ReplayClientUnload();
-	mLibretroNetpacketV2ReplayHostUnload();
+	mLibretroGBAWifiLinkReplayClientUnload();
+	mLibretroGBAWifiLinkReplayHostUnload();
 	MutexLock(&fixture->network.mutex);
 	_clearWire(&fixture->network);
 	MutexUnlock(&fixture->network.mutex);
@@ -416,8 +416,8 @@ static void _beginFrontendSession(void) {
 }
 
 static bool _bothReady(void) {
-	return mLibretroNetpacketV2ReplayHostOwnsExecution() &&
-	       mLibretroNetpacketV2ReplayClientOwnsExecution();
+	return mLibretroGBAWifiLinkReplayHostOwnsExecution() &&
+	       mLibretroGBAWifiLinkReplayClientOwnsExecution();
 }
 
 static void _pumpAttachment(unsigned limit) {
@@ -425,8 +425,8 @@ static void _pumpAttachment(unsigned limit) {
 	     iteration < limit && !_bothReady(); ++iteration) {
 		_hostPoll();
 		_clientPoll();
-		mLibretroNetpacketV2ReplayHostRunBegin();
-		mLibretroNetpacketV2ReplayClientRunBegin();
+		mLibretroGBAWifiLinkReplayHostRunBegin();
+		mLibretroGBAWifiLinkReplayClientRunBegin();
 	}
 }
 
@@ -441,7 +441,7 @@ static void _attach(void) {
 
 static THREAD_ENTRY _hostFrame(void* context) {
 	struct ReplayFrameCall* call = context;
-	call->result = mLibretroNetpacketV2ReplayHostRunFrame(
+	call->result = mLibretroGBAWifiLinkReplayHostRunFrame(
 	    call->keys);
 	THREAD_EXIT(NULL);
 }
@@ -450,7 +450,7 @@ static bool _runPairedFrame(uint16_t hostKeys, uint16_t clientKeys) {
 	struct ReplayFrameCall host = { .keys = hostKeys };
 	Thread thread;
 	assert_int_equal(ThreadCreate(&thread, _hostFrame, &host), 0);
-	bool client = mLibretroNetpacketV2ReplayClientRunFrame(clientKeys);
+	bool client = mLibretroGBAWifiLinkReplayClientRunFrame(clientKeys);
 	assert_int_equal(ThreadJoin(&thread), 0);
 	return host.result && client;
 }
@@ -468,9 +468,9 @@ static void _setDrop(
 static void _assertReplicasMatch(void) {
 	for (unsigned player = 0; player < 2; ++player) {
 		struct mCore* host =
-		    mLibretroNetpacketV2ReplayHostTestPairCore(player);
+		    mLibretroGBAWifiLinkReplayHostTestPairCore(player);
 		struct mCore* client =
-		    mLibretroNetpacketV2ReplayClientTestPairCore(player);
+		    mLibretroGBAWifiLinkReplayClientTestPairCore(player);
 		assert_non_null(host);
 		assert_non_null(client);
 		assert_int_equal(host->frameCounter(host),
@@ -482,10 +482,10 @@ static void _assertReplicasMatch(void) {
 }
 
 static void _assertCableWorkRemainsLocal(void) {
-	struct mLibretroNetpacketV2TestMetrics hostMetrics;
-	struct mLibretroNetpacketV2TestMetrics clientMetrics;
-	assert_true(mLibretroNetpacketV2ReplayHostTestGetMetrics(&hostMetrics));
-	assert_true(mLibretroNetpacketV2ReplayClientTestGetMetrics(&clientMetrics));
+	struct mLibretroGBAWifiLinkTestMetrics hostMetrics;
+	struct mLibretroGBAWifiLinkTestMetrics clientMetrics;
+	assert_true(mLibretroGBAWifiLinkReplayHostTestGetMetrics(&hostMetrics));
+	assert_true(mLibretroGBAWifiLinkReplayClientTestGetMetrics(&clientMetrics));
 	assert_true(hostMetrics.cableTransferStarts > 0);
 	assert_int_equal(hostMetrics.cableTransferStarts,
 	    clientMetrics.cableTransferStarts);
@@ -507,11 +507,11 @@ M_TEST_DEFINE(realAdaptersReplayLatencyJitterInputsAndStateChecks) {
 	UNUSED(state);
 	_attach();
 	assert_ptr_equal(
-	    mLibretroNetpacketV2ReplayHostPresentedCore(),
-	    mLibretroNetpacketV2ReplayHostTestPairCore(0));
+	    mLibretroGBAWifiLinkReplayHostPresentedCore(),
+	    mLibretroGBAWifiLinkReplayHostTestPairCore(0));
 	assert_ptr_equal(
-	    mLibretroNetpacketV2ReplayClientPresentedCore(),
-	    mLibretroNetpacketV2ReplayClientTestPairCore(1));
+	    mLibretroGBAWifiLinkReplayClientPresentedCore(),
+	    mLibretroGBAWifiLinkReplayClientTestPairCore(1));
 	for (unsigned frame = 0; frame < 125; ++frame) {
 		assert_true(_runPairedFrame(
 		    frame & 1 ? 1 : 0, frame & 2 ? 2 : 0));
@@ -521,10 +521,10 @@ M_TEST_DEFINE(realAdaptersReplayLatencyJitterInputsAndStateChecks) {
 	_assertCableWorkRemainsLocal();
 	assert_int_equal(_fixture->network.typeCounts[
 	    GBA_LINK_V2_MESSAGE_STATE_CHECK], 4);
-	struct mLibretroNetpacketV2TestMetrics hostMetrics;
-	struct mLibretroNetpacketV2TestMetrics clientMetrics;
-	assert_true(mLibretroNetpacketV2ReplayHostTestGetMetrics(&hostMetrics));
-	assert_true(mLibretroNetpacketV2ReplayClientTestGetMetrics(&clientMetrics));
+	struct mLibretroGBAWifiLinkTestMetrics hostMetrics;
+	struct mLibretroGBAWifiLinkTestMetrics clientMetrics;
+	assert_true(mLibretroGBAWifiLinkReplayHostTestGetMetrics(&hostMetrics));
+	assert_true(mLibretroGBAWifiLinkReplayClientTestGetMetrics(&clientMetrics));
 	assert_int_equal(hostMetrics.productPolicy,
 	    GBA_LINK_V2_PRODUCT_STABLE);
 	assert_int_equal(clientMetrics.productPolicy,
@@ -561,10 +561,10 @@ M_TEST_DEFINE(lowLatencyPolicyRunsExactOneFrameMapping) {
 	}
 	_assertReplicasMatch();
 	_assertCableWorkRemainsLocal();
-	struct mLibretroNetpacketV2TestMetrics hostMetrics;
-	struct mLibretroNetpacketV2TestMetrics clientMetrics;
-	assert_true(mLibretroNetpacketV2ReplayHostTestGetMetrics(&hostMetrics));
-	assert_true(mLibretroNetpacketV2ReplayClientTestGetMetrics(&clientMetrics));
+	struct mLibretroGBAWifiLinkTestMetrics hostMetrics;
+	struct mLibretroGBAWifiLinkTestMetrics clientMetrics;
+	assert_true(mLibretroGBAWifiLinkReplayHostTestGetMetrics(&hostMetrics));
+	assert_true(mLibretroGBAWifiLinkReplayClientTestGetMetrics(&clientMetrics));
 	assert_int_equal(hostMetrics.productPolicy,
 	    GBA_LINK_V2_PRODUCT_LOW_LATENCY);
 	assert_int_equal(clientMetrics.productPolicy,
@@ -590,10 +590,10 @@ M_TEST_DEFINE(calibratedHigherDelayPreservesContinuousFixtureTrace) {
 	}
 	_assertReplicasMatch();
 	_assertCableWorkRemainsLocal();
-	struct mLibretroNetpacketV2TestMetrics hostMetrics;
-	struct mLibretroNetpacketV2TestMetrics clientMetrics;
-	assert_true(mLibretroNetpacketV2ReplayHostTestGetMetrics(&hostMetrics));
-	assert_true(mLibretroNetpacketV2ReplayClientTestGetMetrics(&clientMetrics));
+	struct mLibretroGBAWifiLinkTestMetrics hostMetrics;
+	struct mLibretroGBAWifiLinkTestMetrics clientMetrics;
+	assert_true(mLibretroGBAWifiLinkReplayHostTestGetMetrics(&hostMetrics));
+	assert_true(mLibretroGBAWifiLinkReplayClientTestGetMetrics(&clientMetrics));
 	assert_true(hostMetrics.selectedDelay > GBA_LINK_INPUT_STABLE_FLOOR);
 	assert_int_equal(hostMetrics.selectedDelay, clientMetrics.selectedDelay);
 	assert_int_equal(hostMetrics.releasedFrames, 125);
@@ -606,11 +606,11 @@ M_TEST_DEFINE(inputAndStateCheckLossFailClosedAtRuntimeBoundaries) {
 	_attach();
 	_setDrop(REPLAY_HOST, GBA_LINK_V2_MESSAGE_INPUT_BATCH, 1);
 	assert_false(_runPairedFrame(1, 2));
-	assert_false(mLibretroNetpacketV2ReplayClientOwnsExecution());
+	assert_false(mLibretroGBAWifiLinkReplayClientOwnsExecution());
 
 	/* Recreate the complete adapter pair for the verification boundary. */
-	mLibretroNetpacketV2ReplayClientUnload();
-	mLibretroNetpacketV2ReplayHostUnload();
+	mLibretroGBAWifiLinkReplayClientUnload();
+	mLibretroGBAWifiLinkReplayHostUnload();
 	_teardown(state);
 	assert_int_equal(_setup(state), 0);
 	_attach();
@@ -620,7 +620,7 @@ M_TEST_DEFINE(inputAndStateCheckLossFailClosedAtRuntimeBoundaries) {
 	_setDrop(REPLAY_HOST, GBA_LINK_V2_MESSAGE_STATE_CHECK, 1);
 	assert_true(_runPairedFrame(0, 0));
 	assert_false(_runPairedFrame(0, 0));
-	assert_false(mLibretroNetpacketV2ReplayClientOwnsExecution());
+	assert_false(mLibretroGBAWifiLinkReplayClientOwnsExecution());
 }
 
 M_TEST_DEFINE(rtcSourcesNormalizePerPlayerAndRestoreOriginalSemantics) {
@@ -636,13 +636,13 @@ M_TEST_DEFINE(rtcSourcesNormalizePerPlayerAndRestoreOriginalSemantics) {
 
 	_attach();
 	struct mCore* hostP0 =
-	    mLibretroNetpacketV2ReplayHostTestPairCore(0);
+	    mLibretroGBAWifiLinkReplayHostTestPairCore(0);
 	struct mCore* clientP0 =
-	    mLibretroNetpacketV2ReplayClientTestPairCore(0);
+	    mLibretroGBAWifiLinkReplayClientTestPairCore(0);
 	struct mCore* hostP1 =
-	    mLibretroNetpacketV2ReplayHostTestPairCore(1);
+	    mLibretroGBAWifiLinkReplayHostTestPairCore(1);
 	struct mCore* clientP1 =
-	    mLibretroNetpacketV2ReplayClientTestPairCore(1);
+	    mLibretroGBAWifiLinkReplayClientTestPairCore(1);
 	assert_int_equal(hostP0->rtc.override, RTC_FAKE_EPOCH);
 	assert_int_equal(clientP0->rtc.override, RTC_FAKE_EPOCH);
 	assert_int_equal(hostP0->rtc.value, clientP0->rtc.value);
@@ -663,10 +663,10 @@ M_TEST_DEFINE(rtcSourcesNormalizePerPlayerAndRestoreOriginalSemantics) {
 	assert_true(hostP0->rtc.d.unixTime(&hostP0->rtc.d) >= firstP0 + 3);
 	_fixture->frontends[REPLAY_CLIENT].callbacks->disconnected(0);
 	_fixture->frontends[REPLAY_HOST].callbacks->disconnected(1);
-	mLibretroNetpacketV2ReplayHostRunBegin();
-	mLibretroNetpacketV2ReplayClientRunBegin();
-	assert_false(mLibretroNetpacketV2ReplayHostOwnsExecution());
-	assert_false(mLibretroNetpacketV2ReplayClientOwnsExecution());
+	mLibretroGBAWifiLinkReplayHostRunBegin();
+	mLibretroGBAWifiLinkReplayClientRunBegin();
+	assert_false(mLibretroGBAWifiLinkReplayHostOwnsExecution());
+	assert_false(mLibretroGBAWifiLinkReplayClientOwnsExecution());
 	assert_int_equal(
 	    _fixture->cores[REPLAY_HOST]->rtc.override, RTC_NO_OVERRIDE);
 	assert_int_equal(_fixture->cores[REPLAY_HOST]->rtc.value, 111);
@@ -714,8 +714,8 @@ M_TEST_DEFINE(attachmentLossFailsClosedAtEveryWireBoundary) {
 }
 
 static void _assertStopped(void) {
-	assert_false(mLibretroNetpacketV2ReplayHostOwnsExecution());
-	assert_false(mLibretroNetpacketV2ReplayClientOwnsExecution());
+	assert_false(mLibretroGBAWifiLinkReplayHostOwnsExecution());
+	assert_false(mLibretroGBAWifiLinkReplayClientOwnsExecution());
 }
 
 M_TEST_DEFINE(detachStopResetAndUnloadReleaseBothAdapters) {
@@ -724,8 +724,8 @@ M_TEST_DEFINE(detachStopResetAndUnloadReleaseBothAdapters) {
 	assert_true(_runPairedFrame(0, 0));
 	_fixture->frontends[REPLAY_CLIENT].callbacks->disconnected(0);
 	_fixture->frontends[REPLAY_HOST].callbacks->disconnected(1);
-	mLibretroNetpacketV2ReplayHostRunBegin();
-	mLibretroNetpacketV2ReplayClientRunBegin();
+	mLibretroGBAWifiLinkReplayHostRunBegin();
+	mLibretroGBAWifiLinkReplayClientRunBegin();
 	_assertStopped();
 
 	_teardown(state);
@@ -738,19 +738,19 @@ M_TEST_DEFINE(detachStopResetAndUnloadReleaseBothAdapters) {
 	_teardown(state);
 	assert_int_equal(_setup(state), 0);
 	_attach();
-	mLibretroNetpacketV2ReplayHostReset();
-	mLibretroNetpacketV2ReplayClientReset();
+	mLibretroGBAWifiLinkReplayHostReset();
+	mLibretroGBAWifiLinkReplayClientReset();
 	_assertStopped();
 
 	_teardown(state);
 	assert_int_equal(_setup(state), 0);
 	_attach();
-	mLibretroNetpacketV2ReplayHostUnload();
-	mLibretroNetpacketV2ReplayClientUnload();
+	mLibretroGBAWifiLinkReplayHostUnload();
+	mLibretroGBAWifiLinkReplayClientUnload();
 	_assertStopped();
 }
 
-M_TEST_SUITE_DEFINE_SETUP_TEARDOWN(LibretroNetpacketV2Replay,
+M_TEST_SUITE_DEFINE_SETUP_TEARDOWN(LibretroGBAWifiLinkReplay,
 	cmocka_unit_test_setup_teardown(
 	    realAdaptersReplayLatencyJitterInputsAndStateChecks,
 	    _setup, _teardown),

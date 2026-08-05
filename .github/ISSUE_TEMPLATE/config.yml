@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/mgba-emu/mgba/issues
     about: Use upstream for emulator defects that reproduce without this fork's network runtime.
   - name: Installation and troubleshooting
-    url: https://github.com/Aelvryx/mgba/blob/master/docs/wifi-link-netplay.md
+    url: https://github.com/Aelvryx/mgba-wifi-link/blob/master/docs/gba-wifi-link.md
     about: Check the current setup and failure guidance before filing.

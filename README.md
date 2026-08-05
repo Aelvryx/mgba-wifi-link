@@ -72,10 +72,11 @@ frontend controller mappings.
 uses a minimum two-frame input buffer. **Auto (Low Latency, Experimental)** may
 permit one frame, but the measured path may still select two or more.
 
-The current Thor/Odin mesh-Wi-Fi qualification selected two frames under both
-policies. One-frame operation will not become the default until the same build
-passes the documented long-run gate on both endpoints. A direct 5 GHz hotspot
-comparison is tracked in the roadmap.
+The Thor/Odin mesh-Wi-Fi qualification selected two frames under both policies.
+A subsequent direct 5 GHz Android-hotspot run selected one frame and preserved
+correct execution, but its rare input waits exceeded the bilateral publication
+limits. Stable therefore remains the default; Low Latency remains an honest
+opt-in experiment rather than a universal promise.
 
 ## Saves and states
 
@@ -138,9 +139,8 @@ The immediate engineering priorities are:
 
 1. Validate and package the integrated GBA Wi-Fi Link runtime as a clean
    release.
-2. Test direct-hotspot latency and decide whether one-frame buffering can
-   become the default.
-3. Expand compatibility reporting and diagnostic capture.
+2. Expand compatibility reporting and diagnostic capture.
+3. Produce a one-command sanitized diagnostic bundle.
 
 Four-player Multi-Pak and Linux handheld support follow. Rollback/prediction,
 Single-Pak, and RFU are later research, not promises. See [ROADMAP.md](ROADMAP.md)

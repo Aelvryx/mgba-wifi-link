@@ -261,16 +261,23 @@ def _effective_config(path: Path) -> dict[str, str]:
     except OSError as error:
         _fail(f"cannot read configuration {path}: {error}")
     values: dict[str, str] = {}
-    for line in lines:
+    key_lines: dict[str, int] = {}
+    for line_number, line in enumerate(lines, start=1):
         stripped = line.strip()
         if not stripped or stripped.startswith("#") or "=" not in stripped:
             continue
         key, value = stripped.split("=", 1)
         key = key.strip()
+        if key in values:
+            _fail(
+                f"configuration {path} repeats key {key!r} "
+                f"at lines {key_lines[key]} and {line_number}"
+            )
         value = value.strip()
         if len(value) >= 2 and value[0] == value[-1] == '"':
             value = value[1:-1]
         values[key] = value
+        key_lines[key] = line_number
     return values
 
 

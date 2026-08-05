@@ -201,7 +201,6 @@ class QualificationHelperTest(unittest.TestCase):
     def config_text(self) -> str:
         return "\n".join(
             [
-                'input_overlay_enable = "false"',
                 'input_overlay_enable = "true"',
                 'input_player1_joypad_index = "0"',
                 'input_netplay_host_toggle = "nul"',
@@ -419,7 +418,7 @@ class QualificationHelperTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("EXPECTED_RELEASE_COMMIT", result.stderr)
 
-    def test_effective_final_config_value_is_enforced(self) -> None:
+    def test_duplicate_qualification_config_key_is_rejected(self) -> None:
         thor_config = self.run_root / "device-snapshots/thor-qualification.cfg"
         with thor_config.open("a", encoding="utf-8") as output:
             output.write('savefile_directory = "/normal/saves"\n')
@@ -428,18 +427,34 @@ class QualificationHelperTest(unittest.TestCase):
         (self.run_root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         result = self.run_helper("preflight")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("effective config value savefile_directory", result.stderr)
+        self.assertIn("repeats key 'savefile_directory'", result.stderr)
 
     def test_run_specific_core_options_must_be_enabled(self) -> None:
         thor_config = self.run_root / "device-snapshots/thor-qualification.cfg"
-        with thor_config.open("a", encoding="utf-8") as output:
-            output.write('global_core_options = "false"\n')
+        thor_config.write_text(
+            thor_config.read_text(encoding="utf-8").replace(
+                'global_core_options = "true"',
+                'global_core_options = "false"',
+            ),
+            encoding="utf-8",
+        )
         manifest = json.loads((self.run_root / "manifest.json").read_text(encoding="utf-8"))
         manifest["devices"][0]["configuration_sha256"] = self.sha(thor_config)
         (self.run_root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         result = self.run_helper("preflight")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("effective config value global_core_options", result.stderr)
+
+    def test_duplicate_latency_option_is_rejected(self) -> None:
+        thor_options = self.run_root / "device-snapshots/thor-mgba-qualification.opt"
+        with thor_options.open("a", encoding="utf-8") as output:
+            output.write('mgba_link_netplay_latency = "stable"\n')
+        manifest = json.loads((self.run_root / "manifest.json").read_text(encoding="utf-8"))
+        manifest["devices"][0]["core_options_sha256"] = self.sha(thor_options)
+        (self.run_root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        result = self.run_helper("preflight")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("repeats key 'mgba_link_netplay_latency'", result.stderr)
 
     def test_manifest_cannot_attest_a_different_loaded_core(self) -> None:
         manifest_path = self.run_root / "manifest.json"

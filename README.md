@@ -1,7 +1,7 @@
 # mGBA Wi-Fi Link
 
-[![GBA Wi-Fi Link](https://github.com/Aelvryx/mgba/actions/workflows/gba-wifi-link-ci.yml/badge.svg)](https://github.com/Aelvryx/mgba/actions/workflows/gba-wifi-link-ci.yml)
-[![Latest prerelease](https://img.shields.io/github/v/release/Aelvryx/mgba?include_prereleases&label=prerelease)](https://github.com/Aelvryx/mgba/releases)
+[![GBA Wi-Fi Link](https://github.com/Aelvryx/mgba-wifi-link/actions/workflows/gba-wifi-link-ci.yml/badge.svg)](https://github.com/Aelvryx/mgba-wifi-link/actions/workflows/gba-wifi-link-ci.yml)
+[![Latest prerelease](https://img.shields.io/github/v/release/Aelvryx/mgba-wifi-link?include_prereleases&label=prerelease)](https://github.com/Aelvryx/mgba-wifi-link/releases)
 [![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
 
 An experimental [mGBA](https://github.com/mgba-emu/mgba) fork for two-player
@@ -10,7 +10,7 @@ libretro core in stock RetroArch and uses RetroArch's Netpacket transport—no
 RetroArch fork and no direct socket configuration required.
 
 The current Android ARM64 prerelease is
-[GBA Wi-Fi Link v0.2.0 alpha](https://github.com/Aelvryx/mgba/releases/tag/v0.2.0).
+[GBA Wi-Fi Link v0.2.0 alpha](https://github.com/Aelvryx/mgba-wifi-link/releases/tag/v0.2.0).
 
 This repository is an independent experimental fork. It is not an official
 mGBA release and is not supported by the upstream mGBA project.
@@ -45,7 +45,7 @@ still experimental and untested games remain untested.
 
 ## Install the Android core
 
-1. Download the newest Android ARM64 core from [Releases](https://github.com/Aelvryx/mgba/releases).
+1. Download the newest Android ARM64 core from [Releases](https://github.com/Aelvryx/mgba-wifi-link/releases).
 2. Put the `.so` file in Android's Downloads folder.
 3. In RetroArch, choose **Load Core → Install or Restore a Core** and select it.
 4. Repeat on the second device using the identical core file.

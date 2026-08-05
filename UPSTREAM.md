@@ -7,7 +7,7 @@
 - Pinned upstream commit: `71aa6c7dab7654bfdbbd57e696f704671a97e55d`
 - Pinned commit date: `2026-07-30T23:01:50-07:00`
 - Pinned commit subject: `Qt: Remove unneeded Qt Multimedia-only include`
-- Fork repository: `https://github.com/Aelvryx/mgba.git`
+- Fork repository: `https://github.com/Aelvryx/mgba-wifi-link.git`
 - Protected integration branch: `master`
 
 The repository was initialized directly from mGBA Git history. The

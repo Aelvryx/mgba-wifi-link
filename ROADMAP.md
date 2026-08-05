@@ -1,9 +1,167 @@
 # Roadmap
 
-This roadmap keeps the project pointed in a useful direction without pretending
-that experimental emulator work has predictable dates. GitHub issues carry
-actionable work; OpenSpec is used only when a change needs a behavioural or
-architectural contract.
+GBA Wi-Fi Link exists to make multiplayer on real handhelds feel like a local
+GBA cable session while using stock RetroArch and remaining a reviewable mGBA
+fork. This roadmap describes product outcomes and the evidence that unlocks
+them. It is directional rather than date-driven.
+
+GitHub issues carry bounded work. OpenSpec is used when a change needs a new
+behavioural or architectural contract. Compatibility reports remain a
+continuous evidence stream rather than an arbitrary release quota.
+
+## North star
+
+The long-term product is a dependable, understandable way to play GBA
+multiplayer across modern handhelds without game-specific hacks, commercial
+content, a private frontend fork, or network latency on every emulated cable
+word.
+
+Every expansion must preserve four things:
+
+1. Generic hardware behaviour rather than title detection.
+2. Deterministic corresponding replicas and authoritative player input.
+3. Local save ownership with transactional failure recovery.
+4. Evidence that is automated wherever practical and proportionate where a
+   human must play the game.
+
+## Current product: v0.2.0 usable alpha
+
+| Dimension | Current position |
+| --- | --- |
+| Players | Two physical devices, one authoritative player each |
+| Cartridge model | Identical-ROM Multi-Pak |
+| Cable model | GBA `MULTI` mode through a replicated local P0/P1 pair |
+| Frontend | Stock RetroArch Netpacket |
+| Published platform | Android ARM64/API 21+ |
+| Network | Trusted local LAN or direct Android hotspot |
+| Latency | Calibrated fixed delay; qualified Stable policy has a two-frame floor |
+| Persistence | Local authoritative saves; verified state/save rollback on uncertain teardown |
+| Qualified games | Mario Kart: Super Circuit and Zelda: Four Swords; Advance Wars user playtest |
+
+The current product deliberately does not promise universal Multi-Pak
+compatibility, Single-Pak, four players, Wireless Adapter/RFU, reconnection,
+internet relay, or live-session savestates.
+
+## Direction
+
+```text
+v0.2.0: working public alpha
+          |
+          v
+v0.2.1: supportable alpha
+  diagnostics + release automation + upstream refresh + parser fuzzing
+          |
+          v
+portable and resilient operation
+  resource budgets + Android lifecycle + H700 feasibility
+          |
+          v
+evidence-backed capability choice
+  Four Player Multi-Pak  OR  Single-Pak multiboot
+          |
+          v
+broader GBA multiplayer
+  extra cable modes + sensors + RFU + resilience + latency research
+```
+
+The arrows are dependency and confidence gates, not promises that every item
+must wait for all earlier work. Research can proceed in parallel when it is
+bounded and does not pre-authorize production behaviour.
+
+## Now: v0.2.1 supportable alpha
+
+The next release should make the working alpha easier to distribute,
+diagnose, maintain, and update. It intentionally adds no new emulation mode.
+
+### Committed outcomes
+
+1. [One-command sanitized diagnostic bundle (#20)](https://github.com/Aelvryx/mgba-wifi-link/issues/20)
+   captures actionable bilateral evidence without ROM, BIOS, save, address,
+   path, or input-history disclosure.
+2. [Automated release artifacts and provenance (#21)](https://github.com/Aelvryx/mgba-wifi-link/issues/21)
+   turn an approved tag into a repeatable Android bundle with verified identity
+   and checksums while retaining an explicit publication decision.
+3. [Current upstream mGBA refresh (#22)](https://github.com/Aelvryx/mgba-wifi-link/issues/22)
+   rebases the patch stack onto a reviewed pin and proves that the product and
+   versioned compatibility contract survive.
+4. [Network-controlled decoder fuzzing (#23)](https://github.com/Aelvryx/mgba-wifi-link/issues/23)
+   covers packet, profile, calibration, replica-manifest, and copied-transport
+   boundaries under sanitizers.
+
+[Compatibility evidence (#8)](https://github.com/Aelvryx/mgba-wifi-link/issues/8)
+continues alongside this milestone. A confirmed success or failure improves
+the matrix, but v0.2.1 is not held hostage to an arbitrary number of commercial
+playthroughs.
+
+### Exit gate
+
+v0.2.1 is ready when issues #20–#23 are complete, the protected automated
+suite is green on the release candidate, the published bundle is reproducible
+and correctly identified, and any physical smoke is proportionate to actual
+runtime changes. Documentation-only or tooling-only work does not manufacture
+a need for another long commercial playtest.
+
+## Next: portable and resilient operation
+
+This horizon establishes whether the current architecture can travel beyond
+the already-qualified Android devices and remain well-behaved when mobile
+platforms interrupt it.
+
+1. [Establish resource budgets (#25)](https://github.com/Aelvryx/mgba-wifi-link/issues/25)
+   for CPU, memory, frame time, audio, temperature, verification, and replica
+   cost. These budgets are decision inputs, not retrospective pass marks.
+2. [Qualify H700 Linux handhelds (#11)](https://github.com/Aelvryx/mgba-wifi-link/issues/11)
+   only if their frontend exposes the required Netpacket API and their measured
+   resource envelope is credible. A documented infeasibility result is valid.
+3. [Harden Android lifecycle teardown (#24)](https://github.com/Aelvryx/mgba-wifi-link/issues/24)
+   across backgrounding, sleep, frontend stop, and network changes without
+   silently expanding into transparent reconnection.
+
+This horizon earns a release milestone only after the first measurements show
+which outcomes belong together. We will not promise a platform before proving
+its frontend and hardware can support the product.
+
+## Discovery: choose the next multiplayer capability
+
+Two valuable expansions are known, but implementing both together would mix
+two different architectures and weaken reviewability.
+
+| Candidate | User value | Must prove before implementation |
+| --- | --- | --- |
+| [Four Player Multi-Pak (#10)](https://github.com/Aelvryx/mgba-wifi-link/issues/10) | Recreates the full cable player count for supported titles | Frontend peer topology, authoritative input ownership, four-replica CPU/memory/thermal cost, save ownership, verification, and partial-disconnect semantics |
+| [Single-Pak multiboot (#26)](https://github.com/Aelvryx/mgba-wifi-link/issues/26) | Opens games whose multiplayer client is downloaded from one cartridge | BIOS/multiboot accuracy, asymmetric content and boot identity, WRAM client state, persistence, retry/failure behaviour, and a redistributable fixture |
+
+Each investigation ends with a bounded feasibility report, rough size,
+dependency map, regression strategy, and explicit proceed/defer recommendation.
+Only the selected capability receives an OpenSpec implementation proposal and
+release commitment. Novelty alone does not select it; user reach, feasibility,
+resource headroom, and ability to test it generically do.
+
+## Later: broaden the GBA link ecosystem
+
+These are legitimate directions, not commitments. They remain here until a
+concrete need and a credible first increment exist.
+
+### Cable and cartridge fidelity
+
+- Synchronize tilt, gyro, solar/luminance, and other cartridge-owned inputs
+  instead of rejecting affected cartridges.
+- Characterize NORMAL8/NORMAL32 and cross-ROM cable sessions before relaxing
+  exact-ROM equality.
+- Treat Wireless Adapter/RFU as a distinct peripheral and multiplayer protocol,
+  not another cable mode.
+- Keep GB/GBC link outside the present GBA product boundary unless it receives
+  its own architecture.
+
+### Latency and resilience
+
+- Prediction or rollback may reduce perceived latency, but it must define
+  presentation, audio, save, verification, and failure semantics together.
+- Reconnection, host migration, and live-session savestates require a complete
+  transferable session model rather than merely retaining a socket.
+- Internet relay or NAT traversal requires a hostile-peer threat model and
+  should reuse frontend transport facilities rather than adding silent direct
+  sockets.
 
 ## Product principles
 
@@ -11,144 +169,74 @@ architectural contract.
 2. Keep network latency out of individual emulated cable transactions.
 3. Fail closed when inputs or deterministic policy cannot be synchronized.
 4. Preserve local save ownership and transactional rollback.
-5. Measure real devices, but let evidence serve the product rather than turn
-   qualification into ceremony.
-6. Keep human input for complex navigation and gameplay; automate everything
-   mechanical and repeatable.
-7. Prefer a smaller dependable product over many half-supported modes.
+5. Keep human input for complex navigation and gameplay; automate mechanical
+   building, replay, monitoring, evidence capture, and analysis.
+6. Let validation serve product decisions rather than become ceremony.
+7. Keep the fork close enough to upstream mGBA that its patch stack remains
+   reviewable and refreshable.
+8. Prefer one finished capability over several half-supported modes.
 
-## Lightweight WSJF
+## Prioritization
 
-Priorities use a deliberately rough Weighted Shortest Job First calculation:
+WSJF is a lightweight tie-breaker inside a horizon, not the product strategy.
+Continuous evidence, prerequisite research, and implementation work are not
+directly interchangeable merely because they can all be assigned numbers.
 
 ```text
-WSJF = (user/release value + time criticality + risk reduction/opportunity) / job size
+WSJF = (user/release value + urgency + risk reduction/opportunity) / job size
 ```
 
-Each input uses relative buckets `1, 2, 3, 5, 8, 13, 21`, with scores rounded
-half up to one decimal place. A higher score means
-“consider sooner,” not “promise a date.” Scores are estimates, and dependencies
-override the arithmetic: a release cannot precede the cleanup or decision that
-defines what it contains. We should rescore when evidence changes, not after
-every completed task.
+Relative estimates use `1, 2, 3, 5, 8, 13, 21` and are reconsidered only when
+new evidence changes value, dependency, or size.
 
-| Rank | Outcome | Value | Urgency | Risk / enablement | Size | WSJF | Horizon |
-| ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| — | [Remove shipped cable-sync v1](https://github.com/Aelvryx/mgba-wifi-link/issues/6) | 5 | 8 | 8 | 3 | **7.0** | **Completed in PR #14** |
-| — | [Publish the GBA Wi-Fi Link alpha](https://github.com/Aelvryx/mgba-wifi-link/issues/7) | 8 | 8 | 5 | 3 | **7.0** | **Completed in v0.2.0** |
-| — | [Test hotspot latency and decide the default](https://github.com/Aelvryx/mgba-wifi-link/issues/9) | 5 | 5 | 8 | 3 | **6.0** | **Completed; retain Stable default** |
-| 1 | [Grow the compatibility matrix](https://github.com/Aelvryx/mgba-wifi-link/issues/8) | 5 | 5 | 5 | 3 | **5.0** | Now / continuous |
-| 2 | Produce a one-command sanitized diagnostic bundle | 5 | 3 | 8 | 5 | **3.2** | Next |
-| 3 | Automate reviewed release artifacts and provenance | 5 | 3 | 8 | 5 | **3.2** | Next |
-| 4 | Fuzz packet, profile, and replica-bundle decoding | 3 | 3 | 8 | 5 | **2.8** | Next |
-| 5 | [Qualify H700 Linux handhelds](https://github.com/Aelvryx/mgba-wifi-link/issues/11) | 5 | 3 | 5 | 5 | **2.6** | Next |
-| 6 | Establish CPU, memory, audio, and thermal budgets | 5 | 3 | 5 | 5 | **2.6** | Next |
-| 7 | Harden Android suspend, resume, and network-change teardown | 5 | 3 | 5 | 8 | **1.6** | Next |
-| 8 | [Design four-player Multi-Pak](https://github.com/Aelvryx/mgba-wifi-link/issues/10) | 8 | 3 | 8 | 13 | **1.5** | Next / research |
-| 9 | Synchronize cartridge sensors | 3 | 2 | 5 | 8 | **1.3** | Later |
-| 10 | Support NORMAL8/NORMAL32 and cross-ROM cable sessions | 5 | 2 | 8 | 13 | **1.2** | Later / research |
-| 11 | Add Single-Pak multiboot | 8 | 3 | 8 | 21 | **0.9** | Later / research |
-| 12 | Reconnection and host migration | 5 | 1 | 5 | 13 | **0.8** | Later |
-| 13 | Prediction or rollback | 8 | 1 | 8 | 21 | **0.8** | Later / research |
-| 14 | Wireless Adapter / RFU | 8 | 1 | 8 | 21 | **0.8** | Later / research |
-| 15 | Live-session savestates | 3 | 1 | 5 | 13 | **0.7** | Later |
-| 16 | GB/GBC network link | 5 | 1 | 5 | 21 | **0.5** | Outside current GBA scope |
-| 17 | Internet relay / NAT traversal | 5 | 1 | 3 | 21 | **0.4** | Later |
+| Outcome | Value | Urgency | Risk / enablement | Size | WSJF | Horizon |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Sanitized diagnostic bundle (#20) | 5 | 5 | 8 | 5 | **3.6** | Now |
+| Automated release provenance (#21) | 5 | 5 | 8 | 5 | **3.6** | Now |
+| Upstream mGBA refresh (#22) | 3 | 5 | 8 | 5 | **3.2** | Now |
+| Decoder fuzzing (#23) | 3 | 5 | 8 | 5 | **3.2** | Now |
+| Resource budgets (#25) | 5 | 3 | 8 | 5 | **3.2** | Next / prerequisite |
+| H700 feasibility (#11) | 5 | 3 | 5 | 5 | **2.6** | Next |
+| Android lifecycle hardening (#24) | 5 | 3 | 5 | 8 | **1.6** | Next |
+| Four Player feasibility (#10) | 8 | 3 | 8 | 13 | **1.5** | Discovery |
+| Single-Pak feasibility (#26) | 8 | 3 | 8 | 21 | **0.9** | Discovery |
 
-The low scores for Single-Pak, RFU, and rollback do not mean low value. They
-reflect large uncertain jobs whose first useful increment is expensive.
+Compatibility (#8) is deliberately absent from the ranking because it is a
+time-boxed continuous stream, not a finishable outcome.
 
-## Recommended execution order
+## Success measures
 
-### Completed — v0.2.0 usable alpha
-
-1. **Remove v1 (#6): completed in PR #14.** The frontend selector, distributed
-   runtime, obsolete tests, and v1-only analyzer are gone. Historical evidence
-   remains labelled, while generic SIO and the supported versioned-runtime
-   invariants have active test owners.
-2. **Direct-hotspot comparison (#9): completed.** A direct 5 GHz Android
-   hotspot selected one frame and remained correct, but exceeded the bilateral
-   wait-free, p95, and maximum-tail publication limits. Stable remains the
-   default and Low Latency remains an experimental opt-in.
-3. **Publish v0.2.0 alpha (#7): completed.** The
-   [exact Android ARM64 prerelease](https://github.com/Aelvryx/mgba-wifi-link/releases/tag/v0.2.0)
-   includes checksums, install/upgrade notes, honest policy and compatibility
-   claims, and a concise exact-artifact two-device smoke.
-
-### Next — strengthen the product and open platforms
-
-- Grow compatibility evidence (#8) continuously without holding future
-  releases hostage to an arbitrary game count.
-- Add a sanitized report bundle so users can capture build identity, frontend,
-  policy, attachment, calibration, wait, and teardown evidence without leaking
-  ROM, save, path, address, or input data.
-- Automate release builds, checksums, provenance, and GitHub attachments from a
-  reviewed tag.
-- Fuzz all network- and replica-controlled decoders and retain their allocation
-  bounds under sanitizers.
-- Establish a repeatable performance/thermal budget before multiplying local
-  replicas or adding lower-powered targets.
-- Run the [H700 feasibility path](https://github.com/Aelvryx/mgba-wifi-link/issues/11).
-- Harden lifecycle failure when Android backgrounds the frontend, changes
-  networks, or suspends one endpoint.
-- Research [four-player topology](https://github.com/Aelvryx/mgba-wifi-link/issues/10)
-  in parallel, but do not commit implementation until CPU/memory/thermal and
-  distributed-state costs are credible.
-
-### Later — expand cable and cartridge scope
-
-#### Single-Pak multiboot
-
-Single-Pak is a distinct architecture, not a player-count toggle. The host owns
-the cartridge while clients receive and execute a downloaded multiboot image
-from WRAM. It therefore needs:
-
-- asymmetric initial machine/content bundles;
-- accurate BIOS/multiboot transfer and client boot state;
-- a different content-identity and persistence policy;
-- reset, failure, and retry semantics during download;
-- redistributable multiboot fixtures before commercial qualification.
-
-The first step is a feasibility/specification change, not production code.
-
-#### Other link families
-
-- NORMAL8/NORMAL32 and cross-ROM sessions need explicit identity and timing
-  rules rather than relaxing exact-ROM equality globally.
-- Wireless Adapter/RFU is a different peripheral and multiplayer protocol, not
-  a cable mode.
-- GB/GBC link is outside the current GBA product boundary and should not inherit
-  assumptions from the replicated GBA pair.
-
-#### Latency and resilience
-
-- Prediction/rollback can reduce perceived input latency but changes save,
-  audio, presentation, verification, and failure semantics.
-- Reconnection, host migration, and live-session savestates all require a
-  complete transferable session state—not merely keeping a socket alive.
-- Internet relay/NAT traversal should follow a clear hostile-peer security model
-  and should reuse frontend facilities where possible rather than adding silent
-  direct sockets.
+| Concern | Evidence that matters |
+| --- | --- |
+| Correctness | Matching replicas and verification, bounded failure, transactional state/save restoration, no input loss |
+| Playability | Sustained frame/audio delivery and bounded input rendezvous on explicitly qualified devices and paths |
+| Supportability | A privacy-safe report can explain build, attachment, policy, performance, and teardown without private content |
+| Maintainability | Explicit upstream pin, reviewable patch stack, reproducible releases, stable fixtures, and fuzzed peer-controlled parsers |
+| Compatibility | Honest per-title evidence with verified, user-reported, failed, and untested states—not a universal claim or game-count target |
 
 ## Decision log
 
 | Decision | Current position | Revisit when |
 | --- | --- | --- |
-| Production runtime | GBA Wi-Fi Link façade over the version-2 replicated session and wire contract; v1 runtime and selector removed | A new reviewed architecture demonstrates a concrete need |
-| Default delay | Calibrated, minimum two frames | Exact one-frame candidate passes both-device gate |
-| Network path | Ordinary LAN and direct 5 GHz Android hotspot supported; neither path guarantees lower latency | A new frontend transport path is proposed |
-| Players | Exactly two | Four-player resource and topology proposal is reviewed |
-| Cartridge model | Identical Multi-Pak cartridges | Single-Pak or cross-ROM proposal defines asymmetric identity |
-| Serial modes | GBA MULTI for networked play | NORMAL-mode need is characterized and reviewed |
-| Savestates | Rejected during a live session | Network session state has a complete serialization design |
-| Internet | Trusted local network | Threat model and frontend transport path are agreed |
+| Production runtime | GBA Wi-Fi Link façade over the version-2 replicated session and wire contract | A reviewed architecture demonstrates a concrete incompatibility or new requirement |
+| Default delay | Calibrated Stable policy with a minimum two frames | An exact candidate passes the bilateral one-frame publication gate |
+| Network path | Trusted local LAN and direct Android hotspot; neither guarantees lower latency | A frontend-supported transport path and threat model are proposed |
+| Players | Exactly two | Four Player feasibility and resource gates pass |
+| Cartridge model | Identical Multi-Pak cartridges | Single-Pak or cross-ROM design defines asymmetric identity and persistence |
+| Serial modes | GBA `MULTI` for networked play | A NORMAL-mode need is characterized generically |
+| Savestates | Rejected during a live session | Complete network-session serialization is designed |
+| Major capability after hardening | Undecided between Four Player and Single-Pak | Both feasibility reports make value, cost, and risk comparable |
+| Upstream maintenance | Make an explicit base decision before each capability release; refresh now for v0.2.1 | Upstream fixes, security, compatibility, or accumulated drift justify an earlier refresh |
 
 ## How work is tracked
 
-- The `v0.2.0 — Usable alpha` milestone contains the current release horizon.
-- Issues define actionable now/next outcomes; later inventory remains here until
-  it is close enough to investigate responsibly.
-- OpenSpec captures architecture or behavioural changes, then is archived after
-  merge.
-- This file is rescored when evidence, dependencies, or product priorities
-  materially change.
+- The `v0.2.0 — Usable alpha` milestone is closed and records the first public
+  release.
+- The `v0.2.1 — Supportable alpha` milestone contains only issues #20–#23.
+- Compatibility issue #8 remains open and unmilestoned as continuous evidence.
+- `roadmap: now`, `roadmap: next`, and `roadmap: later` describe horizons, not
+  promises or calendar dates.
+- GitHub issues own bounded outcomes. OpenSpec owns reviewed behavioural or
+  architectural changes and is archived after merge.
+- This file changes when evidence or product direction changes, not after every
+  task checkbox.

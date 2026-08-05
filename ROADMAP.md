@@ -36,7 +36,7 @@ every completed task.
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | — | [Remove shipped cable-sync v1](https://github.com/Aelvryx/mgba/issues/6) | 5 | 8 | 8 | 3 | **7.0** | **Completed in PR #14** |
 | 2 | [Publish the GBA Wi-Fi Link alpha](https://github.com/Aelvryx/mgba/issues/7) | 8 | 8 | 5 | 3 | **7.0** | Now, after #6 and #9 |
-| 3 | [Test hotspot latency and decide the default](https://github.com/Aelvryx/mgba/issues/9) | 5 | 5 | 8 | 3 | **6.0** | Now |
+| — | [Test hotspot latency and decide the default](https://github.com/Aelvryx/mgba/issues/9) | 5 | 5 | 8 | 3 | **6.0** | **Completed; retain Stable default** |
 | 4 | [Grow the compatibility matrix](https://github.com/Aelvryx/mgba/issues/8) | 5 | 5 | 5 | 3 | **5.0** | Now / continuous |
 | 5 | Produce a one-command sanitized diagnostic bundle | 5 | 3 | 8 | 5 | **3.2** | Next |
 | 6 | Automate reviewed release artifacts and provenance | 5 | 3 | 8 | 5 | **3.2** | Next |
@@ -66,9 +66,10 @@ reflect large uncertain jobs whose first useful increment is expensive.
    runtime, obsolete tests, and v1-only analyzer are gone. Historical evidence
    remains labelled, while generic SIO and the supported versioned-runtime
    invariants have active test owners.
-2. **Run the direct-hotspot comparison (#9).** This is a short decision test,
-   not a new latency architecture. If one frame passes the existing bilateral
-   gate, propose the smallest default change. Otherwise retain two frames.
+2. **Direct-hotspot comparison (#9): completed.** A direct 5 GHz Android
+   hotspot selected one frame and remained correct, but exceeded the bilateral
+   wait-free, p95, and maximum-tail publication limits. Stable remains the
+   default and Low Latency remains an experimental opt-in.
 3. **Publish v0.2.0 alpha (#7).** Release the exact integrated GBA Wi-Fi Link
    artifact with hashes, install/upgrade notes, and honest
    policy/compatibility claims.
@@ -134,7 +135,7 @@ The first step is a feasibility/specification change, not production code.
 | --- | --- | --- |
 | Production runtime | GBA Wi-Fi Link façade over the version-2 replicated session and wire contract; v1 runtime and selector removed | A new reviewed architecture demonstrates a concrete need |
 | Default delay | Calibrated, minimum two frames | Exact one-frame candidate passes both-device gate |
-| Network path | Ordinary LAN supported | Direct-hotspot A/B evidence exists |
+| Network path | Ordinary LAN and direct 5 GHz Android hotspot supported; neither path guarantees lower latency | A new frontend transport path is proposed |
 | Players | Exactly two | Four-player resource and topology proposal is reviewed |
 | Cartridge model | Identical Multi-Pak cartridges | Single-Pak or cross-ROM proposal defines asymmetric identity |
 | Serial modes | GBA MULTI for networked play | NORMAL-mode need is characterized and reviewed |

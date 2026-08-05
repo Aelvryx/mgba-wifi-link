@@ -713,11 +713,49 @@ removed afterward while leaving the installed alpha core available for ad-hoc
 testing.
 
 Both devices were on strong Wi-Fi 6 links but associated with different 5 GHz
-BSSIDs and channels. A direct 5 GHz Android-hotspot A/B run is therefore a
-useful future attempt to qualify one frame; it is not required for the
-two-frame determinism/calibration increment. The source option remains clearly
-labelled experimental and unqualified rather than turning repeated calibration
-attempts into a search for a favourable sample.
+BSSIDs and channels. That result motivated the bounded direct-hotspot decision
+run below. The source option remains clearly labelled experimental and
+unqualified rather than turning repeated calibration attempts into a search
+for a favourable sample.
+
+### Direct-hotspot default-policy decision
+
+The integrated `master` candidate at
+`1b0ee969850d9ac0c195d9391f537a004def082b` had SHA-256
+`826c5b051eba80d606c677571694890e6ff0f753600a78e164d8269cb730af3f`.
+Thor hosted a direct 5 GHz Android hotspot and GBA Wi-Fi Link P0; Odin joined
+that hotspot as P1. RetroArch 1.22.2 (Git `69a4f0e`) loaded the exact candidate,
+the isolated run contract and physical controllers passed, and both endpoints
+selected one frame from the same 24-sample calibration vector.
+
+Calibration measured min/p50/p95/max RTT values of
+13,929/16,686/17,853/18,638 microseconds. The automated CC0 fixture ran for
+19,800 synchronized frames (328.405 seconds) at 60.291 FPS, completed 9,896
+matching transfers per player and 329 matching verification intervals, and
+reported zero cable errors, cable timeouts, divergence, input deadline misses,
+telemetry clock failures, or empty-audio frames.
+
+| Endpoint | Wait-free frames | Waited-frame p95 | Maximum wait |
+| --- | ---: | ---: | ---: |
+| Thor / P0 | 98.1666% | 14,880 us | 31,303 us |
+| Odin / P1 | 99.6616% | 11,281 us | 22,977 us |
+
+The ordinary fixture analyzer passed. The one-frame publication gate requires
+at least 99% wait-free frames on each endpoint, waited-frame p95 no greater
+than 8,000 microseconds and no wait above 16,743 microseconds. Both endpoints
+exceeded the immutable maximum-tail limit, and Thor also missed the ratio and
+p95 limits, so extending the run could not produce a passing exact-artifact
+result. The run was stopped proportionately rather than continuing a ceremonial
+30-minute soak after permanent gate failure.
+
+The product decision is therefore to retain **Auto (Stable)** as the default
+and **Auto (Low Latency, Experimental)** as an opt-in. The direct hotspot is a
+supported ordinary LAN topology, not a promise of lower latency. Raw logs and
+screenshots remain private; their SHA-256 digests are
+`fb4bf7f7a55a57e731515ae47146ad6bfce1fc8419a8727878560319a757113a`
+for Thor and
+`48b2eb93bea2d44aeb536e3e477799f002f3ab133e881f91f753a4eaa78865a8`
+for Odin.
 
 Physical logs also exposed that RetroArch truncates long core log records. The
 follow-up diagnostic-only correction splits calibration, wait-tail, health,

@@ -82,14 +82,16 @@ change only the isolated save/state/log paths, autosave/config persistence, and
 explicitly documented diagnostic options. It must retain normal input, joypad,
 overlay path, menu, video, and audio settings, while setting
 `input_overlay_enable = "true"` as a visible fallback on both devices.
-The helper interprets the last occurrence of every config key, matching
-RetroArch's effective value. It requires run-specific save, state, and log
-directories, disabled config-save-on-exit and autosave, timestamped file
-logging, a run-specific `core_options_path`, native joypad index 0, and no
-injected host hotkey. It also requires `global_core_options = "true"`; without
-that setting RetroArch may ignore the run-specific options file in favour of a
-per-core file from the normal configuration tree. This prevents the
-qualification launch from persisting
+The helper rejects every duplicate config or core-option key. Qualification
+files must replace the cloned value in place rather than append an override;
+depending on an assumed duplicate-key precedence can silently select the
+device's ordinary overlay, persistence, or logging path. The helper requires
+run-specific save, state, and log directories, disabled config-save-on-exit
+and autosave, timestamped file logging, a run-specific `core_options_path`,
+native joypad index 0, and no injected host hotkey. It also requires
+`global_core_options = "true"`; without that setting RetroArch may ignore the
+run-specific options file in favour of a per-core file from the normal
+configuration tree. This prevents the qualification launch from persisting
 core-option changes into the normal RetroArch configuration tree.
 
 After launch, the human presses one physical button on each handheld. Do not

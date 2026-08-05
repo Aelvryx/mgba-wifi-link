@@ -135,11 +135,14 @@ not open a separate socket or provide another address.
 
 An Android local hotspot is also an ordinary supported IP LAN: one handheld
 hosts the hotspot and Netplay server, the other joins it, and the client uses
-the hotspot owner's address. This can reduce forwarding or mesh-backhaul
-jitter, but calibration remains authoritative. Wi-Fi Direct is present on the
-qualified devices, but stock RetroArch does not create or manage a Wi-Fi Direct
-group; Android would first need to expose such a link as mutually reachable IP
-interfaces. Prefer a 5 GHz hotspot for a future controlled A/B test.
+the hotspot owner's address. A controlled Thor/Odin run over a direct 5 GHz
+hotspot selected one frame and remained correct, but occasional input waits
+still exceeded the low-latency publication limits. A hotspot can remove a
+router or mesh hop; it does not guarantee lower scheduling or radio jitter, so
+calibration remains authoritative. Wi-Fi Direct is present on the qualified
+devices, but stock RetroArch does not create or manage a Wi-Fi Direct group;
+Android would first need to expose such a link as mutually reachable IP
+interfaces.
 
 Connect before entering the game's cable menu, but after both devices have
 loaded content. In games with leader-driven menus, player two may show `WAIT`

@@ -9,6 +9,9 @@ GBA Multi-Pak play between physical devices over a local network. It runs as a
 libretro core in stock RetroArch and uses RetroArch's Netpacket transport—no
 RetroArch fork and no direct socket configuration required.
 
+The current Android ARM64 prerelease is
+[GBA Wi-Fi Link v0.2.0 alpha](https://github.com/Aelvryx/mgba/releases/tag/v0.2.0).
+
 This repository is an independent experimental fork. It is not an official
 mGBA release and is not supported by the upstream mGBA project.
 
@@ -137,10 +140,10 @@ under `openspec/changes/archive`.
 
 The immediate engineering priorities are:
 
-1. Validate and package the integrated GBA Wi-Fi Link runtime as a clean
-   release.
-2. Expand compatibility reporting and diagnostic capture.
-3. Produce a one-command sanitized diagnostic bundle.
+1. Produce a one-command sanitized diagnostic bundle.
+2. Expand compatibility reporting without turning it into a release gate.
+3. Automate reviewed release artifacts and provenance, then fuzz the
+   network-controlled decoders.
 
 Four-player Multi-Pak and Linux handheld support follow. Rollback/prediction,
 Single-Pak, and RFU are later research, not promises. See [ROADMAP.md](ROADMAP.md)

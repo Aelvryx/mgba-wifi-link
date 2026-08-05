@@ -35,32 +35,32 @@ every completed task.
 | Rank | Outcome | Value | Urgency | Risk / enablement | Size | WSJF | Horizon |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | --- |
 | — | [Remove shipped cable-sync v1](https://github.com/Aelvryx/mgba/issues/6) | 5 | 8 | 8 | 3 | **7.0** | **Completed in PR #14** |
-| 2 | [Publish the GBA Wi-Fi Link alpha](https://github.com/Aelvryx/mgba/issues/7) | 8 | 8 | 5 | 3 | **7.0** | Now, after #6 and #9 |
+| — | [Publish the GBA Wi-Fi Link alpha](https://github.com/Aelvryx/mgba/issues/7) | 8 | 8 | 5 | 3 | **7.0** | **Completed in v0.2.0** |
 | — | [Test hotspot latency and decide the default](https://github.com/Aelvryx/mgba/issues/9) | 5 | 5 | 8 | 3 | **6.0** | **Completed; retain Stable default** |
-| 4 | [Grow the compatibility matrix](https://github.com/Aelvryx/mgba/issues/8) | 5 | 5 | 5 | 3 | **5.0** | Now / continuous |
-| 5 | Produce a one-command sanitized diagnostic bundle | 5 | 3 | 8 | 5 | **3.2** | Next |
-| 6 | Automate reviewed release artifacts and provenance | 5 | 3 | 8 | 5 | **3.2** | Next |
-| 7 | Fuzz packet, profile, and replica-bundle decoding | 3 | 3 | 8 | 5 | **2.8** | Next |
-| 8 | [Qualify H700 Linux handhelds](https://github.com/Aelvryx/mgba/issues/11) | 5 | 3 | 5 | 5 | **2.6** | Next |
-| 9 | Establish CPU, memory, audio, and thermal budgets | 5 | 3 | 5 | 5 | **2.6** | Next |
-| 10 | Harden Android suspend, resume, and network-change teardown | 5 | 3 | 5 | 8 | **1.6** | Next |
-| 11 | [Design four-player Multi-Pak](https://github.com/Aelvryx/mgba/issues/10) | 8 | 3 | 8 | 13 | **1.5** | Next / research |
-| 12 | Synchronize cartridge sensors | 3 | 2 | 5 | 8 | **1.3** | Later |
-| 13 | Support NORMAL8/NORMAL32 and cross-ROM cable sessions | 5 | 2 | 8 | 13 | **1.2** | Later / research |
-| 14 | Add Single-Pak multiboot | 8 | 3 | 8 | 21 | **0.9** | Later / research |
-| 15 | Reconnection and host migration | 5 | 1 | 5 | 13 | **0.8** | Later |
-| 16 | Prediction or rollback | 8 | 1 | 8 | 21 | **0.8** | Later / research |
-| 17 | Wireless Adapter / RFU | 8 | 1 | 8 | 21 | **0.8** | Later / research |
-| 18 | Live-session savestates | 3 | 1 | 5 | 13 | **0.7** | Later |
-| 19 | GB/GBC network link | 5 | 1 | 5 | 21 | **0.5** | Outside current GBA scope |
-| 20 | Internet relay / NAT traversal | 5 | 1 | 3 | 21 | **0.4** | Later |
+| 1 | [Grow the compatibility matrix](https://github.com/Aelvryx/mgba/issues/8) | 5 | 5 | 5 | 3 | **5.0** | Now / continuous |
+| 2 | Produce a one-command sanitized diagnostic bundle | 5 | 3 | 8 | 5 | **3.2** | Next |
+| 3 | Automate reviewed release artifacts and provenance | 5 | 3 | 8 | 5 | **3.2** | Next |
+| 4 | Fuzz packet, profile, and replica-bundle decoding | 3 | 3 | 8 | 5 | **2.8** | Next |
+| 5 | [Qualify H700 Linux handhelds](https://github.com/Aelvryx/mgba/issues/11) | 5 | 3 | 5 | 5 | **2.6** | Next |
+| 6 | Establish CPU, memory, audio, and thermal budgets | 5 | 3 | 5 | 5 | **2.6** | Next |
+| 7 | Harden Android suspend, resume, and network-change teardown | 5 | 3 | 5 | 8 | **1.6** | Next |
+| 8 | [Design four-player Multi-Pak](https://github.com/Aelvryx/mgba/issues/10) | 8 | 3 | 8 | 13 | **1.5** | Next / research |
+| 9 | Synchronize cartridge sensors | 3 | 2 | 5 | 8 | **1.3** | Later |
+| 10 | Support NORMAL8/NORMAL32 and cross-ROM cable sessions | 5 | 2 | 8 | 13 | **1.2** | Later / research |
+| 11 | Add Single-Pak multiboot | 8 | 3 | 8 | 21 | **0.9** | Later / research |
+| 12 | Reconnection and host migration | 5 | 1 | 5 | 13 | **0.8** | Later |
+| 13 | Prediction or rollback | 8 | 1 | 8 | 21 | **0.8** | Later / research |
+| 14 | Wireless Adapter / RFU | 8 | 1 | 8 | 21 | **0.8** | Later / research |
+| 15 | Live-session savestates | 3 | 1 | 5 | 13 | **0.7** | Later |
+| 16 | GB/GBC network link | 5 | 1 | 5 | 21 | **0.5** | Outside current GBA scope |
+| 17 | Internet relay / NAT traversal | 5 | 1 | 3 | 21 | **0.4** | Later |
 
 The low scores for Single-Pak, RFU, and rollback do not mean low value. They
 reflect large uncertain jobs whose first useful increment is expensive.
 
 ## Recommended execution order
 
-### Now — close the current alpha properly
+### Completed — v0.2.0 usable alpha
 
 1. **Remove v1 (#6): completed in PR #14.** The frontend selector, distributed
    runtime, obsolete tests, and v1-only analyzer are gone. Historical evidence
@@ -70,14 +70,15 @@ reflect large uncertain jobs whose first useful increment is expensive.
    hotspot selected one frame and remained correct, but exceeded the bilateral
    wait-free, p95, and maximum-tail publication limits. Stable remains the
    default and Low Latency remains an experimental opt-in.
-3. **Publish v0.2.0 alpha (#7).** Release the exact integrated GBA Wi-Fi Link
-   artifact with hashes, install/upgrade notes, and honest
-   policy/compatibility claims.
-4. **Grow compatibility evidence (#8).** This proceeds continuously and should
-   not hold the release hostage to an arbitrary game count.
+3. **Publish v0.2.0 alpha (#7): completed.** The
+   [exact Android ARM64 prerelease](https://github.com/Aelvryx/mgba/releases/tag/v0.2.0)
+   includes checksums, install/upgrade notes, honest policy and compatibility
+   claims, and a concise exact-artifact two-device smoke.
 
 ### Next — strengthen the product and open platforms
 
+- Grow compatibility evidence (#8) continuously without holding future
+  releases hostage to an arbitrary game count.
 - Add a sanitized report bundle so users can capture build identity, frontend,
   policy, attachment, calibration, wait, and teardown evidence without leaking
   ROM, save, path, address, or input data.

@@ -49,12 +49,12 @@
   absolute, traversal, non-regular, unsafe-mode, and non-normalized inputs.
 - [ ] 3.3 Implement deterministic guide and human provenance rendering from the
   canonical model without copying runtime-private or historical correction data.
-- [ ] 3.4 Implement canonical `BUILD-PROVENANCE.json` construction and validate its
+- [x] 3.4 Implement canonical `BUILD-PROVENANCE.json` construction and validate its
   schema, exact protected evidence, source, runner, action, toolchain, configuration,
   deterministic epoch, and sibling-payload identities.
 - [ ] 3.5 Implement deterministic archive construction and its internal
   `SHA256SUMS`, covering every archive member except the checksum file itself.
-- [ ] 3.6 Implement canonical `RELEASE-PROVENANCE.json` after archive construction,
+- [x] 3.6 Implement canonical `RELEASE-PROVENANCE.json` after archive construction,
   recording the five non-provenance public payload assets without recursive hashes.
 - [ ] 3.7 Implement standalone `SHA256SUMS` last, covering all six preceding project
   assets and excluding itself and GitHub-generated source archives/attestations.
@@ -67,18 +67,18 @@
 
 ## 4. Enforce release privacy and provenance boundaries
 
-- [ ] 4.1 Add field-level allow-list tests for repository, tag, source, public
+- [x] 4.1 Add field-level allow-list tests for repository, tag, source, public
   workflow, runner/toolchain, build configuration, asset, and qualification-decision
   metadata.
-- [ ] 4.2 Add file-level allow-list tests for every public asset and archive member
+- [x] 4.2 Add file-level allow-list tests for every public asset and archive member
   and fail on any undeclared staging file or directory.
-- [ ] 4.3 Add synthetic canary tests for ROM/BIOS identities, saves, raw inputs,
+- [x] 4.3 Add synthetic canary tests for ROM/BIOS identities, saves, raw inputs,
   endpoint/frontend logs, paths, addresses, serials, device nicknames, commercial
   evidence, tokens, secrets, and unexpected hashes.
-- [ ] 4.4 Implement fail-closed privacy validation over source templates, rendered
+- [x] 4.4 Implement fail-closed privacy validation over source templates, rendered
   text, canonical JSON, archive members, release body, and workflow artifact
   inventory with bounded category-only diagnostics.
-- [ ] 4.5 Add tests that provenance contains no recursive digest, no environment
+- [x] 4.5 Add tests that provenance contains no recursive digest, no environment
   secret, and no signed attestation envelope, while human and machine identity
   fields remain mutually consistent.
 - [ ] 4.6 Extend the permanent product-boundary audit to recognize the new release

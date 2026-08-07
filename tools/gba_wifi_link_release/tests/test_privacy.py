@@ -1,6 +1,7 @@
 """Public-tree membership and category-only privacy validation tests."""
 
 import hashlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -8,7 +9,7 @@ import unittest
 from tools.gba_wifi_link_release.admission import REQUIRED_GATES, REQUIRED_WORKFLOW
 from tools.gba_wifi_link_release.model import GateResult, ReleaseAsset, ReleaseContext, load_contract
 from tools.gba_wifi_link_release.privacy import PrivacyError, validate_public_tree
-from tools.gba_wifi_link_release.provenance import release_provenance
+from tools.gba_wifi_link_release.provenance import canonical_json, release_provenance
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -81,6 +82,21 @@ class PrivacyTest(unittest.TestCase):
             )
             (root / "RELEASE-PROVENANCE.json").write_bytes(release_provenance(CONTEXT, payloads))
             validate_public_tree(root, CONTRACT)
+
+    def test_release_provenance_requires_canonical_json_and_typed_source_fields(self):
+        with self.public_tree() as temporary:
+            root = Path(temporary)
+            document = json.loads((root / "RELEASE-PROVENANCE.json").read_bytes())
+            document["source"]["repository"] = False
+            (root / "RELEASE-PROVENANCE.json").write_bytes(canonical_json(document))
+            self.assert_category_only("PRIVACY_FIELD", root, "False")
+        with self.public_tree() as temporary:
+            root = Path(temporary)
+            document = json.loads((root / "RELEASE-PROVENANCE.json").read_bytes())
+            (root / "RELEASE-PROVENANCE.json").write_text(
+                json.dumps(document, indent=2) + "\n", encoding="utf-8"
+            )
+            self.assert_category_only("PRIVACY_JSON", root, "  \"schema\"")
 
     def test_private_text_canaries_return_only_stable_categories(self):
         cases = (

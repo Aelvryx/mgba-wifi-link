@@ -103,12 +103,19 @@ class ProvenanceTest(unittest.TestCase):
         invalid_hash = replace(BUILD_SIBLINGS[0], sha256="A" * 64)
         with self.assertRaisesRegex(ProvenanceError, "^PROVENANCE_ASSET$"):
             build_provenance(CONTEXT, (invalid_hash, *BUILD_SIBLINGS[1:]))
+        with self.assertRaisesRegex(ProvenanceError, "^PROVENANCE_ASSET$"):
+            build_provenance(
+                CONTEXT,
+                (replace(BUILD_SIBLINGS[0], sha256=123), *BUILD_SIBLINGS[1:]),  # type: ignore[arg-type]
+            )
         invalid_size = replace(RELEASE_PAYLOADS[0], size=-1)
         with self.assertRaisesRegex(ProvenanceError, "^PROVENANCE_ASSET$"):
             release_provenance(CONTEXT, (invalid_size, *RELEASE_PAYLOADS[1:]))
         invalid_gate = replace(CONTEXT.gates[0], run_id=True)
         with self.assertRaisesRegex(ProvenanceError, "^PROVENANCE_GATE$"):
             build_provenance(replace(CONTEXT, gates=(invalid_gate, *CONTEXT.gates[1:])), BUILD_SIBLINGS)
+        with self.assertRaisesRegex(ProvenanceError, "^PROVENANCE_SOURCE$"):
+            build_provenance(replace(CONTEXT, notes_sha256=123), BUILD_SIBLINGS)  # type: ignore[arg-type]
 
     def test_provenance_rejects_cycles_and_wrong_declared_membership(self):
         self.assertRaisesRegex(

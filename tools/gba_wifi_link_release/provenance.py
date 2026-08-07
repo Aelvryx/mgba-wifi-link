@@ -35,11 +35,14 @@ def _source(context: ReleaseContext) -> dict[str, object]:
         or not context.tag
         or not isinstance(context.version, str)
         or not context.version
+        or not isinstance(context.tag_object, str)
         or not _SHA1_RE.fullmatch(context.tag_object)
+        or not isinstance(context.commit, str)
         or not _SHA1_RE.fullmatch(context.commit)
         or type(context.source_date_epoch) is not int
         or context.source_date_epoch < 0
         or type(context.prerelease) is not bool
+        or not isinstance(context.notes_sha256, str)
         or not _SHA256_RE.fullmatch(context.notes_sha256)
     ):
         raise ProvenanceError("PROVENANCE_SOURCE")
@@ -87,6 +90,7 @@ def _assets(assets: tuple[ReleaseAsset, ...], expected_names: tuple[str, ...]) -
         if (
             type(asset.size) is not int
             or asset.size < 0
+            or not isinstance(asset.sha256, str)
             or not _SHA256_RE.fullmatch(asset.sha256)
         ):
             raise ProvenanceError("PROVENANCE_ASSET")

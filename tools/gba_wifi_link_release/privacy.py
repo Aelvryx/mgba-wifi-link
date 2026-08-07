@@ -8,6 +8,7 @@ import re
 import stat
 
 from .model import ReleaseContract
+from .provenance import canonical_json
 
 
 _MAX_TEXT_BYTES = 1_048_576
@@ -25,6 +26,8 @@ _DEVICE_RE = re.compile(r"(?i)\b(?:device|phone) (?:serial|nickname|id|name)\b")
 _COMMERCIAL_RE = re.compile(r"(?i)\bcommercial (?:game|title|evidence)\b")
 _SECRET_RE = re.compile(r"(?i)\b(?:access )?(?:api[_ -]?key|token|secret|password)(?:\s*[:=]|\s+\S+)")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
+_TAG_RE = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 
 
 class PrivacyError(ValueError):
@@ -85,9 +88,28 @@ def _validate_release_provenance(path: Path, root: Path, expected_names: tuple[s
         raise PrivacyError("PRIVACY_JSON") from error
     if not isinstance(value, dict) or tuple(sorted(value)) != ("payloads", "schema", "source") or value.get("schema") != 1:
         raise PrivacyError("PRIVACY_FIELD")
+    if canonical_json(value) != text.encode("utf-8"):
+        raise PrivacyError("PRIVACY_JSON")
     source = value.get("source")
     required_source = {"commit", "notes_sha256", "prerelease", "repository", "source_date_epoch", "tag", "tag_object", "version"}
     if not isinstance(source, dict) or set(source) != required_source:
+        raise PrivacyError("PRIVACY_FIELD")
+    tag = source["tag"]
+    if (
+        source["repository"] != "Aelvryx/mgba-wifi-link"
+        or not isinstance(tag, str)
+        or not _TAG_RE.fullmatch(tag)
+        or source["version"] != tag[1:]
+        or not isinstance(source["tag_object"], str)
+        or not _SHA1_RE.fullmatch(source["tag_object"])
+        or not isinstance(source["commit"], str)
+        or not _SHA1_RE.fullmatch(source["commit"])
+        or type(source["source_date_epoch"]) is not int
+        or source["source_date_epoch"] < 0
+        or type(source["prerelease"]) is not bool
+        or not isinstance(source["notes_sha256"], str)
+        or not _SHA256_RE.fullmatch(source["notes_sha256"])
+    ):
         raise PrivacyError("PRIVACY_FIELD")
     payloads = value.get("payloads")
     if not isinstance(payloads, list) or len(payloads) != 5 or tuple(item.get("name") if isinstance(item, dict) else None for item in payloads) != expected_names:

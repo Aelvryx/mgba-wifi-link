@@ -20,22 +20,22 @@
 
 ## 2. Implement tag admission and canonical metadata test-first
 
-- [ ] 2.1 Add failing tests for valid annotated tag parsing, peeling, canonical
+- [x] 2.1 Add failing tests for valid annotated tag parsing, peeling, canonical
   version extraction, protected-`master` reachability, exact notes lookup, and
   prerelease classification.
-- [ ] 2.2 Add failing tests for lightweight, malformed, moved, reused, missing,
+- [x] 2.2 Add failing tests for lightweight, malformed, moved, reused, missing,
   off-history, version-conflicting, placeholder-containing, and already-conflicting
   tag/release inputs.
-- [ ] 2.3 Implement the minimum tag-admission and canonical-metadata module needed
+- [x] 2.3 Implement the minimum tag-admission and canonical-metadata module needed
   to pass the valid and invalid vector tests.
-- [ ] 2.4 Add tests that the remote tag object and peeled commit are captured
+- [x] 2.4 Add tests that the remote tag object and peeled commit are captured
   independently and must remain stable through the final publication check.
-- [ ] 2.5 Add tests that release notes cannot supply or override generated source,
+- [x] 2.5 Add tests that release notes cannot supply or override generated source,
   artifact, compatibility, checksum, provenance, or workflow identities.
-- [ ] 2.6 Add tests rejecting missing release notes, unresolved placeholders,
+- [x] 2.6 Add tests rejecting missing release notes, unresolved placeholders,
   mismatched version claims, prohibited privacy fields, and unsupported stable
   classification for `v0.x`.
-- [ ] 2.7 Implement tracked release-note validation and deterministic release-body
+- [x] 2.7 Implement tracked release-note validation and deterministic release-body
   rendering from reviewed prose plus canonical generated facts.
 - [ ] 2.8 Expose a non-publishing CLI entry point that emits canonical admitted
   metadata or a bounded machine-readable failure without mutating GitHub.

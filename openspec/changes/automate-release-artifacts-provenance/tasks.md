@@ -1,20 +1,20 @@
 ## 1. Freeze the release contract and historical baseline
 
-- [ ] 1.1 Record the current v0.2.0 tag, peeled commit, six public asset names,
+- [x] 1.1 Record the current v0.2.0 tag, peeled commit, six public asset names,
   asset hashes, archive membership, internal hashes, release metadata, and
   immutable core/fixture identities as a historical regression fixture.
-- [ ] 1.2 Inventory the protected CI jobs, Android build command, runner image,
+- [x] 1.2 Inventory the protected CI jobs, Android build command, runner image,
   NDK/toolchain downloads, action versions, binary-boundary checks, fixture build,
   and current packaging inputs that the release workflow must reuse.
-- [ ] 1.3 Freeze schema-v1 field names, types, ordering, required/optional policy,
+- [x] 1.3 Freeze schema-v1 field names, types, ordering, required/optional policy,
   canonical JSON serialization, and privacy allow-list for build and release
   provenance before generating golden fixtures.
-- [ ] 1.4 Freeze canonical semantic-version tag syntax, annotated-tag requirements,
+- [x] 1.4 Freeze canonical semantic-version tag syntax, annotated-tag requirements,
   version-to-prerelease mapping, exact seven public asset names, exact archive
   members, modes, checksum scopes, and normalized ZIP parameters.
-- [ ] 1.5 Define version-neutral tracked guide/source templates and the exact-version
+- [x] 1.5 Define version-neutral tracked guide/source templates and the exact-version
   reviewed release-notes path without modifying the historical v0.2.0 directory.
-- [ ] 1.6 Add synthetic public release inputs containing a fake core, fake fixtures,
+- [x] 1.6 Add synthetic public release inputs containing a fake core, fake fixtures,
   release notes, source identities, gate results, runner/toolchain metadata, and
   privacy canaries; do not use commercial or private qualification data.
 

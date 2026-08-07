@@ -22,6 +22,8 @@ class ReleaseAsset:
 
 @dataclass(frozen=True)
 class ReleaseContext:
+    """Canonical source identity admitted before release construction."""
+
     repository: str
     tag: str
     tag_object: str
@@ -30,6 +32,7 @@ class ReleaseContext:
     source_date_epoch: int
     prerelease: bool
     gates: tuple[GateResult, ...]
+    notes_sha256: str
 
 
 @dataclass(frozen=True)

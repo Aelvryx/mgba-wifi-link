@@ -56,16 +56,45 @@ correction path.
 ## Recovery and policy checks
 
 The tracked policy is
-`.github/rulesets/gba-wifi-link-release-tags.json`. It is applied and verified
-separately from ordinary release preparation. A maintainer can read the live
-policy without changing GitHub:
+`.github/rulesets/gba-wifi-link-release-tags.json`. GitHub's ruleset list API
+returns summaries; the complete ruleset endpoint exposes `bypass_actors` only
+to a caller with write access to that ruleset. See GitHub's [ruleset REST
+documentation](https://docs.github.com/en/rest/repos/rules?apiVersion=2022-11-28).
+
+Create the `gba-wifi-link-release-governance` GitHub Environment with deployment
+branches restricted to protected `master` only (no tag pattern and no manual
+reviewer gate), then store `GBA_WIFI_LINK_RULESET_AUDIT_TOKEN` as an
+**environment secret** there. The credential must be repository-limited and
+have ruleset visibility. It may need write-capable ruleset access solely because
+GitHub withholds the field from read-only callers. The audit code uses it for two
+`GET` requests only, never prints it, and rejects missing or withheld
+`bypass_actors` fail-closed. Do not use a broader personal credential when a
+repository-limited credential is available.
+GitHub documents that environment secrets are available only to jobs referencing
+the environment and only after its protection rules pass; see [deployment
+environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
+
+The `GBA Wi-Fi Link release governance` workflow runs only from protected
+`master` and on its schedule. It owns that credential and checks the live policy
+there. The tag-triggered release workflow deliberately never receives it: a
+workflow triggered by a tag is evaluated from that tag's source and must not be
+able to rewrite a secret-bearing audit step. A master-only environment secret
+also prevents a tag workflow from referencing the credential directly. The tag
+ruleset itself remains the release precondition; the governance audit
+continuously detects policy drift.
+
+For a local, read-only audit, provide the same credential through the
+environment rather than placing it in a command line or log:
 
 ```sh
+export GBA_WIFI_LINK_RULESET_AUDIT_TOKEN='…'
 python3 tools/gba-wifi-link-release.py verify-tag-policy
 ```
 
-That command is read-only. It requires exactly one active canonical tag ruleset
-on `Aelvryx/mgba-wifi-link`, covering `refs/tags/v*`, with no bypass actors and
-with deletion and force-update protection. During implementation or rehearsal,
-do not create a real version tag or publish a release; only the dedicated,
-reviewed release workflow and a later approved tag perform publication.
+That command first selects exactly one canonical summary by name and repository,
+then reads and validates its complete detail by ID. It requires an active tag
+ruleset on `Aelvryx/mgba-wifi-link`, covering `refs/tags/v*`, with no bypass
+actors and with deletion and force-update protection. During implementation or
+rehearsal, do not create a real version tag or publish a release; only the
+dedicated, reviewed release workflow and a later approved tag perform
+publication.

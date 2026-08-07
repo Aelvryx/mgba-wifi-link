@@ -28,13 +28,6 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.ref }}
 
-      - name: Verify immutable release-tag policy
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          python3 tools/gba-wifi-link-release.py verify-tag-policy
-
       - name: Inspect canonical annotated source
         id: source
         env:

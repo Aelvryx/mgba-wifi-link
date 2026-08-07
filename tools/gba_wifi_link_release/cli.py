@@ -20,8 +20,8 @@ from .packager import PackageInputs, build_release
 from .render import render_release_body
 from .publisher import publish_release
 from .provenance import bind_actual_builds
-from .tag_policy import (load_tag_policy, read_tag_rulesets,
-                         validate_tag_policy_response)
+from .tag_policy import (load_tag_policy, verify_live_tag_policy,
+                         RULESET_AUDIT_TOKEN_ENV)
 from .verifier import verify_release
 
 
@@ -323,7 +323,10 @@ def main(argv: list[str] | None = None) -> int:
                                         separators=(",", ":")) + "\n")
         elif args.command == "verify-tag-policy":
             expected = load_tag_policy(TAG_POLICY)
-            validate_tag_policy_response(read_tag_rulesets(CANONICAL_REPOSITORY), expected)
+            verify_live_tag_policy(
+                CANONICAL_REPOSITORY, expected,
+                audit_token=os.environ.get(RULESET_AUDIT_TOKEN_ENV),
+            )
             sys.stdout.write("tag policy verified\n")
         else:
             if args.repository != CANONICAL_REPOSITORY:

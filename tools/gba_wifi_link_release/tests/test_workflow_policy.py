@@ -12,6 +12,7 @@ from tools.gba_wifi_link_release.workflow_policy import (
     lex_workflow_yaml,
     normalize_workflow,
     validate_release_workflow_policy,
+    validate_ruleset_governance_workflow_policy,
     validate_workflow_policy,
 )
 
@@ -235,23 +236,40 @@ jobs:
     def test_release_workflow_satisfies_the_automatic_tag_contract(self):
         validate_release_workflow_policy(ROOT)
 
-    def test_release_workflow_checks_the_live_immutable_tag_policy_before_admission(self):
+    def test_release_admission_has_no_ruleset_audit_credential(self):
         source = (ROOT / ".github/workflows/gba-wifi-link-release.yml").read_text(encoding="utf-8")
-        self.assertIn("- name: Verify immutable release-tag policy", source)
-        self.assertIn("python3 tools/gba-wifi-link-release.py verify-tag-policy", source)
-        self.assertLess(
-            source.index("- name: Verify immutable release-tag policy"),
-            source.index("- name: Inspect canonical annotated source"),
+        self.assertNotIn("GBA_WIFI_LINK_RULESET_AUDIT_TOKEN", source)
+        self.assertIn("  admit:\n    name: Admit protected release source\n    needs: [inspect-tag, protected-validation]\n", source)
+        self.assert_release_rejected_after(
+            lambda text: text.replace(
+                "  admit:\n    name: Admit protected release source\n",
+                "  admit:\n    env:\n      GBA_WIFI_LINK_RULESET_AUDIT_TOKEN: ${{ secrets.GBA_WIFI_LINK_RULESET_AUDIT_TOKEN }}\n    name: Admit protected release source\n",
+                1,
+            )
         )
-        step = (
-            "      - name: Verify immutable release-tag policy\n"
-            "        env:\n"
-            "          GH_TOKEN: ${{ github.token }}\n"
-            "        run: |\n"
-            "          set -euo pipefail\n"
-            "          python3 tools/gba-wifi-link-release.py verify-tag-policy\n"
+
+    def test_default_branch_governance_owns_the_fail_closed_ruleset_audit(self):
+        validate_ruleset_governance_workflow_policy(ROOT)
+        source = (ROOT / ".github/workflows/gba-wifi-link-release-governance.yml").read_text(
+            encoding="utf-8"
         )
-        self.assert_release_rejected_after(lambda text: text.replace(step, "", 1))
+        self.assertIn("branches:\n      - master", source)
+        self.assertIn("schedule:", source)
+        self.assertNotIn("tags:", source)
+        self.assertIn("environment: gba-wifi-link-release-governance", source)
+        self.assertIn("test -n \"$GBA_WIFI_LINK_RULESET_AUDIT_TOKEN\"", source)
+        self.assertIn("verify-tag-policy", source)
+        with self.copy_policy_repo() as temporary:
+            repo = Path(temporary)
+            governance = repo / ".github/workflows/gba-wifi-link-release-governance.yml"
+            governance.write_text(
+                governance.read_text(encoding="utf-8").replace(
+                    "          test -n \"$GBA_WIFI_LINK_RULESET_AUDIT_TOKEN\"\n", "", 1
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(WorkflowPolicyError):
+                validate_ruleset_governance_workflow_policy(repo)
 
     def test_release_workflow_has_two_post_validation_clean_compile_jobs(self):
         source = (ROOT / ".github/workflows/gba-wifi-link-release.yml").read_text(encoding="utf-8")

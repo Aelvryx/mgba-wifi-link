@@ -1,0 +1,27 @@
+{
+  "id": 123,
+  "name": "GBA Wi-Fi Link release tags",
+  "source": "Aelvryx/mgba-wifi-link",
+  "source_type": "Repository",
+  "enforcement": "active",
+  "target": "tag",
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/tags/v*"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {"type": "deletion"},
+    {"type": "non_fast_forward"}
+  ],
+  "bypass_actors": [],
+  "node_id": "RRS_kwDOExample",
+  "created_at": "2026-08-07T00:00:00Z",
+  "updated_at": "2026-08-07T00:00:00Z",
+  "_links": {
+    "self": {
+      "href": "https://api.github.com/repos/Aelvryx/mgba-wifi-link/rulesets/123"
+    }
+  }
+}

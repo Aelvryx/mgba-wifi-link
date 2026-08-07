@@ -2,6 +2,7 @@
 
 import copy
 import json
+import os
 from pathlib import Path
 import subprocess
 
@@ -16,6 +17,9 @@ _GITHUB_GENERATED_KEYS = frozenset({
 })
 _MAX_POLICY_BYTES = 1 << 20
 _MAX_DIFFERENCE_POINTER = 160
+_MAX_AUDIT_TOKEN_BYTES = 4096
+RULESET_AUDIT_TOKEN_ENV = "GBA_WIFI_LINK_RULESET_AUDIT_TOKEN"
+_CANONICAL_REPOSITORY = "Aelvryx/mgba-wifi-link"
 
 
 class TagPolicyError(ValueError):
@@ -63,7 +67,7 @@ def _first_difference(expected: object, actual: object, pointer: str = "") -> st
 def _require_policy_shape(policy: object) -> dict[str, object]:
     if not isinstance(policy, dict) or set(policy) != _EXPECTED_POLICY_KEYS:
         raise TagPolicyError("TAG_POLICY_SCHEMA")
-    if policy.get("schema") != 1 or policy.get("repository") != "Aelvryx/mgba-wifi-link":
+    if policy.get("schema") != 1 or policy.get("repository") != _CANONICAL_REPOSITORY:
         raise TagPolicyError("TAG_POLICY_SCHEMA")
     ruleset = policy.get("ruleset")
     if not isinstance(ruleset, dict) or set(ruleset) != _EXPECTED_RULESET_KEYS:
@@ -106,7 +110,7 @@ def canonicalize_tag_ruleset(actual: object) -> dict[str, object]:
     unexpected = set(result) - _EXPECTED_RULESET_KEYS - _GITHUB_GENERATED_KEYS
     if unexpected:
         raise TagPolicyError("TAG_POLICY_DRIFT /" + _pointer_escape(sorted(unexpected)[0]))
-    if "source" in result and result["source"] != "Aelvryx/mgba-wifi-link":
+    if "source" in result and result["source"] != _CANONICAL_REPOSITORY:
         raise TagPolicyError("TAG_POLICY_DRIFT /source")
     if "source_type" in result and result["source_type"] != "Repository":
         raise TagPolicyError("TAG_POLICY_DRIFT /source_type")
@@ -126,38 +130,91 @@ def validate_tag_ruleset(actual: object, expected: object) -> None:
         raise TagPolicyError("TAG_POLICY_DRIFT " + difference[:_MAX_DIFFERENCE_POINTER])
 
 
-def select_tag_ruleset(rulesets: object, expected: object) -> dict[str, object]:
-    """Select exactly the expected named tag ruleset from the repository response."""
+def select_tag_ruleset_id(rulesets: object, expected: object) -> int:
+    """Select one ruleset ID from GitHub's intentionally summary-only list."""
     policy = _require_policy_shape(expected)
     if not isinstance(rulesets, list):
         raise TagPolicyError("TAG_POLICY_RESPONSE")
     wanted = policy["ruleset"]
     assert isinstance(wanted, dict)
-    matches = [
-        ruleset for ruleset in rulesets
-        if isinstance(ruleset, dict)
-        and ruleset.get("name") == wanted["name"]
-        and ruleset.get("target") == wanted["target"]
-    ]
+    named = [ruleset for ruleset in rulesets
+             if isinstance(ruleset, dict) and ruleset.get("name") == wanted["name"]]
+    if any(
+        ruleset.get("source") != _CANONICAL_REPOSITORY
+        or ruleset.get("source_type") != "Repository"
+        or type(ruleset.get("id")) is not int
+        or ruleset["id"] <= 0
+        for ruleset in named
+    ):
+        raise TagPolicyError("TAG_POLICY_RULESET")
+    matches = named
     if len(matches) != 1:
         raise TagPolicyError("TAG_POLICY_RULESET")
-    return matches[0]
+    return matches[0]["id"]
 
 
-def validate_tag_policy_response(rulesets: object, expected: object) -> None:
-    """Select and validate the one live immutable release-tag ruleset."""
-    validate_tag_ruleset(select_tag_ruleset(rulesets, expected), expected)
+def validate_tag_ruleset_detail(actual: object, expected: object, ruleset_id: int) -> None:
+    """Validate the complete selected response, including hidden-sensitive fields."""
+    if (
+        type(ruleset_id) is not int
+        or ruleset_id <= 0
+        or not isinstance(actual, dict)
+        or actual.get("id") != ruleset_id
+        or actual.get("source") != _CANONICAL_REPOSITORY
+        or actual.get("source_type") != "Repository"
+        or "bypass_actors" not in actual
+    ):
+        raise TagPolicyError("TAG_POLICY_DETAIL")
+    validate_tag_ruleset(actual, expected)
 
 
-def read_tag_rulesets(repository: str, *, gh: str = "gh") -> object:
-    """Read the sole canonical repository's rulesets without mutating GitHub."""
-    if repository != "Aelvryx/mgba-wifi-link" or not isinstance(gh, str) or not gh:
-        raise TagPolicyError("TAG_POLICY_REPOSITORY")
+def _require_audit_token(audit_token: object) -> str:
+    if (
+        not isinstance(audit_token, str)
+        or not audit_token
+        or len(audit_token.encode("utf-8")) > _MAX_AUDIT_TOKEN_BYTES
+        or any(character.isspace() for character in audit_token)
+    ):
+        raise TagPolicyError("TAG_POLICY_AUDIT_CREDENTIAL")
+    return audit_token
+
+
+def _read_api(endpoint: str, audit_token: object, *, gh: str) -> object:
+    token = _require_audit_token(audit_token)
+    if not isinstance(gh, str) or not gh:
+        raise TagPolicyError("TAG_POLICY_GITHUB")
+    environment = os.environ.copy()
+    environment.pop("GITHUB_TOKEN", None)
+    environment.pop("GH_TOKEN", None)
+    environment["GH_TOKEN"] = token
     try:
         completed = subprocess.run(
-            [gh, "api", f"repos/{repository}/rulesets?per_page=100"], check=True,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            [gh, "api", "--method", "GET", endpoint], check=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment,
         )
     except (OSError, subprocess.CalledProcessError) as error:
         raise TagPolicyError("TAG_POLICY_GITHUB") from error
     return _load_json_bytes(completed.stdout)
+
+
+def read_tag_rulesets(repository: str, audit_token: object, *, gh: str = "gh") -> object:
+    """Read GitHub's ruleset summaries with the explicitly provisioned auditor."""
+    if repository != _CANONICAL_REPOSITORY:
+        raise TagPolicyError("TAG_POLICY_REPOSITORY")
+    return _read_api(f"repos/{repository}/rulesets?per_page=100", audit_token, gh=gh)
+
+
+def read_tag_ruleset_detail(repository: str, ruleset_id: int, audit_token: object,
+                             *, gh: str = "gh") -> object:
+    """Read one complete ruleset response after a summary-only list selection."""
+    if repository != _CANONICAL_REPOSITORY or type(ruleset_id) is not int or ruleset_id <= 0:
+        raise TagPolicyError("TAG_POLICY_REPOSITORY")
+    return _read_api(f"repos/{repository}/rulesets/{ruleset_id}", audit_token, gh=gh)
+
+
+def verify_live_tag_policy(repository: str, expected: object, *, audit_token: object,
+                           gh: str = "gh") -> None:
+    """Perform the two-request, GET-only live ruleset verification contract."""
+    ruleset_id = select_tag_ruleset_id(read_tag_rulesets(repository, audit_token, gh=gh), expected)
+    detail = read_tag_ruleset_detail(repository, ruleset_id, audit_token, gh=gh)
+    validate_tag_ruleset_detail(detail, expected, ruleset_id)

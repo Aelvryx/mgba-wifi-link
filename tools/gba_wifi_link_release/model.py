@@ -71,6 +71,7 @@ class ReleaseContract:
     standalone_sha256_assets: tuple[str, ...]
     public_text_assets: tuple[str, ...]
     file_mode: str
+    license_sha256: str
     zip_compression: str
     zip_compression_level: int
     zip_creator: str
@@ -95,6 +96,7 @@ def load_contract(path: Path) -> ReleaseContract:
         standalone_sha256_assets=tuple(data["standalone_sha256_assets"]),
         public_text_assets=tuple(data["public_text_assets"]),
         file_mode=data["file_mode"],
+        license_sha256=data["license_sha256"],
         zip_compression=data["zip"]["compression"],
         zip_compression_level=data["zip"]["compression_level"],
         zip_creator=data["zip"]["creator"],

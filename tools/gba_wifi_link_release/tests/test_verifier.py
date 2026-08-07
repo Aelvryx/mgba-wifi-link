@@ -4,6 +4,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
+import warnings
 import zipfile
 
 from tools.gba_wifi_link_release.packager import build_release
@@ -18,11 +19,11 @@ class VerifierTest(unittest.TestCase):
         build_release(package_tests.context(), maker.make_inputs(root), return_root)
         return return_root
 
-    def assert_rejected(self, mutate) -> None:
+    def assert_rejected(self, mutate, reason: str = "^VERIFY_") -> None:
         with tempfile.TemporaryDirectory() as directory:
             release = self.build(Path(directory))
             mutate(release)
-            with self.assertRaisesRegex(VerificationError, "^VERIFY_"):
+            with self.assertRaisesRegex(VerificationError, reason):
                 verify_release(release, package_tests.context())
 
     def test_verifier_accepts_fresh_release_and_returns_full_inventory(self):
@@ -58,6 +59,56 @@ class VerifierTest(unittest.TestCase):
             with zipfile.ZipFile(archive_path, "a") as archive:
                 archive.writestr("extra.txt", b"extra")
         self.assert_rejected(append_member)
+
+    def test_verifier_rejects_adversarial_archive_names_duplicates_and_types(self):
+        def rewrite(root: Path, transform) -> None:
+            path = root / "mgba-gba-wifi-link-v9.8.7-android-arm64.zip"
+            with zipfile.ZipFile(path) as original:
+                entries = [(entry, original.read(entry)) for entry in original.infolist()]
+            with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as rewritten:
+                for entry, data in transform(entries):
+                    rewritten.writestr(entry, data)
+
+        for name in ("../BUILD-PROVENANCE.json", "/BUILD-PROVENANCE.json"):
+            def unsafe_name(entries, name=name):
+                entry, data = entries[0]
+                entry.filename = name
+                return [(entry, data), *entries[1:]]
+            with self.subTest(name=name):
+                self.assert_rejected(lambda root, transform=unsafe_name: rewrite(root, transform))
+
+        def duplicate(entries):
+            return [entries[0], entries[0], *entries[1:]]
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Duplicate name:.*", category=UserWarning)
+            self.assert_rejected(lambda root: rewrite(root, duplicate))
+
+        for file_type in (0o120777, 0o020644):
+            def nonregular(entries, file_type=file_type):
+                entry, data = entries[0]
+                entry.external_attr = file_type << 16
+                return [(entry, data), *entries[1:]]
+            with self.subTest(file_type=oct(file_type)):
+                self.assert_rejected(lambda root, transform=nonregular: rewrite(root, transform))
+
+        def wrong_mode(entries):
+            entry, data = entries[0]
+            entry.external_attr = 0o100600 << 16
+            return [(entry, data), *entries[1:]]
+        self.assert_rejected(lambda root: rewrite(root, wrong_mode))
+
+    def test_verifier_independently_rejects_substituted_license_and_private_archive_text(self):
+        def rewrite_member(root: Path, member: str, data: bytes) -> None:
+            path = root / "mgba-gba-wifi-link-v9.8.7-android-arm64.zip"
+            with zipfile.ZipFile(path) as original:
+                entries = [(entry, original.read(entry)) for entry in original.infolist()]
+            with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as rewritten:
+                for entry, original_data in entries:
+                    rewritten.writestr(entry, data if entry.filename == member else original_data)
+
+        self.assert_rejected(lambda root: rewrite_member(root, "LICENSE", b"substituted\n"), "^VERIFY_LICENCE$")
+        self.assert_rejected(lambda root: rewrite_member(root, "LICENSE", b"private /secret/license\n"), "^VERIFY_LICENCE$")
+        self.assert_rejected(lambda root: rewrite_member(root, "SOURCE-AND-PROVENANCE.md", b"private /secret/path\n"), "^VERIFY_PRIVACY$")
 
     def test_verifier_rejects_stale_and_cyclic_manifests(self):
         self.assert_rejected(lambda root: (root / "INSTALL-AND-USAGE.md").write_text("stale\n", encoding="utf-8"))

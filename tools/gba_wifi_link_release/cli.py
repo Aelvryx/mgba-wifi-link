@@ -100,14 +100,25 @@ def _inputs(args: argparse.Namespace) -> PackageInputs:
     return PackageInputs(*(Path(path) for path in paths[:-1]), Path(paths[-1]).read_bytes())
 
 
-def _build_atomic(context: ReleaseContext, inputs: PackageInputs, output: Path) -> None:
+def _build_atomic(context: ReleaseContext, inputs: PackageInputs, output: Path,
+                  *, before_reserve=None) -> None:
     if output.exists() or output.is_symlink() or not output.parent.is_dir():
         raise ValueError("CLI_OUTPUT")
     staging_parent = Path(tempfile.mkdtemp(prefix=f".{output.name}.", dir=output.parent))
     staging = staging_parent / output.name
     try:
         build_release(context, inputs, staging)
-        os.rename(staging, output)
+        if before_reserve is not None:
+            before_reserve()
+        try:
+            # mkdir is an atomic no-replace reservation of the final pathname.
+            output.mkdir(mode=0o700)
+        except OSError as error:
+            raise ValueError("CLI_OUTPUT") from error
+        for staged_file in staging.iterdir():
+            os.rename(staged_file, output / staged_file.name)
+        staging.rmdir()
+        verify_release(output, context)
     finally:
         shutil.rmtree(staging_parent, ignore_errors=True)
 

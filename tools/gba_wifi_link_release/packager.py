@@ -80,18 +80,19 @@ def _render_template(template: bytes, context: ReleaseContext) -> bytes:
     return _normal_text(text.encode("utf-8"))
 
 
-def _zip_epoch(epoch: int) -> tuple[int, int, int, int, int, int]:
-    if type(epoch) is not int or epoch < 315532800 or epoch > 4354819198:
+def zip_timestamp(epoch: int) -> tuple[int, int, int, int, int, int]:
+    """Encode an epoch as ZIP's canonical two-second-resolution UTC stamp."""
+    if type(epoch) is not int or epoch < 315532800 or epoch > 4354819199:
         raise PackageError("PACKAGE_EPOCH")
     stamp = time.gmtime(epoch)[:6]
     if stamp[0] < 1980 or stamp[0] > 2107:
         raise PackageError("PACKAGE_EPOCH")
-    return stamp
+    return (*stamp[:5], stamp[5] & ~1)
 
 
 def zip_info(name: str, epoch: int) -> zipfile.ZipInfo:
     """Make one byte-stable Unix regular-file ZIP member descriptor."""
-    info = zipfile.ZipInfo(name, _zip_epoch(epoch))
+    info = zipfile.ZipInfo(name, zip_timestamp(epoch))
     info.create_system = 3
     info.external_attr = 0o100644 << 16
     info.compress_type = zipfile.ZIP_DEFLATED
@@ -120,6 +121,17 @@ def _contract_names(context: ReleaseContext) -> tuple[str, ...]:
     return tuple(name.replace("{tag}", context.tag) for name in load_contract(CONTRACT_PATH).public_assets)
 
 
+def canonical_license(contract) -> bytes:
+    """Return the contract-pinned, normalized tracked MPL-2.0 text."""
+    try:
+        data = _normal_text((ROOT / "LICENSE").read_bytes())
+    except OSError as error:
+        raise PackageError("PACKAGE_LICENCE") from error
+    if hashlib.sha256(data).hexdigest() != contract.license_sha256:
+        raise PackageError("PACKAGE_LICENCE")
+    return data
+
+
 def build_release(context: ReleaseContext, inputs: PackageInputs, output_dir: Path) -> ReleaseSet:
     """Build exactly the contract's release files in an initially absent directory."""
     contract = load_contract(CONTRACT_PATH)
@@ -133,6 +145,9 @@ def build_release(context: ReleaseContext, inputs: PackageInputs, output_dir: Pa
     test = _read_regular(inputs.test_fixture)
     continuous = _read_regular(inputs.continuous_fixture)
     licence = _read_regular(inputs.licence, text=True)
+    expected_licence = canonical_license(contract)
+    if licence != expected_licence:
+        raise PackageError("PACKAGE_LICENCE")
     install = _render_template(_read_regular(inputs.install_template, text=True), context)
     source = _render_template(_read_regular(inputs.source_template, text=True), context)
     if (
@@ -146,7 +161,7 @@ def build_release(context: ReleaseContext, inputs: PackageInputs, output_dir: Pa
         "gba-link-test.gba": test,
         "gba-link-continuous.gba": continuous,
         "INSTALL-AND-USAGE.md": install,
-        "LICENSE": licence,
+        "LICENSE": expected_licence,
         "SOURCE-AND-PROVENANCE.md": source,
     }
     siblings = tuple(_asset(name, raw[name]) for name in contract.build_provenance_siblings)

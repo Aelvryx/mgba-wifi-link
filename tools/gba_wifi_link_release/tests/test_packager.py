@@ -19,7 +19,9 @@ from tools.gba_wifi_link_release.packager import (
     PackageError,
     PackageInputs,
     build_release,
+    zip_timestamp,
 )
+from tools.gba_wifi_link_release.verifier import VerificationError
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -54,14 +56,19 @@ class PackageTest(unittest.TestCase):
         (source / "mgba_libretro_android.so").write_bytes(b"synthetic core\r\n")
         (source / "gba-link-test.gba").write_bytes(b"test fixture\n")
         (source / "gba-link-continuous.gba").write_bytes(b"continuous fixture\n")
-        (source / "LICENSE").write_bytes(b"licence trailing  \r\nsecond\t\r\n")
+        licence = b"\n".join(line.rstrip(b" \t") for line in (ROOT / "LICENSE").read_bytes().splitlines()) + b"\n"
+        (source / "LICENSE").write_bytes(licence.replace(b"\n", b"\r\n"))
+        install_template = source / "INSTALL-AND-USAGE.md.in"
+        source_template = source / "SOURCE-AND-PROVENANCE.md.in"
+        install_template.write_bytes(TEMPLATES.joinpath("INSTALL-AND-USAGE.md.in").read_bytes())
+        source_template.write_bytes(TEMPLATES.joinpath("SOURCE-AND-PROVENANCE.md.in").read_bytes())
         return PackageInputs(
             core=source / "mgba_libretro_android.so",
             test_fixture=source / "gba-link-test.gba",
             continuous_fixture=source / "gba-link-continuous.gba",
             licence=source / "LICENSE",
-            install_template=TEMPLATES / "INSTALL-AND-USAGE.md.in",
-            source_template=TEMPLATES / "SOURCE-AND-PROVENANCE.md.in",
+            install_template=install_template,
+            source_template=source_template,
             release_notes=b"Reviewed synthetic release notes.\n",
         )
 
@@ -107,6 +114,26 @@ class PackageTest(unittest.TestCase):
                 self.assertTrue(all(member.compress_type == zipfile.ZIP_DEFLATED for member in members))
             self.assertTrue(all(stat.S_IMODE(path.stat().st_mode) == 0o644 for path in release.iterdir()))
 
+    def test_zip_timestamp_uses_dos_two_second_precision_at_odd_and_boundary_epochs(self):
+        self.assertEqual(zip_timestamp(1_700_000_001), (2023, 11, 14, 22, 13, 20))
+        self.assertEqual(zip_timestamp(315_532_800), (1980, 1, 1, 0, 0, 0))
+        self.assertEqual(zip_timestamp(4_354_819_199), (2107, 12, 31, 23, 59, 58))
+        for epoch in (315_532_799, 4_354_819_200):
+            with self.subTest(epoch=epoch):
+                with self.assertRaisesRegex(PackageError, "^PACKAGE_EPOCH$"):
+                    zip_timestamp(epoch)
+
+    def test_build_freezes_normalized_mpl_license_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            inputs = self.make_inputs(root)
+            (root / "input/LICENSE").write_text("substituted license\n", encoding="utf-8")
+            with self.assertRaisesRegex(PackageError, "^PACKAGE_LICENCE$"):
+                build_release(context(), inputs, root / "release")
+            (root / "input/LICENSE").write_text("private /secret/license\n", encoding="utf-8")
+            with self.assertRaisesRegex(PackageError, "^PACKAGE_LICENCE$"):
+                build_release(context(), inputs, root / "private")
+
     def test_build_rejects_unrepresentable_zip_epoch_and_unsafe_inputs(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -151,6 +178,34 @@ class PackageTest(unittest.TestCase):
             with redirect_stderr(StringIO()):
                 self.assertNotEqual(main(["build", "--fixture", "synthetic", "--output", str(output)]), 0)
 
+    def test_atomic_build_reserves_an_absent_final_path_without_overwriting_a_racer(self):
+        from tools.gba_wifi_link_release.cli import _build_atomic
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "release"
+
+            def racer() -> None:
+                output.mkdir()
+                (output / "racer-marker").write_text("preserve\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "^CLI_OUTPUT$"):
+                _build_atomic(context(), self.make_inputs(root), output, before_reserve=racer)
+            self.assertEqual((output / "racer-marker").read_text(encoding="utf-8"), "preserve\n")
+
+    def test_two_clean_synthetic_cli_runs_are_byte_identical(self):
+        from tools.gba_wifi_link_release.cli import main
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            left, right = root / "left", root / "right"
+            self.assertEqual(main(["build", "--fixture", "synthetic", "--output", str(left)]), 0)
+            self.assertEqual(main(["build", "--fixture", "synthetic", "--output", str(right)]), 0)
+            self.assertEqual(
+                {path.name: path.read_bytes() for path in left.iterdir()},
+                {path.name: path.read_bytes() for path in right.iterdir()},
+            )
+
     def test_standalone_cli_script_imports_from_the_checkout_root(self):
         with tempfile.TemporaryDirectory() as directory:
             result = subprocess.run(
@@ -159,3 +214,36 @@ class PackageTest(unittest.TestCase):
                 cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_declared_input_changes_alter_the_release_or_are_rejected(self):
+        cases = (
+            ("core", b"changed core\n", None),
+            ("test_fixture", b"changed test fixture\n", None),
+            ("continuous_fixture", b"changed continuous fixture\n", None),
+            ("install_template", b"\nChanged install text.\n", "VERIFY_STALE"),
+            ("source_template", b"\nChanged source text.\n", "VERIFY_STALE"),
+            ("licence", b"substituted licence\n", "PACKAGE_LICENCE"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline_inputs = self.make_inputs(root)
+            build_release(context(), baseline_inputs, root / "baseline")
+            baseline = (root / "baseline/mgba-gba-wifi-link-v9.8.7-android-arm64.zip").read_bytes()
+            for field, suffix, rejection in cases:
+                with self.subTest(field=field), tempfile.TemporaryDirectory(dir=root) as case_directory:
+                    case_root = Path(case_directory)
+                    inputs = self.make_inputs(case_root)
+                    path = getattr(inputs, field)
+                    path.write_bytes(path.read_bytes() + suffix)
+                    if rejection == "PACKAGE_LICENCE":
+                        with self.assertRaisesRegex(PackageError, "^PACKAGE_LICENCE$"):
+                            build_release(context(), inputs, case_root / "release")
+                    elif rejection == "VERIFY_STALE":
+                        with self.assertRaisesRegex(VerificationError, "^VERIFY_STALE$"):
+                            build_release(context(), inputs, case_root / "release")
+                    else:
+                        build_release(context(), inputs, case_root / "release")
+                        self.assertNotEqual(
+                            baseline,
+                            (case_root / "release/mgba-gba-wifi-link-v9.8.7-android-arm64.zip").read_bytes(),
+                        )

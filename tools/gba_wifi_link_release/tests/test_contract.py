@@ -54,6 +54,7 @@ class ContractTest(unittest.TestCase):
 
     def test_contract_exposes_normalized_archive_and_checksum_rules(self):
         contract = load_contract(CONTRACT)
+        self.assertEqual(contract.license_sha256, "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5")
         self.assertEqual(
             contract.archive_members,
             (

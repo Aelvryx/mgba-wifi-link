@@ -2,13 +2,14 @@
 
 from pathlib import Path
 import stat
-import time
 import zipfile
 
 from .model import ReleaseAsset, ReleaseContext, ReleaseSet, load_contract
-from .packager import CONTRACT_PATH, _asset, _render_template, _sums
+from .packager import (CONTRACT_PATH, PackageError, _asset, _render_template,
+                       _sums, canonical_license, zip_timestamp)
 from .privacy import PrivacyError, validate_public_tree
 from .provenance import build_provenance, release_provenance
+from .text_policy import classify_private_text
 
 
 class VerificationError(ValueError):
@@ -44,7 +45,10 @@ def _check_sums(data: bytes, expected: tuple[tuple[str, bytes], ...]) -> None:
 
 def _check_archive(data: bytes, context: ReleaseContext, public: dict[str, bytes]) -> None:
     contract = load_contract(CONTRACT_PATH)
-    expected_stamp = time.gmtime(context.source_date_epoch)[:6]
+    try:
+        expected_stamp = zip_timestamp(context.source_date_epoch)
+    except PackageError as error:
+        raise VerificationError("VERIFY_ARCHIVE") from error
     try:
         from io import BytesIO
         with zipfile.ZipFile(BytesIO(data)) as archive:
@@ -67,6 +71,20 @@ def _check_archive(data: bytes, context: ReleaseContext, public: dict[str, bytes
                 raw[entry.filename] = archive.read(entry)
     except (OSError, zipfile.BadZipFile) as error:
         raise VerificationError("VERIFY_ARCHIVE") from error
+    for name in ("BUILD-PROVENANCE.json", "INSTALL-AND-USAGE.md", "SHA256SUMS",
+                 "SOURCE-AND-PROVENANCE.md"):
+        try:
+            text = raw[name].decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise VerificationError("VERIFY_PRIVACY") from error
+        if "\r" in text or classify_private_text(text):
+            _fail("VERIFY_PRIVACY")
+    try:
+        expected_licence = canonical_license(contract)
+    except PackageError as error:
+        raise VerificationError("VERIFY_LICENCE") from error
+    if raw["LICENSE"] != expected_licence:
+        _fail("VERIFY_LICENCE")
     if raw["mgba_libretro_android.so"] != public["mgba_libretro_android.so"] or raw["gba-link-test.gba"] != public["gba-link-test.gba"] or raw["gba-link-continuous.gba"] != public["gba-link-continuous.gba"] or raw["INSTALL-AND-USAGE.md"] != public["INSTALL-AND-USAGE.md"]:
         _fail("VERIFY_ARCHIVE")
     expected_source = _render_template(

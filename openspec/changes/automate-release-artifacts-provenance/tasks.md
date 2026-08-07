@@ -111,16 +111,16 @@
 
 ## 6. Compose protected CI and the tag-triggered release workflow
 
-- [ ] 6.1 Pin every third-party action used by the privileged or artifact-producing
+- [x] 6.1 Pin every third-party action used by the privileged or artifact-producing
   release path to a reviewed full commit SHA and record the human-readable action
   version in provenance.
-- [ ] 6.2 Refactor the protected CI workflow into a reusable form without changing
+- [x] 6.2 Refactor the protected CI workflow into a reusable form without changing
   its pull-request or protected-`master` triggers, job definitions, sanitizer
   settings, fixture behavior, target counts, or pinned upstream exception.
-- [ ] 6.3 Add regression/static checks proving the six protected jobs still run for
+- [x] 6.3 Add regression/static checks proving the six protected jobs still run for
   pull requests and `master`, and the reusable invocation checks out and tests the
   caller's exact peeled tag commit.
-- [ ] 6.4 Make the Android protected job upload its inspected core and canonical
+- [x] 6.4 Make the Android protected job upload its inspected core and canonical
   build metadata through a fixed artifact contract without granting write
   permissions.
 - [ ] 6.5 Add a second independent clean Android build job with the same pinned

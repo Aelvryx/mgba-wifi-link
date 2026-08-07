@@ -73,9 +73,12 @@ Every candidate-validating command (`preflight`, `stage`, `launch`, and
 `EXPECTED_RELEASE_TAG`, `EXPECTED_CORE_SHA256`, and
 `EXPECTED_CORE_VERSION`; the helper deliberately has no stale candidate
 defaults. Recovery commands (`capture`, `stop`, and `cleanup`) need only the
-validated run ID and device/path contract, so an interrupted run can always be
-collected or removed safely. `CORE_PATH` may override the canonical local build
-path.
+validated run ID, `P0_SERIAL`, `P1_SERIAL`, and device/path contract, so an
+interrupted run can always be collected or removed safely. Candidate-validating
+commands additionally require `P0_CONTROLLER` and `P1_CONTROLLER`, populated
+from the private endpoints' real RetroArch Autoconf names. The helper contains
+no public device serial or controller default. `CORE_PATH` may override the
+canonical local build path.
 
 Every qualification config must clone that device's current normal config and
 change only the isolated save/state/log paths, autosave/config persistence, and
@@ -96,15 +99,15 @@ core-option changes into the normal RetroArch configuration tree.
 
 After launch, the human presses one physical button on each handheld. Do not
 hand off the run until `check-controls` confirms the latest effective
-assignment is `Ayn Odin` on Thor port 1 and `Ayn Odin (Xbox Mode)` on Odin port
-1, and a private screenshot proves that both touchscreen overlays are visible.
-`Virtual` on port 1, an AYN controller displaced to a later port, or a stale
-historical assignment all fail closed. The same check also verifies the exact
-RetroArch build, content CRC, app-private core path, the schema-1 structured
-GBA Wi-Fi Link product/protocol record, absence of a structured failure record,
-isolated runtime paths, and remote hashes. Friendly registration and failure
-sentences are display-only and are not qualification evidence. If validation
-fails, stop and relaunch without ADB
+assignment matches each endpoint's manifest-declared physical controller on
+port 1, and a private screenshot proves that both touchscreen overlays are
+visible. `Virtual` on port 1, the expected controller displaced to a later
+port, or a stale historical assignment all fail closed. The same check also
+verifies the exact RetroArch build, content CRC, app-private core path, the
+schema-1 structured GBA Wi-Fi Link product/protocol record, absence of a
+structured failure record, isolated runtime paths, and remote hashes. Friendly
+registration and failure sentences are display-only and are not qualification
+evidence. If validation fails, stop and relaunch without ADB
 input injection. Do not improvise controller indices, hotkeys, menu drivers,
 or tap sequences.
 

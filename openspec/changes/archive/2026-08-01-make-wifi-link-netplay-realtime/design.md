@@ -2,7 +2,7 @@
 
 The protocol-v1 implementation distributes the GBA cable itself. Player zero leads virtual time and every MULTI word passes through `TRANSFER_START`, `TRANSFER_READY`, `TRANSFER_COMMIT`, completion catch-up, completion decision, and final acknowledgement barriers. This produces deterministic hardware behavior and strong failure handling, but the cable becomes limited by Wi-Fi latency rather than the emulated GBA serial clock.
 
-A two-device qualification run on the Odin/Thor pair measured two distinct problems:
+A two-device qualification run on the physical Android pair measured two distinct problems:
 
 - With no active cable traffic, each single-flight frame grant covered 280,896 GBA cycles and took a mean of about 28.75 ms to acknowledge. The GBA advanced at about 29.5 frames per second while RetroArch called `retro_run()` at about 120 calls per second. Blocked calls returned cached video with little or no audio, causing frequent Android `AudioTrack` stop/restart behavior and badly warped audio.
 - During the Four Swords linking screen, 2,803 successful serial words took 167.8 seconds: 16.7 words per second. One successful word required roughly three network round trips and completed in a median 44 ms. No timeout or protocol fault occurred; the design was operating correctly and was still functionally unplayable.
@@ -185,7 +185,7 @@ signals are prepared before the human run so one pass captures useful evidence.
 
 ## Migration Plan
 
-1. Preserve the approved protocol-v1 branch and captured Odin/Thor evidence as the baseline.
+1. Preserve the approved protocol-v1 branch and captured two-device evidence as the baseline.
 2. Add the bounded in-call v1 grant rendezvous plus an automated audio/frame-pacing regression.
 3. Implement and measure the transport-independent two-core feasibility spike on Linux and both Android devices.
 4. If the spike passes, add the replica bundle codec and pair construction tests without changing the default runtime.
@@ -201,7 +201,7 @@ Rollback before step 8 is selecting the unchanged v1 runtime. Rollback after ste
 
 - Which scheduler candidate meets the Android real-time and teardown gates with the smallest upstream-facing change?
 - What is the smallest canonical replica bundle that round-trips every supported GBA save type and RTC mode without embedding frontend state?
-- What fixed input-delay bounds are justified by the measured Odin/Thor Wi-Fi jitter, and should the initial choice be immutable for the session?
+- What fixed input-delay bounds are justified by the measured two-device Wi-Fi jitter, and should the initial choice be immutable for the session?
 - Which canonical core-state fields provide a stable, inexpensive divergence hash across supported Android ABIs?
 - Can shadow video rendering be disabled safely, or must it render into a small private buffer to preserve timing behavior?
 

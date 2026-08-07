@@ -15,10 +15,10 @@ readonly PACKAGE="${PACKAGE:-com.retroarch.aarch64}"
 readonly ACTIVITY="${ACTIVITY:-${PACKAGE}/com.retroarch.browser.retroactivity.RetroActivityFuture}"
 readonly INTERNAL_CORE="${INTERNAL_CORE:-/data/user/0/${PACKAGE}/cores/mgba_libretro_android.so}"
 readonly CONTENT="${CONTENT:-/sdcard/Roms/gba/The Legend of Zelda - A Link to the Past & Four Swords.zip}"
-readonly THOR_SERIAL="${THOR_SERIAL:-11c5b80}"
-readonly ODIN_SERIAL="${ODIN_SERIAL:-6986c674}"
-readonly THOR_CONTROLLER="${THOR_CONTROLLER:-Ayn Odin}"
-readonly ODIN_CONTROLLER="${ODIN_CONTROLLER:-Ayn Odin (Xbox Mode)}"
+readonly P0_SERIAL="${P0_SERIAL:-}"
+readonly P1_SERIAL="${P1_SERIAL:-}"
+readonly P0_CONTROLLER="${P0_CONTROLLER:-}"
+readonly P1_CONTROLLER="${P1_CONTROLLER:-}"
 readonly EXPECTED_LATENCY_POLICY="${EXPECTED_LATENCY_POLICY:-stable}"
 readonly EXPECTED_SELECTED_DELAY="${EXPECTED_SELECTED_DELAY:-2}"
 
@@ -27,7 +27,7 @@ if [[ -n "${ADB:-}" ]]; then
 elif command -v adb >/dev/null 2>&1; then
   readonly ADB_BIN="$(command -v adb)"
 else
-  readonly ADB_BIN="/var/home/anthony/Android/Sdk/platform-tools/adb"
+  readonly ADB_BIN=""
 fi
 
 readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -45,6 +45,10 @@ Commands: preflight, stage, launch, check-controls, capture, stop, cleanup
 The ignored <run>/manifest.json file is mandatory. The exact core must first
 be installed through RetroArch's human-owned core-installation flow; Android
 does not permit ADB to hash the resulting app-private file.
+
+Set P0_SERIAL and P1_SERIAL to the private ADB endpoint serials. Candidate-
+validating commands also require P0_CONTROLLER and P1_CONTROLLER to match the
+physical controller names emitted by each endpoint's RetroArch log.
 
 Never use `adb shell input` during this workflow. Android's synthetic Virtual
 controller can claim RetroArch port 1 and displace the handheld controls.
@@ -66,6 +70,32 @@ require_candidate_identity() {
   }
   [[ -n "$EXPECTED_CORE_VERSION" ]] || {
     echo "set EXPECTED_CORE_VERSION to the embedded candidate identity" >&2
+    exit 2
+  }
+  [[ -n "$P0_CONTROLLER" ]] || {
+    echo "set P0_CONTROLLER to the host endpoint's expected physical controller" >&2
+    exit 2
+  }
+  [[ -n "$P1_CONTROLLER" ]] || {
+    echo "set P1_CONTROLLER to the client endpoint's expected physical controller" >&2
+    exit 2
+  }
+}
+
+require_endpoint_serials() {
+  [[ -n "$P0_SERIAL" ]] || {
+    echo "set P0_SERIAL to the host endpoint's private ADB serial" >&2
+    exit 2
+  }
+  [[ -n "$P1_SERIAL" ]] || {
+    echo "set P1_SERIAL to the client endpoint's private ADB serial" >&2
+    exit 2
+  }
+}
+
+require_adb() {
+  [[ -n "$ADB_BIN" ]] || {
+    echo "adb was not found; install it or set ADB to its executable path" >&2
     exit 2
   }
 }
@@ -107,8 +137,8 @@ assert_path_contract() {
 
 for_each_device() {
   local callback=$1
-  "$callback" "$THOR_SERIAL" thor "$THOR_CONTROLLER" 0
-  "$callback" "$ODIN_SERIAL" odin "$ODIN_CONTROLLER" 1
+  "$callback" "$P0_SERIAL" p0 "$P0_CONTROLLER" 0
+  "$callback" "$P1_SERIAL" p1 "$P1_CONTROLLER" 1
 }
 
 assert_device() {
@@ -169,11 +199,11 @@ validate_local_inputs() {
     --frontend-package-version "$EXPECTED_FRONTEND_PACKAGE_VERSION" \
     --package "$PACKAGE" --content-crc32 "$EXPECTED_CONTENT_CRC32" \
     --rom-sha256 "$EXPECTED_ROM_SHA256" \
-    --thor-serial "$THOR_SERIAL" --odin-serial "$ODIN_SERIAL" \
-    --thor-controller "$THOR_CONTROLLER" --odin-controller "$ODIN_CONTROLLER" \
+    --p0-serial "$P0_SERIAL" --p1-serial "$P1_SERIAL" \
+    --p0-controller "$P0_CONTROLLER" --p1-controller "$P1_CONTROLLER" \
     --latency-policy "$EXPECTED_LATENCY_POLICY" \
     --selected-delay "$EXPECTED_SELECTED_DELAY"
-  for name in thor odin; do
+  for name in p0 p1; do
     cfg="$root/device-snapshots/$name-qualification.cfg"
     python3 "$VALIDATOR" config --config "$cfg" \
       --options "$root/device-snapshots/$name-mgba-qualification.opt" \
@@ -346,6 +376,8 @@ main() {
       ;;
   esac
   require_run_id
+  require_endpoint_serials
+  require_adb
   assert_path_contract
   case "$command" in
     preflight)

@@ -75,11 +75,11 @@ frontend controller mappings.
 uses a minimum two-frame input buffer. **Auto (Low Latency, Experimental)** may
 permit one frame, but the measured path may still select two or more.
 
-The Thor/Odin mesh-Wi-Fi qualification selected two frames under both policies.
-A subsequent direct 5 GHz Android-hotspot run selected one frame and preserved
-correct execution, but its rare input waits exceeded the bilateral publication
-limits. Stable therefore remains the default; Low Latency remains an honest
-opt-in experiment rather than a universal promise.
+Physical-device playtesting over mesh Wi-Fi selected two frames under both
+policies. A subsequent direct 5 GHz Android-hotspot run selected one frame and
+preserved correct execution, but its rare input waits exceeded the bilateral
+publication limits. Stable therefore remains the default; Low Latency remains
+an honest opt-in experiment rather than a universal promise.
 
 ## Saves and states
 

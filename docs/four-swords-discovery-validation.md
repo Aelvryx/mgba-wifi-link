@@ -16,8 +16,8 @@ delta-requirement review at task 4.9.
 | Core size | 8,043,736 bytes |
 | Core SHA-256 | `14978106a3978ab4ef6ec025add82e0e9a38decda72404e3dc8c02b3373f179d` |
 | Frontend | Stock RetroArch `1.22.2_GIT`, package `com.retroarch.aarch64` |
-| Thor | AYN Thor, ADB `11c5b80`, Android 13; live identity reconfirmed 2026-08-01 |
-| Odin | AYN Odin2 Portal, ADB `6986c674`, Android 13; live identity reconfirmed 2026-08-01 |
+| P0 | Android 13 host endpoint; live role and platform identity reconfirmed 2026-08-01 |
+| P1 | Android 13 client endpoint; live role and platform identity reconfirmed 2026-08-01 |
 | Current Four Swords status | Verified: topology-settled alpha.2 completed discovery and brief shared gameplay |
 
 The exact artifact above was hash-verified in each app-specific staging
@@ -62,12 +62,12 @@ No result from this run directly authorizes production behavior changes.
 
 ## Alpha.2 qualification result
 
-Run `20260801-110213-alpha2-four-swords` connected the Thor host before the
-Four Swords cable menu and joined the Odin as player two. Both devices left
+Run `20260801-110213-alpha2-four-swords` connected the host before the Four
+Swords cable menu and joined the client as player two. Both devices left
 discovery, displayed both logical players in the same shared game, accepted
 their respective physical controls, and retained normal animation and audio
-during the human-owned gameplay window. Final screenshots independently show
-the same two-player room from each role.
+during the playtesting window. Final screenshots independently show the same
+two-player room from each role.
 
 The strict commercial-log analyzer reported:
 
@@ -88,10 +88,10 @@ commercial evidence remains only in the ignored private run directory.
 
 | Private evidence | SHA-256 |
 | --- | --- |
-| Thor core log | `35188a76adc949ca894492628c6d24cb35f61f876b2ed9ae20a8a2720a28eadc` |
-| Odin core log | `caed28d74130d2be33c78fc647b97da25087d2b7fabc1db0fae50d70c1d088dd` |
-| Thor terminal screenshot | `53e9f758ae10856b132a1c4628ae365301efcf954f60be3183164ce126dba3b6` |
-| Odin terminal screenshot | `b006fa9beef9d98b9f4500907f7a73b62c4830625a82b888715f46229513c632` |
+| P0 core log | `35188a76adc949ca894492628c6d24cb35f61f876b2ed9ae20a8a2720a28eadc` |
+| P1 core log | `caed28d74130d2be33c78fc647b97da25087d2b7fabc1db0fae50d70c1d088dd` |
+| P0 terminal screenshot | `53e9f758ae10856b132a1c4628ae365301efcf954f60be3183164ce126dba3b6` |
+| P1 terminal screenshot | `b006fa9beef9d98b9f4500907f7a73b62c4830625a82b888715f46229513c632` |
 | Both pre/post isolated saves | `8897fe438b05596b4852cb5a8cfc38305e1f61b027571bb1f7f4267d23179627` |
 
 The already-present redistributable regression
@@ -112,20 +112,15 @@ cost.
 
 The first 2026-08-01 staging attempt used an injected Android key while
 RetroArch was running. Android exposed that event as a synthetic `Virtual`
-controller, which RetroArch assigned ahead of the Thor's physical controls.
-The log showed `Virtual` as the fallback device and the real `Ayn Odin`
-controller in port 2. That attempt was stopped before qualification and is not
-valid evidence about Four Swords.
+controller, which RetroArch assigned ahead of the host endpoint's physical
+controls. The log showed `Virtual` as the fallback device and the expected
+physical controller in port 2. That attempt was stopped before qualification
+and is not valid evidence about Four Swords.
 
 The clean rerun introduced no ADB input. Both device-native configurations
 were retained, the existing touchscreen overlay was made visible on both
-endpoints as a fallback, and the controller gate required these log records
-before handoff:
-
-```text
-Thor: Ayn Odin configured in port 1.
-Odin: Ayn Odin (Xbox Mode) configured in port 1.
-```
+endpoints as a fallback, and the controller gate required each endpoint's
+manifest-declared physical controller on port 1 before handoff.
 
 The checked workflow is
 `tools/four-swords-discovery/android-qualification.sh`. Future physical runs

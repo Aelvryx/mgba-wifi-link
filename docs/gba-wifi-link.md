@@ -119,9 +119,10 @@ contract. Older configurations may still contain an
 `mgba_gba_link_netplay_runtime` line with any value; the core no longer
 declares or queries that key, so the line is inert and may be removed.
 
-The recorded Thor/Odin mesh-Wi-Fi run selected two frames under both policies.
-That is the current qualified outcome: Low Latency was active, but its clean
-calibration correctly declined to commit one frame on that network path.
+Physical-device playtesting over mesh Wi-Fi selected two frames under both
+policies. That is the current qualified outcome: Low Latency was active, but
+its clean calibration correctly declined to commit one frame on that network
+path.
 
 RetroArch assigns Netpacket client ID zero to the host and one to the client.
 The core maps those roles to GBA P0/primary and P1/secondary respectively.
@@ -135,14 +136,13 @@ not open a separate socket or provide another address.
 
 An Android local hotspot is also an ordinary supported IP LAN: one handheld
 hosts the hotspot and Netplay server, the other joins it, and the client uses
-the hotspot owner's address. A controlled Thor/Odin run over a direct 5 GHz
-hotspot selected one frame and remained correct, but occasional input waits
-still exceeded the low-latency publication limits. A hotspot can remove a
-router or mesh hop; it does not guarantee lower scheduling or radio jitter, so
-calibration remains authoritative. Wi-Fi Direct is present on the qualified
-devices, but stock RetroArch does not create or manage a Wi-Fi Direct group;
-Android would first need to expose such a link as mutually reachable IP
-interfaces.
+the hotspot owner's address. Controlled two-device playtesting over a direct
+5 GHz hotspot selected one frame and remained correct, but occasional input
+waits still exceeded the low-latency publication limits. A hotspot can remove
+a router or mesh hop; it does not guarantee lower scheduling or radio jitter,
+so calibration remains authoritative. Stock RetroArch does not create or
+manage a Wi-Fi Direct group; Android would first need to expose such a link as
+mutually reachable IP interfaces.
 
 Connect before entering the game's cable menu, but after both devices have
 loaded content. In games with leader-driven menus, player two may show `WAIT`
@@ -290,7 +290,7 @@ is neither repeatable automation nor effective manual play.
 Never use `adb shell input`, injected key events, or injected taps before or
 during a controller-qualified RetroArch process. Android exposes those events
 through a synthetic `Virtual` input device. RetroArch can assign that device to
-port 1 and move the handheld's physical AYN controller to port 2, leaving the
+port 1 and move the handheld's physical controller to port 2, leaving the
 game apparently unresponsive despite an otherwise valid configuration.
 
 For every human-assisted Android run:
@@ -302,17 +302,18 @@ For every human-assisted Android run:
    without changing its layout or physical bindings.
 4. Launch content directly without any ADB input injection.
 5. Have the human press one physical button on each device.
-6. Require the log to show the real AYN controller `configured in port 1` on
-   each endpoint and capture one private screenshot proving both overlays are
-   visible.
+6. Require the log to show the manifest-declared physical controller
+   `configured in port 1` on each endpoint and capture one private screenshot
+   proving both overlays are visible.
 7. Only then perform host/join and game navigation. On this stock Android
    frontend, host/join remains human-owned; do not replace it with improvised
    hotkeys or menu-driving automation.
 
-If a log instead shows `Virtual ... configured` or the AYN device in port 2,
-stop RetroArch and relaunch cleanly. Do not compensate by changing the joypad
-index: the injected virtual device is transient and the workaround will break
-the next clean launch. The Four Swords change provides the checked helper at
+If a log instead shows `Virtual ... configured` or the expected physical
+controller in port 2, stop RetroArch and relaunch cleanly. Do not compensate by
+changing the joypad index: the injected virtual device is transient and the
+workaround will break the next clean launch. The Four Swords change provides
+the checked helper at
 `tools/four-swords-discovery/android-qualification.sh`.
 
 ## Current validation

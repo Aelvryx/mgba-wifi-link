@@ -185,16 +185,16 @@ def validate_manifest(args: argparse.Namespace) -> None:
         _fail("manifest must contain exactly two device records")
     by_name: dict[str, dict[str, Any]] = {}
     for device in devices:
-        if not isinstance(device, dict) or device.get("name") not in ("thor", "odin"):
-            _fail("device records must be named thor and odin")
+        if not isinstance(device, dict) or device.get("name") not in ("p0", "p1"):
+            _fail("device records must be named p0 and p1")
         name = device["name"]
         if name in by_name:
             _fail(f"duplicate device record: {name}")
         by_name[name] = device
 
     expected_devices = {
-        "thor": (args.thor_serial, args.thor_controller, "host"),
-        "odin": (args.odin_serial, args.odin_controller, "client"),
+        "p0": (args.p0_serial, args.p0_controller, "host"),
+        "p1": (args.p1_serial, args.p1_controller, "client"),
     }
     for name, (serial, controller, role) in expected_devices.items():
         if name not in by_name:
@@ -503,10 +503,10 @@ def build_parser() -> argparse.ArgumentParser:
     manifest.add_argument("--package", required=True)
     manifest.add_argument("--content-crc32", required=True)
     manifest.add_argument("--rom-sha256", required=True)
-    manifest.add_argument("--thor-serial", required=True)
-    manifest.add_argument("--odin-serial", required=True)
-    manifest.add_argument("--thor-controller", required=True)
-    manifest.add_argument("--odin-controller", required=True)
+    manifest.add_argument("--p0-serial", required=True)
+    manifest.add_argument("--p1-serial", required=True)
+    manifest.add_argument("--p0-controller", required=True)
+    manifest.add_argument("--p1-controller", required=True)
     manifest.add_argument("--latency-policy", choices=sorted(LATENCY_POLICIES), required=True)
     manifest.add_argument("--selected-delay", type=int, choices=range(1, 9), required=True)
     manifest.set_defaults(handler=validate_manifest)

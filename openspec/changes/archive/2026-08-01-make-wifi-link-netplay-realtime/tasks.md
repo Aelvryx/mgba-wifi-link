@@ -1,6 +1,6 @@
 ## 1. Preserve the measured baseline
 
-- [x] 1.1 Add a sanitized diagnostic report for the Odin/Thor runs with exact packet counts, grant RTTs, emulated-frame rate, serial-word rate, transfer-phase latency, audio starvation, CPU, and Wi-Fi observations.
+- [x] 1.1 Add a sanitized diagnostic report for the two-device runs with exact packet counts, grant RTTs, emulated-frame rate, serial-word rate, transfer-phase latency, audio starvation, CPU, and Wi-Fi observations.
 - [x] 1.2 Add a reusable log-analysis script that derives those metrics from sampled and unsampled protocol traces without mistaking printed lines for packet counts.
 - [x] 1.3 Add a protocol-v1 integration fixture that reproduces single-flight frame-grant blocking and asserts the number of real core frames separately from frontend `retro_run()` calls.
 - [x] 1.4 Add an audio fixture that records generated samples and detects repeated blocked calls returning no new emulated audio.
@@ -29,7 +29,7 @@
 
 - [x] 4.1 Expose the selected pair spike behind a non-release diagnostic core option without changing the default protocol runtime.
 - [x] 4.2 Build the exact Android arm64 diagnostic core reproducibly and record its source revision and SHA-256.
-- [x] 4.3 Install the diagnostic core on the Odin and Thor without modifying their normal configuration or save paths.
+- [x] 4.3 Install the diagnostic core on both physical Android endpoints without modifying their normal configuration or save paths.
 - [x] 4.4 Run the continuous-transfer fixture on each device for at least ten minutes and capture real emulation FPS, serial words per emulated second, wall CPU, peak memory, temperature, throttling state, and teardown latency.
 - [x] 4.5 Compare Android serial throughput with the same build's Linux and Android local-lockstep baseline and investigate any gap above five percent.
 - [x] 4.6 Record a go/no-go decision: proceed only if both devices sustain at least 59 emulated FPS without sustained thermal throttling; otherwise stop production v2 work and open a replacement architecture proposal.

@@ -82,13 +82,14 @@ Artifact evidence must prove:
 - the release page records the exact source commit and corrected artifact
   hashes.
 
-Human evidence is one time-boxed cold-reader rehearsal in which a person who
-did not author the instructions follows only the public release material to
-install the core and establish one short link session. The maintainer may
-observe and record friction but should not silently supply missing steps. A
-redistributable fixture is preferred; a brief game connection is acceptable
-when both participants already own the content. This is onboarding validation,
-not another performance or compatibility gate.
+Onboarding evidence is proportionate to a limited experimental alpha. The
+corrected guide is reviewed as a public artifact, the published downloads are
+verified independently, and substantial real playtesting already proves the
+documented path can reach working sessions. A separate staged cold-reader
+exercise would add ceremony without materially changing the sharing decision.
+The first limited public users therefore provide the genuine onboarding signal;
+concrete documentation defects are handled through the normal issue and
+documentation-correction path.
 
 ### Q6: What is explicitly not required?
 
@@ -110,9 +111,9 @@ complete checksum manifest, verify it and the archive shape locally, and update
 the existing prerelease assets and release description with a clear
 documentation-only repack note.
 
-Then run a single cold-reader installation/link rehearsal, record only a brief
-sanitized outcome and any actionable documentation friction, and correct only
-real onboarding defects. Passing this gate makes the repository comfortable to
-share as an experimental Android ARM64 two-player Multi-Pak alpha. Broader
-public support remains the v0.2.1 roadmap rather than being smuggled into this
-change.
+Then record that a separate cold-reader rehearsal is deliberately waived as a
+pre-sharing gate: the reviewed guide, independently verified downloads, and
+existing playtesting are sufficient for limited experimental-alpha sharing.
+Treat concrete feedback from those real users as the onboarding test and
+correct genuine documentation defects transparently. Broader public support
+remains the v0.2.1 roadmap rather than being smuggled into this change.

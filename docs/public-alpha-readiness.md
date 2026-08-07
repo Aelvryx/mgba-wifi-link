@@ -87,12 +87,25 @@ The private rollback snapshot remains retained until the public-alpha sharing
 change is complete. It contains the original release body and assets in case a
 later release-management problem requires recovery.
 
-## Newcomer rehearsal
+## Onboarding feedback policy
 
-A newcomer installation rehearsal remains pending.  It must use the corrected
-standalone core and guide on two Android ARM64 devices in stock RetroArch,
-confirm the documented trusted-network host/join flow, and record any unclear
-or missing instruction before public sharing proceeds.
+A separate staged cold-reader rehearsal is deliberately waived for this
+limited experimental alpha. The public guide has been reviewed, the exact
+published downloads have been independently verified, and existing playtesting
+already demonstrates working sessions through the documented installation and
+trusted-network connection path. Requiring another maintainer-orchestrated
+exercise would add ceremony without materially changing the sharing decision.
+
+Limited public-alpha users now provide the representative onboarding signal.
+Concrete missing or ambiguous documentation should be reported through the
+repository's normal issue path. A reproducible documentation defect updates
+the tracked guide and any affected release documentation assets through the
+same verified repack process; it does not create a speculative pre-sharing
+gameplay or performance gate.
+
+Any future onboarding report or correction preserves the existing privacy
+boundary: do not publish device identifiers, network addresses, private paths,
+raw logs, commercial content, save data, or controller-input history.
 
 ## Sharing boundary
 

@@ -6,14 +6,15 @@
 > checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Correct the published v0.2.0 documentation bundle, prove its binary
-identity and newcomer usability, and open limited public-alpha sharing without
+identity and public usability, and open limited public-alpha sharing without
 changing runtime behavior.
 
 **Architecture:** Version-specific, reviewed text inputs live under
 `packaging/gba-wifi-link/v0.2.0/`; the original published executable and CC0
 fixtures remain immutable inputs. A clean staging process creates internal and
 external checksum scopes, publication uses a preserved rollback snapshot, and
-one short human-owned cold-reader rehearsal closes the onboarding gate.
+limited public use provides real onboarding feedback without a staged
+pre-sharing rehearsal.
 
 **Tech Stack:** Markdown, POSIX shell utilities, Python 3 `zipfile`, SHA-256,
 Git, GitHub CLI, OpenSpec, existing protected GitHub Actions.
@@ -79,7 +80,7 @@ Git, GitHub CLI, OpenSpec, existing protected GitHub Actions.
   ```
 
   Expected: one explicit directory beneath the workspace; retain its printed
-  path until remote verification and cold-reader work finish.
+  path until remote verification and this change finish.
 
 - [ ] **Step 3: Snapshot release metadata and assets**
 
@@ -405,7 +406,7 @@ Git, GitHub CLI, OpenSpec, existing protected GitHub Actions.
   ## Corrected artifact identities
   ## Reconstruction and verification
   ## Publication rollback
-  ## Newcomer rehearsal
+  ## Onboarding feedback policy
   ## Sharing boundary
   ```
 
@@ -414,8 +415,8 @@ Git, GitHub CLI, OpenSpec, existing protected GitHub Actions.
   `69eafbef57876bedc8acb17163886de3f587f19a42fa00d6440d3838b4f085f1`
   and old archive hash
   `8ba4c62975f11bb8a52109a2538d811fb868d9e8ebf31aa7f09d9e18808dd4fc`.
-  Mark publication and newcomer sections as pending in factual prose without
-  using placeholder tokens.
+  Mark publication and onboarding-policy sections as pending in factual prose
+  without using placeholder tokens.
 
 - [ ] **Step 8: Commit the reconstruction evidence**
 
@@ -637,7 +638,7 @@ Git, GitHub CLI, OpenSpec, existing protected GitHub Actions.
   ```
 
   Redownload and verify the restored original manifests before republishing.
-  Do not continue to newcomer testing until the corrected set succeeds later.
+  Do not continue to final landing until the corrected set succeeds later.
 
 - [ ] **Step 8: Record remote verification and commit**
 
@@ -651,65 +652,45 @@ Git, GitHub CLI, OpenSpec, existing protected GitHub Actions.
   git push
   ```
 
-### Task 6: Run the cold-reader onboarding rehearsal
+### Task 6: Record the proportionate onboarding policy
 
 **Files:**
 - Modify: `docs/public-alpha-readiness.md`
 - Read publicly: GitHub release `v0.2.0` and its corrected guide
 
 **Interfaces:**
-- Consumes: clean-redownload-verified public release from Task 5.
-- Produces: sanitized onboarding evidence or a bounded documentation correction.
+- Consumes: clean-redownload-verified public release from Task 5 and existing
+  playtesting evidence.
+- Produces: an explicit readiness decision and public feedback boundary.
 
-- [ ] **Step 1: Select and brief the reader without supplying setup steps**
+- [ ] **Step 1: Record why no separate reader gate is needed**
 
-  Provide only the public release URL and say that the exercise tests the
-  instructions, not the reader. Do not provide device-specific advice or a
-  private copy of the guide.
+  Update `docs/public-alpha-readiness.md` to state that a staged cold-reader
+  rehearsal is deliberately waived: the public guide has been reviewed, the
+  exact downloads were independently verified, and existing playtesting already
+  demonstrates working sessions through the documented path.
 
-- [ ] **Step 2: Verify the reader's downloaded artifact**
+- [ ] **Step 2: Define the real onboarding signal**
 
-  Automation checks the downloaded `SHA256SUMS` against the selected core or
-  bundle before interaction. Expected: the public hash matches the readiness
-  record.
+  State that limited public-alpha users provide the representative onboarding
+  feedback. Route concrete documentation friction through the repository's
+  normal issue path rather than manufacturing another qualification exercise.
 
-- [ ] **Step 3: Run the twenty-minute human-owned onboarding window**
+- [ ] **Step 3: Preserve the privacy and correction boundary**
 
-  Start timing after downloads are available. The reader owns RetroArch core
-  installation, content loading, host/join, and confirmation of one ready
-  session. Use a supplied CC0 fixture where practical. The maintainer observes
-  but does not inject controller input or silently provide a missing step.
+  Future onboarding evidence retains no device identifiers, addresses, private
+  paths, raw logs, commercial data, or input history. A reproducible missing or
+  ambiguous step updates the tracked guide and affected release assets through
+  the same verified repack process.
 
-- [ ] **Step 4: Classify the result**
+- [ ] **Step 4: Commit the policy decision**
 
-  Record exactly one of:
-
-  ```text
-  PASS — installed exact public core and established one ready link session
-  DOCS DEFECT — a necessary step was absent or materially ambiguous
-  ENVIRONMENT BLOCK — unrelated frontend, network, or hardware condition
-  ```
-
-  Also record elapsed minutes and a concise description of actionable friction;
-  retain no private identifiers or raw evidence.
-
-- [ ] **Step 5: Correct only genuine documentation defects**
-
-  If the result is `DOCS DEFECT`, edit the tracked guide, rebuild both manifests
-  and the deterministic archive through Task 3, republish through Task 5, and
-  repeat only the failed onboarding portion. An `ENVIRONMENT BLOCK` gets one
-  documented retry after the unrelated condition is removed; it does not
-  authorize exploratory gameplay automation.
-
-- [ ] **Step 6: Record the passed gate and commit**
-
-  Update `docs/public-alpha-readiness.md` with the sanitized classification,
-  elapsed time, fixture/commercial-content category without a private filename,
-  and any documentation correction. Commit and push:
+  Commit and push the revised planning and readiness evidence:
 
   ```bash
-  git add packaging/gba-wifi-link/v0.2.0 docs/public-alpha-readiness.md
-  git commit -m "docs: close public alpha onboarding gate"
+  git add openspec/changes/prepare-public-alpha-sharing \
+    docs/public-alpha-readiness.md
+  git commit -m "docs: adopt proportionate alpha onboarding"
   git push
   ```
 
@@ -722,7 +703,8 @@ Git, GitHub CLI, OpenSpec, existing protected GitHub Actions.
 - Read: `README.md`, `ROADMAP.md`, `SUPPORT.md`, `SECURITY.md`
 
 **Interfaces:**
-- Consumes: corrected verified public assets, passed newcomer gate, reviewed PR.
+- Consumes: corrected verified public assets, recorded proportionate onboarding
+  policy, and reviewed PR.
 - Produces: authoritative distribution capability, archived change, protected
   master merge, and an honest public share boundary.
 

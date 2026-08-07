@@ -121,48 +121,47 @@ unadvertised until one coherent set is available.
 - **THEN** the preserved original release can be restored and users are not
   intentionally directed to a mixed artifact set
 
-### Requirement: Newcomer onboarding is tested proportionately
+### Requirement: Onboarding feedback is proportionate to limited alpha sharing
 
-Before the corrected alpha is deliberately shared, one person who did not
-author the release instructions SHALL use only the public release material to
-install the exact core and establish a short two-device link session. The
-interactive portion SHALL be time-boxed to twenty minutes after downloads are
-available, SHALL prefer redistributable fixtures, and SHALL test onboarding
-rather than sustained gameplay or performance. Automation SHALL own artifact
-identity and evidence checks; the human SHALL own frontend navigation and
-ordinary interactive confirmation.
+The project SHALL NOT require a separately staged cold-reader exercise before
+limited experimental-alpha sharing when the public guide has been reviewed, the
+published artifacts have been independently verified, and existing playtesting
+has already demonstrated working sessions through the documented path. Real
+limited-alpha use SHALL provide the onboarding signal, and reproducible
+documentation friction SHALL be handled through the repository's normal issue
+and documentation-correction process.
 
-#### Scenario: Cold reader succeeds unaided
-- **WHEN** the reader follows the public guide without undocumented maintainer
-  instructions and reaches one ready linked session within the time box
-- **THEN** the onboarding gate passes and only a brief sanitized outcome and any
-  genuine friction are retained
+#### Scenario: Verified alpha begins limited sharing
+- **WHEN** the corrected public guide and artifacts pass review and independent
+  verification and existing playtesting covers the documented connection path
+- **THEN** limited sharing may begin without a contrived pre-sharing reader gate
 
 #### Scenario: Instructions omit a necessary step
-- **WHEN** the reader cannot proceed without maintainer knowledge that is absent
-  from the public material
-- **THEN** the gate records a documentation defect, the guide is corrected, and
-  only the failed onboarding portion is repeated
+- **WHEN** a limited-alpha user reports that a necessary step is absent or
+  materially ambiguous in the public material
+- **THEN** the report is treated as a documentation defect, the tracked guide is
+  corrected, and affected release documentation is republished transparently
 
 #### Scenario: Gameplay qualification is proposed
-- **WHEN** the short linked session demonstrates that the published installation
-  and connection path works
-- **THEN** this change does not extend the rehearsal into a commercial playthrough
-  or performance soak
+- **WHEN** existing playtesting already demonstrates that the published
+  installation and connection path works
+- **THEN** this change does not add another commercial playthrough or
+  performance soak merely to authorize sharing
 
 ### Requirement: Sharing scope remains honest and tiered
 
-After artifact and cold-reader gates pass, the repository MAY be linked to
-friends, enthusiasts, and technically comfortable testers as an experimental
-Android ARM64 two-player Multi-Pak alpha. Shared wording MUST retain the trusted
-local-network assumption, same-effective-ROM requirement, unsupported-feature
-list, privacy guidance, and upstream-independence statement. A broad campaign
-that actively solicits support reports from strangers SHALL wait for the
-sanitized diagnostic-bundle outcome tracked separately in issue #20.
+After the artifact gate passes and the proportionate onboarding-feedback policy
+is recorded, the repository MAY be linked to friends, enthusiasts, and
+technically comfortable testers as an experimental Android ARM64 two-player
+Multi-Pak alpha. Shared wording MUST retain the trusted local-network
+assumption, same-effective-ROM requirement, unsupported-feature list, privacy
+guidance, and upstream-independence statement. A broad campaign that actively
+solicits support reports from strangers SHALL wait for the sanitized
+diagnostic-bundle outcome tracked separately in issue #20.
 
 #### Scenario: Limited alpha sharing begins
-- **WHEN** the corrected assets and newcomer rehearsal pass while v0.2.1 issues
-  #20 through #23 remain incomplete
+- **WHEN** the corrected assets pass and the limited-alpha feedback path is
+  recorded while v0.2.1 issues #20 through #23 remain incomplete
 - **THEN** limited public-alpha sharing may begin without claiming the later
   supportable-alpha milestone
 

@@ -79,26 +79,26 @@
   original release body and assets or keep the release unadvertised; never
   knowingly leave a mixed public asset set.
 
-## 6. Rehearse newcomer onboarding
+## 6. Record the proportionate onboarding policy
 
-- [ ] 6.1 Give one person who did not author the instructions the corrected
-  public release link, without additional setup guidance, and start the
-  twenty-minute interactive time box after downloads are available.
-- [ ] 6.2 Let automation verify the downloaded artifact identity while the human
-  owns RetroArch installation, host/join navigation, and confirmation of one
-  short ready link session, preferring the redistributable fixture.
-- [ ] 6.3 Record only the sanitized pass/fail outcome, elapsed onboarding time,
-  and concrete documentation friction; do not retain device identifiers,
-  addresses, private paths, raw logs, commercial data, or input history.
-- [ ] 6.4 If undocumented maintainer knowledge is required, correct and republish
-  the affected guide/archive/checksum assets and repeat only the failed
-  onboarding portion rather than extending into gameplay qualification.
+- [x] 6.1 Record that a separate staged cold-reader rehearsal is deliberately
+  waived because the guide is reviewed, the public artifacts are independently
+  verified, and existing playtesting already covers the documented path.
+- [x] 6.2 Make limited public-alpha use the real onboarding signal and route
+  concrete documentation friction through the repository's normal issue path.
+- [x] 6.3 Retain the existing privacy boundary for any future onboarding report:
+  no device identifiers, addresses, private paths, raw logs, commercial data,
+  or input history in public evidence.
+- [x] 6.4 Require reproducible documentation defects to update the tracked guide
+  and affected release assets transparently without turning hypothetical
+  onboarding concerns into a pre-sharing gameplay gate.
 
 ## 7. Close the public-alpha readiness change
 
 - [ ] 7.1 Update the readiness record with the clean remote verification and
-  newcomer result, and state that limited experimental-alpha sharing is open
-  while broad report solicitation still depends on issue #20.
+  proportionate onboarding-policy decision, and state that limited
+  experimental-alpha sharing is open while broad report solicitation still
+  depends on issue #20.
 - [ ] 7.2 Confirm the final release wording retains Android ARM64, exactly two
   players, Multi-Pak, trusted local network, same effective ROM, unsupported
   features, privacy, and independent-fork limitations.

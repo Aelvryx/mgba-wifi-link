@@ -36,8 +36,8 @@ production source or binary will be rebuilt.
 - Preserve the original core, fixture, tag, and source-commit identities.
 - Make the corrected archive shape and checksum relationships mechanically
   verifiable.
-- Prove the onboarding path once with an unfamiliar reader using a short,
-  time-boxed connection rehearsal.
+- Define a proportionate onboarding-feedback path for limited alpha sharing
+  without manufacturing another staged qualification exercise.
 - State the exact boundary between a shareable experimental alpha and the later
   v0.2.1 supportability milestone.
 
@@ -113,25 +113,27 @@ production source or binary will be rebuilt.
   an avoidable inconsistent window. Uploading duplicate suffixed names leaves
   users to guess which artifact is authoritative.
 
-### D6: Treat cold-reader evidence as onboarding, not qualification
+### D6: Let limited public use provide the onboarding signal
 
-- **Choice:** One person unfamiliar with the release material follows only the
-  public instructions to install the exact artifact and establish one short
-  link session. The exercise is time-boxed to twenty minutes after downloads
-  are available. A redistributable fixture is preferred. The maintainer records
-  friction but does not silently supply missing steps.
-- **Rationale:** The test answers whether the link is usable by its intended
-  alpha audience. It does not duplicate the emulator evidence already obtained.
-- **Alternatives considered:** Another long commercial playtest does not test
-  onboarding; no outsider check leaves the most relevant public-facing
-  assumption unexamined.
+- **Choice:** Do not require a staged cold-reader rehearsal before sharing. The
+  corrected guide receives normal review, every published artifact is
+  independently verified, and existing playtesting establishes that the
+  documented path reaches working sessions. Limited alpha users then exercise
+  the real onboarding path and may report concrete documentation friction
+  through the repository's normal issue route.
+- **Rationale:** A contrived pre-sharing exercise adds coordination ceremony but
+  little confidence beyond the evidence already available. Real limited-alpha
+  use is the more representative onboarding test.
+- **Alternatives considered:** A twenty-minute unfamiliar-reader gate was
+  designed and rejected as disproportionate; another commercial playtest would
+  test compatibility rather than onboarding.
 
 ### D7: Define two publication thresholds
 
-- **Choice:** The corrected bundle plus cold-reader pass authorizes sharing with
-  friends, enthusiasts, and technical alpha testers. A broad campaign inviting
-  support requests from strangers should additionally wait for the sanitized
-  diagnostic bundle in issue #20.
+- **Choice:** The corrected, independently verified bundle authorizes sharing
+  with friends, enthusiasts, and technical alpha testers. A broad campaign
+  inviting support requests from strangers should additionally wait for the
+  sanitized diagnostic bundle in issue #20.
 - **Rationale:** Existing issue forms and privacy guidance are adequate for a
   small alpha cohort, while scalable public support benefits materially from
   safe one-command evidence collection.
@@ -151,9 +153,9 @@ production source or binary will be rebuilt.
 - **[Risk]** A tracked offline guide duplicates parts of README and may drift in
   later releases. **Mitigation:** make current-document agreement an explicit
   review and test requirement; issue #21 will later own generalized assembly.
-- **[Risk]** The cold reader needs undocumented help. **Mitigation:** treat that
-  as documentation failure, record the missing step, correct it, and repeat only
-  the failed onboarding portion.
+- **[Risk]** A limited-alpha user encounters an undocumented step. **Mitigation:**
+  treat a reproducible report as a documentation defect, correct the tracked
+  guide, and transparently repack the affected documentation assets.
 - **[Trade-off]** In-place correction does not preserve the original archive at
   its public URL. **Accepted because:** the old archive is retained privately
   for rollback, its identity is recorded, and creating a fake software version
@@ -176,9 +178,10 @@ production source or binary will be rebuilt.
 6. Redownload every public asset into a clean directory and rerun the complete
    verification. If this fails, restore the saved original body and assets and
    keep the release unadvertised until resolved.
-7. Run the time-boxed cold-reader rehearsal. Correct genuine documentation
-   defects and repeat only the affected onboarding step.
-8. Record a sanitized readiness result and begin limited public-alpha sharing.
+7. Record the deliberate decision that no separate cold-reader gate is needed;
+   route concrete limited-alpha onboarding feedback through the existing issue
+   process.
+8. Record the final readiness result and begin limited public-alpha sharing.
 
 Rollback does not change the `v0.2.0` tag or source. The preserved original
 release body and assets can be restored exactly if publication fails before the

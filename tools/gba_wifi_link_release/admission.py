@@ -25,16 +25,29 @@ _PLACEHOLDER_RE = re.compile(r"\b(?:TBD|TODO)\b|<[^>\n]+>")
 _VERSION_RE = re.compile(r"\bv(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\b")
 _GENERATED_FIELD_RE = re.compile(
     r"(?im)^\s*(?:repository|tag|annotated tag object|peeled commit|"
-    r"source date epoch|version|workflow(?: run)?|assets?|checksums?|"
+    r"source(?: identity)?|build(?: identity)?|source date epoch|version|"
+    r"workflow(?: run)?|artifacts?|assets?|checksums?|"
     r"release provenance|provenance|compatibility|qualification)\s*:"
 )
-_GENERATED_HEADING_RE = re.compile(r"(?im)^\s*#+\s*(?:compatibility|qualification)\s*$")
-_PRIVATE_PATH_RE = re.compile(r"(?<![A-Za-z0-9])(?:/(?:[^\s`]+)|[A-Za-z]:[\\/][^\s`]*)")
+_GENERATED_HEADING_RE = re.compile(
+    r"(?im)^\s*#+\s*(?:compatibility|qualification|source(?: and (?:verification|provenance))?|"
+    r"build provenance|workflow evidence|checksums?|release provenance|release assets?)\s*$"
+)
+_PUBLIC_URL_RE = re.compile(r"https?://[^\s`]+")
+_PRIVATE_PATH_RE = re.compile(r"(?<![A-Za-z0-9])(?:~[\\/]|/(?:[^\s`]+)|[A-Za-z]:[\\/][^\s`]*)")
+_TRAVERSAL_PATH_RE = re.compile(r"(?<![A-Za-z0-9])\.\.[\\/]")
 _IPV4_RE = re.compile(
     r"(?<![0-9])(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})"
     r"(?:\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}(?![0-9])"
 )
 _IPV6_RE = re.compile(r"(?<![A-Za-z0-9])(?:[0-9A-Fa-f]{1,4}:){2,}[0-9A-Fa-f:]*")
+_ROM_BIOS_RE = re.compile(r"(?i)\b(?:rom|bios)\b[^\n]*(?:sha(?:-?256)?|hash|crc|dump|identity)")
+_SAVE_RE = re.compile(r"(?i)\b(?:save[ -]?(?:file|state)|\.sav)\b[^\n]*(?:identity|sha(?:-?256)?|hash|dump|private|data)")
+_INPUT_RE = re.compile(r"(?i)\b(?:raw input|input recording|input history)\b")
+_LOG_RE = re.compile(r"(?i)\b(?:endpoint|frontend) log\b")
+_DEVICE_RE = re.compile(r"(?i)\bdevice (?:serial|nickname|id|name)\b")
+_COMMERCIAL_RE = re.compile(r"(?i)\bcommercial (?:game|title|evidence)\b")
+_SECRET_RE = re.compile(r"(?i)\b(?:api[_ -]?key|token|secret|password)\s*[:=]")
 _GITHUB_REMOTE_RE = re.compile(
     r"^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([^/]+/[^/]+?)(?:\.git)?/?$"
 )
@@ -185,10 +198,22 @@ def validate_notes_text(notes: str, tag: str, context_values: tuple[str, ...]) -
         raise AdmissionError("NOTES_PLACEHOLDER")
     if _GENERATED_FIELD_RE.search(notes) or _GENERATED_HEADING_RE.search(notes):
         raise AdmissionError("NOTES_GENERATED_FIELD")
-    if _PRIVATE_PATH_RE.search(notes):
+    notes_without_public_urls = _PUBLIC_URL_RE.sub("", notes)
+    if _PRIVATE_PATH_RE.search(notes_without_public_urls) or _TRAVERSAL_PATH_RE.search(notes_without_public_urls):
         raise AdmissionError("NOTES_PRIVACY_PATH")
     if _IPV4_RE.search(notes) or _IPV6_RE.search(notes):
         raise AdmissionError("NOTES_PRIVACY_ADDRESS")
+    for pattern, reason in (
+        (_ROM_BIOS_RE, "NOTES_PRIVACY_ROM_BIOS"),
+        (_SAVE_RE, "NOTES_PRIVACY_SAVE"),
+        (_INPUT_RE, "NOTES_PRIVACY_INPUT"),
+        (_LOG_RE, "NOTES_PRIVACY_LOG"),
+        (_DEVICE_RE, "NOTES_PRIVACY_DEVICE"),
+        (_COMMERCIAL_RE, "NOTES_PRIVACY_COMMERCIAL"),
+        (_SECRET_RE, "NOTES_PRIVACY_SECRET"),
+    ):
+        if pattern.search(notes):
+            raise AdmissionError(reason)
     if any(version != tag for version in _VERSION_RE.findall(notes)):
         raise AdmissionError("NOTES_VERSION")
     if any(value and value in notes for value in context_values):
@@ -228,7 +253,7 @@ def admit_release(repo: Path, tag: str, evidence: Mapping[str, object]) -> Relea
     if evidence_epoch != source_date_epoch:
         raise AdmissionError("SOURCE_DATE_EPOCH")
     gates = _validate_gates(evidence, commit)
-    notes = _validated_notes(repo, tag, commit, (repository, tag_object, commit))
+    notes = _validated_notes(repo, tag, commit, (tag_object, commit))
     match = TAG_RE.fullmatch(tag)
     assert match is not None
     version = ".".join(match.groups())

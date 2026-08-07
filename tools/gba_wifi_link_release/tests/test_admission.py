@@ -256,3 +256,41 @@ class AdmissionTest(unittest.TestCase):
                 commit = git(repo, "rev-parse", "v9.8.7^{commit}")
                 with self.assertRaisesRegex(AdmissionError, reason):
                     admit_release(repo, "v9.8.7", evidence(repo, commit))
+
+    def test_notes_allow_public_urls_but_reject_every_generated_or_private_category(self):
+        public_notes = "Read the reviewed guide at https://github.com/Aelvryx/mgba-wifi-link/releases.\n"
+        repo = make_repo(notes=public_notes)
+        self.addCleanupRepo(repo)
+        commit = git(repo, "rev-parse", "v9.8.7^{commit}")
+        self.assertEqual(
+            admit_release(repo, "v9.8.7", evidence(repo, commit)).notes_sha256,
+            hashlib.sha256(public_notes.encode("utf-8")).hexdigest(),
+        )
+
+        rejected = (
+            ("Source: forged source identity\n", "NOTES_GENERATED_FIELD"),
+            ("Build: forged build identity\n", "NOTES_GENERATED_FIELD"),
+            ("Checksum: forged checksum\n", "NOTES_GENERATED_FIELD"),
+            ("Artifact: forged artifact identity\n", "NOTES_GENERATED_FIELD"),
+            ("## Source and verification\n", "NOTES_GENERATED_FIELD"),
+            ("## Build provenance\n", "NOTES_GENERATED_FIELD"),
+            ("## Workflow evidence\n", "NOTES_GENERATED_FIELD"),
+            ("## Release assets\n", "NOTES_GENERATED_FIELD"),
+            ("See ../private/review.md\n", "NOTES_PRIVACY_PATH"),
+            ("See ~/.config/private\n", "NOTES_PRIVACY_PATH"),
+            ("ROM SHA-256: deadbeef\n", "NOTES_PRIVACY_ROM_BIOS"),
+            ("BIOS dump identity: deadbeef\n", "NOTES_PRIVACY_ROM_BIOS"),
+            ("Save file identity: deadbeef\n", "NOTES_PRIVACY_SAVE"),
+            ("Raw input recording: private\n", "NOTES_PRIVACY_INPUT"),
+            ("Endpoint log: private\n", "NOTES_PRIVACY_LOG"),
+            ("Device serial: private\n", "NOTES_PRIVACY_DEVICE"),
+            ("Commercial game evidence: private\n", "NOTES_PRIVACY_COMMERCIAL"),
+            ("token=private\n", "NOTES_PRIVACY_SECRET"),
+        )
+        for notes, reason in rejected:
+            with self.subTest(reason=reason, notes=notes):
+                repo = make_repo(notes=notes)
+                self.addCleanupRepo(repo)
+                commit = git(repo, "rev-parse", "v9.8.7^{commit}")
+                with self.assertRaisesRegex(AdmissionError, reason):
+                    admit_release(repo, "v9.8.7", evidence(repo, commit))

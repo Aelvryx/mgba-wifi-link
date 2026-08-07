@@ -26,13 +26,16 @@ CONTEXT = ReleaseContext(
 
 
 class RenderTest(unittest.TestCase):
+    def admitted_context(self, notes: str) -> ReleaseContext:
+        return replace(
+            CONTEXT,
+            notes_sha256=hashlib.sha256(notes.encode("utf-8")).hexdigest(),
+        )
+
     def test_body_is_utf8_lf_and_keeps_reviewed_notes_byte_for_byte(self):
         notes = "Reviewed release scope.\n\nA second reviewed paragraph.\n"
 
-        body = render_release_body(
-            replace(CONTEXT, notes_sha256=hashlib.sha256(notes.encode("utf-8")).hexdigest()),
-            notes,
-        )
+        body = render_release_body(self.admitted_context(notes), notes)
 
         self.assertEqual(body, body.decode("utf-8").encode("utf-8"))
         self.assertTrue(body.endswith(b"\n"))
@@ -70,3 +73,24 @@ class RenderTest(unittest.TestCase):
 
         with self.assertRaisesRegex(AdmissionError, "NOTES_CONTENT"):
             render_release_body(admitted, "Other reviewed prose.\n")
+
+    def test_render_notes_boundary_allows_public_url_and_rejects_generated_private_content(self):
+        notes = "Read https://github.com/Aelvryx/mgba-wifi-link/releases for reviewed context.\n"
+        self.assertIn(
+            notes.encode("utf-8"),
+            render_release_body(self.admitted_context(notes), notes),
+        )
+        for notes, reason in (
+            ("## Checksums\n", "NOTES_GENERATED_FIELD"),
+            ("Workflow: forged identity\n", "NOTES_GENERATED_FIELD"),
+            ("ROM SHA-256: deadbeef\n", "NOTES_PRIVACY_ROM_BIOS"),
+            ("Save file identity: deadbeef\n", "NOTES_PRIVACY_SAVE"),
+            ("Raw input recording: private\n", "NOTES_PRIVACY_INPUT"),
+            ("Frontend log: private\n", "NOTES_PRIVACY_LOG"),
+            ("Device nickname: private\n", "NOTES_PRIVACY_DEVICE"),
+            ("Commercial title evidence: private\n", "NOTES_PRIVACY_COMMERCIAL"),
+            ("api_key=private\n", "NOTES_PRIVACY_SECRET"),
+        ):
+            with self.subTest(reason=reason):
+                with self.assertRaisesRegex(AdmissionError, reason):
+                    render_release_body(self.admitted_context(notes), notes)

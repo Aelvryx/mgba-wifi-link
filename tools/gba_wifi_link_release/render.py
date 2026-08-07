@@ -41,7 +41,7 @@ def render_release_body(context: ReleaseContext, notes: str) -> bytes:
     validate_notes_text(
         notes,
         context.tag,
-        (context.repository, context.tag_object, context.commit),
+        (context.tag_object, context.commit),
     )
     if hashlib.sha256(notes.encode("utf-8")).hexdigest() != context.notes_sha256:
         raise AdmissionError("NOTES_CONTENT")

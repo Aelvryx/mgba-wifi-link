@@ -1,4 +1,4 @@
-"""Non-publishing command line entry points for release package construction."""
+"""Release package construction and verified-artifact publication commands."""
 
 import argparse
 import ctypes
@@ -11,10 +11,13 @@ import shutil
 import sys
 import tempfile
 
-from .admission import REQUIRED_GATES, REQUIRED_WORKFLOW, admit_release
+from .admission import (CANONICAL_REPOSITORY, REQUIRED_GATES, REQUIRED_WORKFLOW,
+                        admit_release)
+from .github import GhClient
 from .model import BuildEvidence, GateResult, ReleaseContext
 from .packager import PackageInputs, build_release
 from .render import render_release_body
+from .publisher import publish_release
 from .verifier import verify_release
 
 
@@ -157,6 +160,13 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--output", required=True)
     render = commands.choices["render-body"]
     render.add_argument("--notes")
+    publish = commands.add_parser("publish")
+    publish.add_argument("--context", required=True)
+    publish.add_argument("--output", required=True)
+    publish.add_argument("--body", required=True)
+    publish.add_argument("--repository", required=True)
+    publish.add_argument("--gh-bin")
+    publish.add_argument("--test-mode", action="store_true", help=argparse.SUPPRESS)
     return parser
 
 
@@ -172,12 +182,27 @@ def main(argv: list[str] | None = None) -> int:
             _build_atomic(_load_context(args), _inputs(args), Path(args.output))
         elif args.command == "verify":
             verify_release(Path(args.output), _load_context(args))
-        else:
+        elif args.command == "render-body":
             context = _load_context(args)
             if not args.fixture and not args.notes:
                 raise ValueError("CLI_INPUT")
             notes = (FIXTURE / "release-notes/v9.8.7.md").read_bytes() if args.fixture else Path(args.notes).read_bytes()
             sys.stdout.write(render_release_body(context, notes.decode("utf-8")).decode("utf-8"))
+        else:
+            if args.repository != CANONICAL_REPOSITORY:
+                raise ValueError("CLI_REPOSITORY")
+            if args.gh_bin and not args.test_mode:
+                raise ValueError("CLI_GH_BIN")
+            context = _context_from_dict(json.loads(Path(args.context).read_text(encoding="utf-8")))
+            if context.repository != args.repository:
+                raise ValueError("CLI_REPOSITORY")
+            release_set = verify_release(Path(args.output), context)
+            result = publish_release(
+                GhClient(args.repository, gh=args.gh_bin or "gh"), release_set,
+                Path(args.body).read_bytes(),
+            )
+            sys.stdout.write(json.dumps({"release_id": result.release_id, "reused": result.reused},
+                                        sort_keys=True, separators=(",", ":")) + "\n")
         return 0
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         print(str(error) if str(error) else "CLI_ERROR", file=sys.stderr)

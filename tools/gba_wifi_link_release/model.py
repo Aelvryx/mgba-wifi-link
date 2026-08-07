@@ -57,6 +57,10 @@ class ReleaseContext:
 class ReleaseSet:
     context: ReleaseContext
     assets: tuple[ReleaseAsset, ...]
+    # This is local transport metadata, not part of canonical release bytes. It
+    # is populated only by the verifier, so publishing can re-verify and upload
+    # the exact immutable files without rebuilding them.
+    directory: Path | None = None
 
 
 @dataclass(frozen=True)

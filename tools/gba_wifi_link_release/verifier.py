@@ -125,7 +125,7 @@ def verify_release(output_dir: Path, context: ReleaseContext) -> ReleaseSet:
             validate_public_tree(output_dir, contract)
         except PrivacyError as error:
             raise VerificationError("VERIFY_PRIVACY") from error
-        return ReleaseSet(context, tuple(_asset(name, public[name]) for name in expected_names))
+        return ReleaseSet(context, tuple(_asset(name, public[name]) for name in expected_names), output_dir)
     except VerificationError:
         raise
     except OSError as error:

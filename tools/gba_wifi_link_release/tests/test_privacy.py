@@ -7,13 +7,20 @@ import tempfile
 import unittest
 
 from tools.gba_wifi_link_release.admission import REQUIRED_GATES, REQUIRED_WORKFLOW
-from tools.gba_wifi_link_release.model import GateResult, ReleaseAsset, ReleaseContext, load_contract
+from tools.gba_wifi_link_release.model import BuildEvidence, GateResult, ReleaseAsset, ReleaseContext, load_contract
 from tools.gba_wifi_link_release.privacy import PrivacyError, validate_public_tree
 from tools.gba_wifi_link_release.provenance import canonical_json, release_provenance
 
 
 ROOT = Path(__file__).resolve().parents[3]
 CONTRACT = load_contract(ROOT / "packaging/gba-wifi-link/release/contract-v1.json")
+BUILD_EVIDENCE = BuildEvidence(
+    runner_image="ubuntu-24.04-20260125.1",
+    pinned_actions=("actions/checkout@0123456789abcdef0123456789abcdef01234567",),
+    pinned_toolchains=("android-ndk@27.2.12479018+sha256:" + "d" * 64,),
+    configuration=(("android_abi", "arm64-v8a"), ("android_api", "21")),
+)
+
 CONTEXT = ReleaseContext(
     repository="Aelvryx/mgba-wifi-link",
     tag="v9.8.7",
@@ -27,6 +34,7 @@ CONTEXT = ReleaseContext(
         for index, name in enumerate(REQUIRED_GATES)
     ),
     notes_sha256="c" * 64,
+    build=BUILD_EVIDENCE,
 )
 
 
@@ -108,7 +116,9 @@ class PrivacyTest(unittest.TestCase):
     def test_private_text_canaries_return_only_stable_categories(self):
         cases = (
             ("PRIVACY_ROM_BIOS", "ROM identity: SYNTHETIC_ROM_BIOS_CANARY"),
+            ("PRIVACY_ROM_BIOS", "ROM CRC: SYNTHETIC_ROM_CRC_CANARY"),
             ("PRIVACY_SAVE", "Save file: SYNTHETIC_SAVE_CANARY"),
+            ("PRIVACY_SAVE", "Save identity: SYNTHETIC_SAVE_IDENTITY_CANARY"),
             ("PRIVACY_INPUT", "Raw input: SYNTHETIC_RAW_INPUT_CANARY"),
             ("PRIVACY_LOG", "Frontend log: SYNTHETIC_LOG_CANARY"),
             ("PRIVACY_PATH", "/private/SYNTHETIC_PATH_CANARY"),
@@ -125,6 +135,17 @@ class PrivacyTest(unittest.TestCase):
                     root = Path(temporary)
                     (root / "INSTALL-AND-USAGE.md").write_text(canary + "\n", encoding="utf-8")
                     self.assert_category_only(category, root, canary)
+
+    def test_private_url_query_and_fragment_paths_are_not_exempted(self):
+        for canary in (
+            "https://github.com/Aelvryx/mgba-wifi-link?path=%2Fprivate%2FSYNTHETIC_URL_QUERY_CANARY",
+            "https://github.com/Aelvryx/mgba-wifi-link#path=%2Fprivate%2FSYNTHETIC_URL_FRAGMENT_CANARY",
+        ):
+            with self.subTest(canary=canary):
+                with self.public_tree() as temporary:
+                    root = Path(temporary)
+                    (root / "INSTALL-AND-USAGE.md").write_text(canary + "\n", encoding="utf-8")
+                    self.assert_category_only("PRIVACY_PATH", root, canary)
 
     def test_symlink_and_undeclared_file_are_rejected_without_disclosing_names(self):
         symlink_canary = "SYNTHETIC_SYMLINK_CANARY"

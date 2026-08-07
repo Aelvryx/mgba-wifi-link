@@ -5,7 +5,7 @@ import json
 import unittest
 
 from tools.gba_wifi_link_release.admission import REQUIRED_GATES, REQUIRED_WORKFLOW
-from tools.gba_wifi_link_release.model import GateResult, ReleaseAsset, ReleaseContext
+from tools.gba_wifi_link_release.model import BuildEvidence, GateResult, ReleaseAsset, ReleaseContext
 from tools.gba_wifi_link_release.provenance import (
     ProvenanceError,
     build_provenance,
@@ -13,6 +13,16 @@ from tools.gba_wifi_link_release.provenance import (
     release_provenance,
 )
 
+
+BUILD_EVIDENCE = BuildEvidence(
+    runner_image="ubuntu-24.04-20260125.1",
+    pinned_actions=(
+        "actions/checkout@0123456789abcdef0123456789abcdef01234567",
+        "actions/upload-artifact@89abcdef0123456789abcdef0123456789abcdef",
+    ),
+    pinned_toolchains=("android-ndk@27.2.12479018+sha256:" + "d" * 64,),
+    configuration=(("android_abi", "arm64-v8a"), ("android_api", "21")),
+)
 
 CONTEXT = ReleaseContext(
     repository="Aelvryx/mgba-wifi-link",
@@ -27,6 +37,7 @@ CONTEXT = ReleaseContext(
         for index, name in enumerate(REQUIRED_GATES)
     ),
     notes_sha256="c" * 64,
+    build=BUILD_EVIDENCE,
 )
 
 BUILD_SIBLINGS = (
@@ -56,8 +67,20 @@ class ProvenanceTest(unittest.TestCase):
     def test_build_provenance_has_schema_one_exact_source_gate_and_sibling_fields(self):
         document = json.loads(build_provenance(CONTEXT, BUILD_SIBLINGS))
 
-        self.assertEqual(tuple(document), ("gates", "schema", "siblings", "source"))
+        self.assertEqual(tuple(document), ("build", "gates", "schema", "siblings", "source"))
         self.assertEqual(document["schema"], 1)
+        self.assertEqual(
+            document["build"],
+            {
+                "configuration": {"android_abi": "arm64-v8a", "android_api": "21"},
+                "pinned_actions": [
+                    "actions/checkout@0123456789abcdef0123456789abcdef01234567",
+                    "actions/upload-artifact@89abcdef0123456789abcdef0123456789abcdef",
+                ],
+                "pinned_toolchains": ["android-ndk@27.2.12479018+sha256:" + "d" * 64],
+                "runner_image": "ubuntu-24.04-20260125.1",
+            },
+        )
         self.assertEqual(
             document["source"],
             {
@@ -84,8 +107,9 @@ class ProvenanceTest(unittest.TestCase):
     def test_release_provenance_has_only_five_declared_payload_hashes(self):
         document = json.loads(release_provenance(CONTEXT, RELEASE_PAYLOADS))
 
-        self.assertEqual(tuple(document), ("payloads", "schema", "source"))
+        self.assertEqual(tuple(document), ("build", "payloads", "schema", "source"))
         self.assertEqual(document["schema"], 1)
+        self.assertEqual(document["build"]["runner_image"], "ubuntu-24.04-20260125.1")
         self.assertEqual(document["source"]["commit"], "b" * 40)
         self.assertEqual(len(document["payloads"]), 5)
         self.assertEqual(
@@ -116,6 +140,8 @@ class ProvenanceTest(unittest.TestCase):
             build_provenance(replace(CONTEXT, gates=(invalid_gate, *CONTEXT.gates[1:])), BUILD_SIBLINGS)
         with self.assertRaisesRegex(ProvenanceError, "^PROVENANCE_SOURCE$"):
             build_provenance(replace(CONTEXT, notes_sha256=123), BUILD_SIBLINGS)  # type: ignore[arg-type]
+        with self.assertRaisesRegex(ProvenanceError, "^PROVENANCE_BUILD$"):
+            build_provenance(replace(CONTEXT, build=None), BUILD_SIBLINGS)  # type: ignore[arg-type]
 
     def test_provenance_rejects_cycles_and_wrong_declared_membership(self):
         self.assertRaisesRegex(

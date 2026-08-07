@@ -41,6 +41,19 @@ def evidence(repo: Path, commit: str, tag: str = "v9.8.7") -> dict[str, object]:
             "tag_object": tag_object,
         },
         "release": {"exists": False},
+        "build": {
+            "runner_image": "ubuntu-24.04-20260125.1",
+            "pinned_actions": [
+                "actions/checkout@0123456789abcdef0123456789abcdef01234567",
+            ],
+            "pinned_toolchains": [
+                "android-ndk@27.2.12479018+sha256:" + "d" * 64,
+            ],
+            "configuration": {
+                "android_abi": "arm64-v8a",
+                "android_api": "21",
+            },
+        },
         "gates": [
             {
                 "name": name,
@@ -96,6 +109,8 @@ class AdmissionTest(unittest.TestCase):
             context.notes_sha256,
             hashlib.sha256(b"Reviewed synthetic release notes.\n").hexdigest(),
         )
+        self.assertEqual(context.build.configuration if context.build else None,
+                         (("android_abi", "arm64-v8a"), ("android_api", "21")))
 
     def test_lightweight_tag_is_rejected(self):
         repo = make_repo(annotated=False)

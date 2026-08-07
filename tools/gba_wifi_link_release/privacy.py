@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import stat
+from urllib.parse import unquote, urlsplit
 
 from .model import ReleaseContract
 from .provenance import canonical_json
@@ -18,8 +19,8 @@ _PUBLIC_URL_RE = re.compile(r"https?://[^\s`]+")
 _IPV4_RE = re.compile(r"(?<![0-9])(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(?:\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}(?![0-9])")
 _IPV6_RE = re.compile(r"(?<![A-Za-z0-9])(?:[0-9A-Fa-f]{1,4}:){2,}[0-9A-Fa-f:]*")
 _MAC_RE = re.compile(r"(?<![0-9A-Fa-f])(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}(?![0-9A-Fa-f])")
-_ROM_BIOS_RE = re.compile(r"(?i)\b(?:rom|bios)(?:\s+(?:identity|hash|sha|dump)|\s*:)" )
-_SAVE_RE = re.compile(r"(?i)\b(?:save[ -]?(?:file|state)|\.sav)\b")
+_ROM_BIOS_RE = re.compile(r"(?i)\b(?:rom|bios)(?:\s+(?:identity|hash|sha(?:-?256)?|crc(?:32)?|dump)|\s*:)")
+_SAVE_RE = re.compile(r"(?i)\b(?:save[ -]?(?:file|state)|\.sav)\b|\bsave\s+(?:identity|hash|sha(?:-?256)?|crc(?:32)?|dump|data)\b")
 _INPUT_RE = re.compile(r"(?i)\b(?:raw input|input recording|input history)\b")
 _LOG_RE = re.compile(r"(?i)\b(?:endpoint|frontend|retroarch) log\b")
 _DEVICE_RE = re.compile(r"(?i)\b(?:device|phone) (?:serial|nickname|id|name)\b")
@@ -28,6 +29,8 @@ _SECRET_RE = re.compile(r"(?i)\b(?:access )?(?:api[_ -]?key|token|secret|passwor
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
 _TAG_RE = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+_ACTION_PIN_RE = re.compile(r"^[A-Za-z0-9._/-]+@[0-9a-f]{40}$")
+_TOOLCHAIN_PIN_RE = re.compile(r"^[A-Za-z0-9._/-]+@[A-Za-z0-9._-]+\+sha256:[0-9a-f]{64}$")
 
 
 class PrivacyError(ValueError):
@@ -35,6 +38,11 @@ class PrivacyError(ValueError):
 
 
 def _text_category(text: str) -> str | None:
+    for url in _PUBLIC_URL_RE.findall(text):
+        parts = urlsplit(url)
+        query_and_fragment = unquote(parts.query) + "\n" + unquote(parts.fragment)
+        if _PRIVATE_PATH_RE.search(query_and_fragment) or _TRAVERSAL_PATH_RE.search(query_and_fragment):
+            return "PRIVACY_PATH"
     path_text = _PUBLIC_URL_RE.sub("", text)
     if _PRIVATE_PATH_RE.search(path_text) or _TRAVERSAL_PATH_RE.search(path_text):
         return "PRIVACY_PATH"
@@ -86,10 +94,34 @@ def _validate_release_provenance(path: Path, root: Path, expected_names: tuple[s
         value = json.loads(text)
     except json.JSONDecodeError as error:
         raise PrivacyError("PRIVACY_JSON") from error
-    if not isinstance(value, dict) or tuple(sorted(value)) != ("payloads", "schema", "source") or value.get("schema") != 1:
+    if not isinstance(value, dict) or tuple(sorted(value)) != ("build", "payloads", "schema", "source") or value.get("schema") != 1:
         raise PrivacyError("PRIVACY_FIELD")
     if canonical_json(value) != text.encode("utf-8"):
         raise PrivacyError("PRIVACY_JSON")
+    build = value.get("build")
+    if (
+        not isinstance(build, dict)
+        or set(build) != {"configuration", "pinned_actions", "pinned_toolchains", "runner_image"}
+        or not isinstance(build["runner_image"], str)
+        or not build["runner_image"]
+        or not isinstance(build["pinned_actions"], list)
+        or not build["pinned_actions"]
+        or build["pinned_actions"] != sorted(build["pinned_actions"])
+        or len(set(build["pinned_actions"])) != len(build["pinned_actions"])
+        or not all(isinstance(action, str) and _ACTION_PIN_RE.fullmatch(action)
+                   for action in build["pinned_actions"])
+        or not isinstance(build["pinned_toolchains"], list)
+        or not build["pinned_toolchains"]
+        or build["pinned_toolchains"] != sorted(build["pinned_toolchains"])
+        or len(set(build["pinned_toolchains"])) != len(build["pinned_toolchains"])
+        or not all(isinstance(toolchain, str) and _TOOLCHAIN_PIN_RE.fullmatch(toolchain)
+                   for toolchain in build["pinned_toolchains"])
+        or not isinstance(build["configuration"], dict)
+        or not build["configuration"]
+        or any(not isinstance(key, str) or not key or not isinstance(item, str) or not item
+               for key, item in build["configuration"].items())
+    ):
+        raise PrivacyError("PRIVACY_FIELD")
     source = value.get("source")
     required_source = {"commit", "notes_sha256", "prerelease", "repository", "source_date_epoch", "tag", "tag_object", "version"}
     if not isinstance(source, dict) or set(source) != required_source:

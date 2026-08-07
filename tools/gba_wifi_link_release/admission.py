@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 import subprocess
 
-from .model import GateResult, ReleaseContext
+from .model import BuildEvidence, GateResult, ReleaseContext
 
 
 TAG_RE = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
@@ -57,6 +57,8 @@ _SECRET_RE = re.compile(r"(?i)\b(?:access )?(?:api[_ -]?key|token|secret|passwor
 _GITHUB_REMOTE_RE = re.compile(
     r"^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([^/]+/[^/]+?)(?:\.git)?/?$"
 )
+_ACTION_PIN_RE = re.compile(r"^[A-Za-z0-9._/-]+@[0-9a-f]{40}$")
+_TOOLCHAIN_PIN_RE = re.compile(r"^[A-Za-z0-9._/-]+@[A-Za-z0-9._-]+\+sha256:[0-9a-f]{64}$")
 
 
 class AdmissionError(ValueError):
@@ -196,6 +198,40 @@ def _validate_gates(evidence: Mapping[str, object], commit: str) -> tuple[GateRe
     return tuple(by_name[name] for name in REQUIRED_GATES)
 
 
+def _validate_build(evidence: Mapping[str, object]) -> BuildEvidence:
+    raw_build = evidence.get("build")
+    if not isinstance(raw_build, Mapping) or set(raw_build) != {
+        "configuration", "pinned_actions", "pinned_toolchains", "runner_image",
+    }:
+        raise AdmissionError("BUILD_EVIDENCE")
+    runner_image = raw_build["runner_image"]
+    actions = raw_build["pinned_actions"]
+    toolchains = raw_build["pinned_toolchains"]
+    configuration = raw_build["configuration"]
+    if (
+        not isinstance(runner_image, str)
+        or not runner_image
+        or not isinstance(actions, Sequence)
+        or isinstance(actions, (str, bytes))
+        or not actions
+        or not all(isinstance(action, str) and _ACTION_PIN_RE.fullmatch(action) for action in actions)
+        or tuple(actions) != tuple(sorted(actions))
+        or len(set(actions)) != len(actions)
+        or not isinstance(toolchains, Sequence)
+        or isinstance(toolchains, (str, bytes))
+        or not toolchains
+        or not all(isinstance(toolchain, str) and _TOOLCHAIN_PIN_RE.fullmatch(toolchain) for toolchain in toolchains)
+        or tuple(toolchains) != tuple(sorted(toolchains))
+        or len(set(toolchains)) != len(toolchains)
+        or not isinstance(configuration, Mapping)
+        or not configuration
+        or any(not isinstance(key, str) or not key or not isinstance(value, str) or not value
+               for key, value in configuration.items())
+    ):
+        raise AdmissionError("BUILD_EVIDENCE")
+    return BuildEvidence(runner_image, tuple(actions), tuple(toolchains), tuple(sorted(configuration.items())))
+
+
 def _notes_line_category(line: str) -> str | None:
     """Classify a single reviewed-prose line without exposing its contents."""
     heading = _MARKDOWN_HEADING_RE.fullmatch(line)
@@ -272,6 +308,7 @@ def admit_release(repo: Path, tag: str, evidence: Mapping[str, object]) -> Relea
     if evidence_epoch != source_date_epoch:
         raise AdmissionError("SOURCE_DATE_EPOCH")
     gates = _validate_gates(evidence, commit)
+    build = _validate_build(evidence)
     notes = _validated_notes(repo, tag, commit, (tag_object, commit))
     match = TAG_RE.fullmatch(tag)
     assert match is not None
@@ -288,6 +325,7 @@ def admit_release(repo: Path, tag: str, evidence: Mapping[str, object]) -> Relea
         prerelease=True,
         gates=gates,
         notes_sha256=hashlib.sha256(notes.encode("utf-8")).hexdigest(),
+        build=build,
     )
 
 

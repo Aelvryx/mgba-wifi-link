@@ -22,6 +22,16 @@ class ReleaseAsset:
 
 
 @dataclass(frozen=True)
+class BuildEvidence:
+    """Resolved, pinned build inputs retained in canonical provenance."""
+
+    runner_image: str
+    pinned_actions: tuple[str, ...]
+    pinned_toolchains: tuple[str, ...]
+    configuration: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
 class ReleaseContext:
     """Canonical source identity admitted before release construction."""
 
@@ -34,6 +44,7 @@ class ReleaseContext:
     prerelease: bool
     gates: tuple[GateResult, ...]
     notes_sha256: str
+    build: BuildEvidence | None = None
 
 
 @dataclass(frozen=True)

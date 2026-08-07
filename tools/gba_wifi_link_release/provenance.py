@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 
 from .admission import REQUIRED_GATES, REQUIRED_WORKFLOW
-from .model import GateResult, ReleaseAsset, ReleaseContext, load_contract
+from .model import BuildEvidence, GateResult, ReleaseAsset, ReleaseContext, load_contract
 
 
 _CONTRACT = (
@@ -14,6 +14,8 @@ _CONTRACT = (
 )
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
+_ACTION_PIN_RE = re.compile(r"^[A-Za-z0-9._/-]+@[0-9a-f]{40}$")
+_TOOLCHAIN_PIN_RE = re.compile(r"^[A-Za-z0-9._/-]+@[A-Za-z0-9._-]+\+sha256:[0-9a-f]{64}$")
 
 
 class ProvenanceError(ValueError):
@@ -82,6 +84,36 @@ def _gates(gates: tuple[GateResult, ...]) -> list[dict[str, object]]:
     return result
 
 
+def _build(build: BuildEvidence | None) -> dict[str, object]:
+    if (
+        not isinstance(build, BuildEvidence)
+        or not isinstance(build.runner_image, str)
+        or not build.runner_image
+        or not build.pinned_actions
+        or tuple(build.pinned_actions) != tuple(sorted(build.pinned_actions))
+        or len(set(build.pinned_actions)) != len(build.pinned_actions)
+        or not all(isinstance(action, str) and _ACTION_PIN_RE.fullmatch(action)
+                   for action in build.pinned_actions)
+        or not build.pinned_toolchains
+        or tuple(build.pinned_toolchains) != tuple(sorted(build.pinned_toolchains))
+        or len(set(build.pinned_toolchains)) != len(build.pinned_toolchains)
+        or not all(isinstance(toolchain, str) and _TOOLCHAIN_PIN_RE.fullmatch(toolchain)
+                   for toolchain in build.pinned_toolchains)
+        or not build.configuration
+        or tuple(key for key, _ in build.configuration) != tuple(sorted(key for key, _ in build.configuration))
+        or len({key for key, _ in build.configuration}) != len(build.configuration)
+        or any(not isinstance(key, str) or not key or not isinstance(value, str) or not value
+               for key, value in build.configuration)
+    ):
+        raise ProvenanceError("PROVENANCE_BUILD")
+    return {
+        "configuration": dict(build.configuration),
+        "pinned_actions": list(build.pinned_actions),
+        "pinned_toolchains": list(build.pinned_toolchains),
+        "runner_image": build.runner_image,
+    }
+
+
 def _assets(assets: tuple[ReleaseAsset, ...], expected_names: tuple[str, ...]) -> list[dict[str, object]]:
     if tuple(asset.name for asset in assets) != expected_names:
         raise ProvenanceError("PROVENANCE_OWNERSHIP")
@@ -102,6 +134,7 @@ def build_provenance(context: ReleaseContext, siblings: tuple[ReleaseAsset, ...]
     """Build archive provenance before its checksum and enclosing ZIP exist."""
     contract = load_contract(_CONTRACT)
     return canonical_json({
+        "build": _build(context.build),
         "gates": _gates(context.gates),
         "schema": contract.schema,
         "siblings": _assets(siblings, contract.build_provenance_siblings),
@@ -115,6 +148,7 @@ def release_provenance(context: ReleaseContext, payloads: tuple[ReleaseAsset, ..
     expected_names = tuple(name.replace("{tag}", context.tag)
                            for name in contract.release_provenance_assets)
     return canonical_json({
+        "build": _build(context.build),
         "payloads": _assets(payloads, expected_names),
         "schema": contract.schema,
         "source": _source(context),

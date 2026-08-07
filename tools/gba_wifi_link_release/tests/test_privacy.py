@@ -1,5 +1,6 @@
 """Public-tree membership and category-only privacy validation tests."""
 
+from dataclasses import replace
 import hashlib
 import json
 from pathlib import Path
@@ -10,15 +11,30 @@ from tools.gba_wifi_link_release.admission import REQUIRED_GATES, REQUIRED_WORKF
 from tools.gba_wifi_link_release.model import BuildEvidence, GateResult, ReleaseAsset, ReleaseContext, load_contract
 from tools.gba_wifi_link_release.privacy import PrivacyError, validate_public_tree
 from tools.gba_wifi_link_release.provenance import canonical_json, release_provenance
+from tools.gba_wifi_link_release.tests.test_packager import actual_builds
 
 
 ROOT = Path(__file__).resolve().parents[3]
 CONTRACT = load_contract(ROOT / "packaging/gba-wifi-link/release/contract-v1.json")
 BUILD_EVIDENCE = BuildEvidence(
     runner_image="ubuntu-24.04-20260125.1",
-    pinned_actions=("actions/checkout@0123456789abcdef0123456789abcdef01234567",),
+    pinned_actions=(
+        "actions/checkout@0123456789abcdef0123456789abcdef01234567",
+        "actions/download-artifact@" + "1" * 40,
+        "actions/upload-artifact@89abcdef0123456789abcdef0123456789abcdef",
+    ),
     pinned_toolchains=("android-ndk@27.2.12479018+sha256:" + "d" * 64,),
     configuration=(("android_abi", "arm64-v8a"), ("android_api", "21")),
+    actual_builds=tuple(
+        replace(
+            build,
+            core=ReleaseAsset(
+                "mgba_libretro_android.so", len(b"public core\n"),
+                hashlib.sha256(b"public core\n").hexdigest(),
+            ),
+        )
+        for build in actual_builds(1_700_000_000)
+    ),
 )
 
 CONTEXT = ReleaseContext(
@@ -69,6 +85,12 @@ class PrivacyTest(unittest.TestCase):
     def test_declared_public_tree_is_accepted(self):
         with self.public_tree() as temporary:
             validate_public_tree(Path(temporary), CONTRACT)
+
+    def test_release_provenance_rejects_payload_byte_mismatch(self):
+        with self.public_tree() as temporary:
+            root = Path(temporary)
+            (root / "mgba_libretro_android.so").write_bytes(b"changed core\n")
+            self.assert_category_only("PRIVACY_HASH", root, "changed core")
 
     def test_schema_v1_project_and_release_urls_are_public_text(self):
         urls = (
@@ -198,6 +220,34 @@ class PrivacyTest(unittest.TestCase):
                     document["build"][field] = value
                     (root / "RELEASE-PROVENANCE.json").write_bytes(canonical_json(document))
                     self.assert_category_only(category, root, "SYNTHETIC_BUILD_EVIDENCE")
+
+        for case in ("missing", "mismatch", "actions-type", "action-format",
+                     "action-version", "ndk-plan"):
+            with self.subTest(case=case), self.public_tree() as temporary:
+                root = Path(temporary)
+                document = json.loads((root / "RELEASE-PROVENANCE.json").read_bytes())
+                actual = document["build"]["actual_builds"]
+                if case == "missing":
+                    actual.pop()
+                elif case == "mismatch":
+                    actual[1]["compiler_sha256"] = "f" * 64
+                else:
+                    if case == "actions-type":
+                        actual[1]["pinned_actions"] = 7
+                    elif case == "action-format":
+                        actual[1]["pinned_actions"][0] = (
+                            "actions/checkout@0123456789abcdef0123456789abcdef01234567"
+                        )
+                    elif case == "action-version":
+                        actual[1]["pinned_actions"][0] = (
+                            "actions/checkout@v9+sha:"
+                            "0123456789abcdef0123456789abcdef01234567"
+                        )
+                    else:
+                        actual[0]["ndk_revision"] = "27.3.0"
+                        actual[1]["ndk_revision"] = "27.3.0"
+                (root / "RELEASE-PROVENANCE.json").write_bytes(canonical_json(document))
+                self.assert_category_only("PRIVACY_FIELD", root, "SYNTHETIC_BUILD_EVIDENCE")
 
     def test_symlink_and_undeclared_file_are_rejected_without_disclosing_names(self):
         symlink_canary = "SYNTHETIC_SYMLINK_CANARY"

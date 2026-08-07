@@ -28,6 +28,28 @@ class ReleaseAsset:
 
 
 @dataclass(frozen=True)
+class ActualBuildEvidence:
+    """Resolved identity emitted by one clean release build job."""
+
+    role: str
+    run_id: int
+    job_id: int
+    runner_image_os: str
+    runner_image_version: str
+    ndk_revision: str
+    ndk_source_properties_sha256: str
+    compiler_sha256: str
+    compiler_version: str
+    cmake_version: str
+    ninja_version: str
+    source_commit: str
+    source_date_epoch: int
+    configuration: tuple[tuple[str, str], ...]
+    core: ReleaseAsset
+    pinned_actions: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class BuildEvidence:
     """Resolved, pinned build inputs retained in canonical provenance."""
 
@@ -35,6 +57,7 @@ class BuildEvidence:
     pinned_actions: tuple[str, ...]
     pinned_toolchains: tuple[str, ...]
     configuration: tuple[tuple[str, str], ...]
+    actual_builds: tuple[ActualBuildEvidence, ...] = ()
 
 
 @dataclass(frozen=True)

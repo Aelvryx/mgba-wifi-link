@@ -373,6 +373,70 @@ def _release_required(text: str, fragment: str, category: str) -> None:
         raise WorkflowPolicyError(category)
 
 
+def _expected_publisher(action_pins: dict[str, str], artifact_name: str) -> str:
+    """Return the only privileged job shape admitted by the release policy."""
+    download = action_pins["actions/download-artifact"]
+    attest = action_pins["actions/attest-build-provenance"]
+    return f"""  publish:
+    name: Attest and automatically publish
+    needs: [admit, package]
+    runs-on: ubuntu-24.04
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - name: Download canonical publisher input
+        uses: actions/download-artifact@{download} # v5
+        with:
+          name: {artifact_name}
+          path: publisher-input
+
+      - name: Verify canonical release before mutation
+        run: |
+          set -euo pipefail
+          test "$(find publisher-input -mindepth 1 -maxdepth 1 -printf '%f\\n' | sort | tr '\\n' ' ')" = \\
+            "release release-body.md release-context.json release-tool "
+          diff --unified \\
+            <(cut -c67- publisher-input/release-tool/MANIFEST.sha256 | sort) \\
+            <(find publisher-input/release-tool -type f ! -name MANIFEST.sha256 | sort)
+          sha256sum --check publisher-input/release-tool/MANIFEST.sha256
+          python3 publisher-input/release-tool/tools/gba-wifi-link-release.py verify \\
+            --context publisher-input/release-context.json \\
+            --output publisher-input/release
+
+      - name: Recheck immutable remote tag
+        run: |
+          set -euo pipefail
+          python3 publisher-input/release-tool/tools/gba-wifi-link-release.py verify-tag \\
+            --context publisher-input/release-context.json \\
+            --repository "$GITHUB_REPOSITORY"
+
+      - name: Attest admitted core
+        if: ${{{{ needs.admit.outputs.release_exists != 'true' }}}}
+        uses: actions/attest-build-provenance@{attest} # v3
+        with:
+          subject-path: publisher-input/release/mgba_libretro_android.so
+
+      - name: Attest admitted archive
+        if: ${{{{ needs.admit.outputs.release_exists != 'true' }}}}
+        uses: actions/attest-build-provenance@{attest} # v3
+        with:
+          subject-path: publisher-input/release/mgba-gba-wifi-link-*-android-arm64.zip
+
+      - name: Publish transaction and final public verification
+        env:
+          GH_TOKEN: ${{{{ github.token }}}}
+        run: |
+          set -euo pipefail
+          python3 publisher-input/release-tool/tools/gba-wifi-link-release.py publish \\
+            --context publisher-input/release-context.json \\
+            --output publisher-input/release \\
+            --body publisher-input/release-body.md \\
+            --repository "$GITHUB_REPOSITORY"
+"""
+
+
 def validate_release_workflow_policy(repo: Path) -> None:
     """Reject release automation that weakens the reviewed fail-closed graph."""
     text, contract = _read_release_workflow(repo)
@@ -449,6 +513,13 @@ def validate_release_workflow_policy(repo: Path) -> None:
     }
     if len(expected_actions) != 4:
         raise WorkflowPolicyError("RELEASE_WORKFLOW_ACTION_PIN")
+    if contract.get("action_versions") != {
+        "actions/attest-build-provenance": "v3",
+        "actions/checkout": "v6",
+        "actions/download-artifact": "v5",
+        "actions/upload-artifact": "v4",
+    }:
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_ACTION_VERSION")
     uses = _USES.findall(text)
     third_party = [value for value in uses if not value.startswith("./")]
     if (
@@ -493,7 +564,7 @@ def validate_release_workflow_policy(repo: Path) -> None:
         '-DGIT_TAG="$EXPECTED_TAG"',
         "sha256sum --check build-digests.txt",
         'test "$protected_sha" = "$independent_sha"',
-        "cmp --silent build-protected/mgba_libretro.so build-independent/mgba_libretro.so",
+        "cmp --silent build-protected/mgba_libretro_android.so build-independent/mgba_libretro_android.so",
         "diff --recursive --no-dereference package-a/release package-b/release",
         "verify --context context.json --output package-a/release",
         "verify --context context.json --output package-b/release",
@@ -510,6 +581,52 @@ def validate_release_workflow_policy(repo: Path) -> None:
         or text.count("python3 tools/gba-wifi-link-release.py build") != 2
     ):
         raise WorkflowPolicyError("RELEASE_WORKFLOW_REPRODUCIBILITY")
+
+    actual_build_fragments = (
+        '"runner_image_os": os.environ["ImageOS"]',
+        '"runner_image_version": os.environ["ImageVersion"]',
+        '"ndk_revision": revisions[0]',
+        '"ndk_source_properties_sha256": hashlib.sha256(source_properties.read_bytes()).hexdigest()',
+        '"compiler_sha256": hashlib.sha256(compiler.read_bytes()).hexdigest()',
+        '"compiler_version": version(str(compiler), "--version")',
+        '"cmake_version": version("cmake", "--version")',
+        '"ninja_version": version("ninja", "--version")',
+        '"job_id": job["id"]',
+        '"source_date_epoch": int(os.environ["SOURCE_DATE_EPOCH"])',
+        '"pinned_actions": pinned_actions',
+    )
+    if (
+        any(text.count(fragment) != 2 for fragment in actual_build_fragments)
+        or text.count('"run_id": int(os.environ["GITHUB_RUN_ID"])') != 3
+    ):
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_ACTUAL_BUILD")
+    action_identity = (
+        'f"{name}@{workflow[\'action_versions\'][name]}+sha:'
+        '{workflow[\'action_pins\'][name]}"'
+    )
+    comparison = (
+        "          reproducibility_fields = (\n"
+        "              \"runner_image_os\",\n"
+        "              \"runner_image_version\",\n"
+        "              \"ndk_revision\",\n"
+        "              \"ndk_source_properties_sha256\",\n"
+        "              \"compiler_sha256\",\n"
+        "              \"compiler_version\",\n"
+        "              \"cmake_version\",\n"
+        "              \"ninja_version\",\n"
+        "              \"source_commit\",\n"
+        "              \"source_date_epoch\",\n"
+        "              \"configuration\",\n"
+        "              \"core\",\n"
+        "          )"
+    )
+    if (
+        text.count(action_identity) != 2
+        or comparison not in text
+        or "python3 tools/gba-wifi-link-release.py bind-builds" not in text
+        or "--identities matched-build/BUILD-IDENTITIES.json" not in text
+    ):
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_ACTUAL_BUILD")
 
     gate_fragment = (
         "          required = (\n"
@@ -537,6 +654,8 @@ def validate_release_workflow_policy(repo: Path) -> None:
     if publisher_start < 0:
         raise WorkflowPolicyError("RELEASE_WORKFLOW_PUBLISHER")
     publisher = text[publisher_start:]
+    if publisher[1:] != _expected_publisher(action_pins, artifact_name):
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_PUBLISHER_ALLOWLIST")
     if publisher.count("if: ${{ needs.admit.outputs.release_exists != 'true' }}") != 2:
         raise WorkflowPolicyError("RELEASE_WORKFLOW_RERUN")
     publisher_uses = _USES.findall(publisher)

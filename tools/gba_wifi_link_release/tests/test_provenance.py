@@ -2,10 +2,20 @@
 
 from dataclasses import replace
 import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 
 from tools.gba_wifi_link_release.admission import REQUIRED_GATES, REQUIRED_WORKFLOW
-from tools.gba_wifi_link_release.model import BuildEvidence, GateResult, ReleaseAsset, ReleaseContext
+from tools.gba_wifi_link_release.model import (
+    ActualBuildEvidence,
+    BuildEvidence,
+    GateResult,
+    ReleaseAsset,
+    ReleaseContext,
+)
 from tools.gba_wifi_link_release.provenance import (
     ProvenanceError,
     build_provenance,
@@ -14,14 +24,89 @@ from tools.gba_wifi_link_release.provenance import (
 )
 
 
+ROOT = Path(__file__).resolve().parents[3]
+CLI = ROOT / "tools/gba-wifi-link-release.py"
+
+
+CORE_EVIDENCE = ReleaseAsset("mgba_libretro_android.so", 15, "5" * 64)
+ACTUAL_BUILDS = (
+    ActualBuildEvidence(
+        role="protected",
+        run_id=900,
+        job_id=901,
+        runner_image_os="ubuntu24",
+        runner_image_version="20260125.1",
+        ndk_revision="27.2.12479018",
+        ndk_source_properties_sha256="d" * 64,
+        compiler_sha256="e" * 64,
+        compiler_version="Android clang version 18.0.3",
+        cmake_version="cmake version 3.31.6",
+        ninja_version="1.12.1",
+        source_commit="b" * 40,
+        source_date_epoch=1_700_000_000,
+        configuration=(("android_abi", "arm64-v8a"), ("android_api", "21")),
+        core=CORE_EVIDENCE,
+        pinned_actions=(
+            "actions/checkout@v6+sha:0123456789abcdef0123456789abcdef01234567",
+            "actions/download-artifact@v5+sha:" + "1" * 40,
+            "actions/upload-artifact@v4+sha:89abcdef0123456789abcdef0123456789abcdef",
+        ),
+    ),
+    ActualBuildEvidence(
+        role="independent",
+        run_id=900,
+        job_id=902,
+        runner_image_os="ubuntu24",
+        runner_image_version="20260125.1",
+        ndk_revision="27.2.12479018",
+        ndk_source_properties_sha256="d" * 64,
+        compiler_sha256="e" * 64,
+        compiler_version="Android clang version 18.0.3",
+        cmake_version="cmake version 3.31.6",
+        ninja_version="1.12.1",
+        source_commit="b" * 40,
+        source_date_epoch=1_700_000_000,
+        configuration=(("android_abi", "arm64-v8a"), ("android_api", "21")),
+        core=CORE_EVIDENCE,
+        pinned_actions=(
+            "actions/checkout@v6+sha:0123456789abcdef0123456789abcdef01234567",
+            "actions/upload-artifact@v4+sha:89abcdef0123456789abcdef0123456789abcdef",
+        ),
+    ),
+)
+
+
+def actual_build_dict(build: ActualBuildEvidence) -> dict[str, object]:
+    return {
+        "cmake_version": build.cmake_version,
+        "compiler_sha256": build.compiler_sha256,
+        "compiler_version": build.compiler_version,
+        "configuration": dict(build.configuration),
+        "core": {"name": build.core.name, "sha256": build.core.sha256,
+                 "size": build.core.size},
+        "job_id": build.job_id,
+        "ndk_revision": build.ndk_revision,
+        "ndk_source_properties_sha256": build.ndk_source_properties_sha256,
+        "ninja_version": build.ninja_version,
+        "pinned_actions": list(build.pinned_actions),
+        "role": build.role,
+        "run_id": build.run_id,
+        "runner_image_os": build.runner_image_os,
+        "runner_image_version": build.runner_image_version,
+        "source_commit": build.source_commit,
+        "source_date_epoch": build.source_date_epoch,
+    }
+
 BUILD_EVIDENCE = BuildEvidence(
     runner_image="ubuntu-24.04-20260125.1",
     pinned_actions=(
         "actions/checkout@0123456789abcdef0123456789abcdef01234567",
+        "actions/download-artifact@" + "1" * 40,
         "actions/upload-artifact@89abcdef0123456789abcdef0123456789abcdef",
     ),
     pinned_toolchains=("android-ndk@27.2.12479018+sha256:" + "d" * 64,),
     configuration=(("android_abi", "arm64-v8a"), ("android_api", "21")),
+    actual_builds=ACTUAL_BUILDS,
 )
 
 CONTEXT = ReleaseContext(
@@ -46,7 +131,7 @@ BUILD_SIBLINGS = (
     ReleaseAsset("SOURCE-AND-PROVENANCE.md", 12, "2" * 64),
     ReleaseAsset("gba-link-continuous.gba", 13, "3" * 64),
     ReleaseAsset("gba-link-test.gba", 14, "4" * 64),
-    ReleaseAsset("mgba_libretro_android.so", 15, "5" * 64),
+    CORE_EVIDENCE,
 )
 RELEASE_PAYLOADS = (
     ReleaseAsset("mgba_libretro_android.so", 15, "5" * 64),
@@ -73,8 +158,31 @@ class ProvenanceTest(unittest.TestCase):
             document["build"],
             {
                 "configuration": {"android_abi": "arm64-v8a", "android_api": "21"},
+                "actual_builds": [
+                    {
+                        "cmake_version": build.cmake_version,
+                        "compiler_sha256": build.compiler_sha256,
+                        "compiler_version": build.compiler_version,
+                        "configuration": dict(build.configuration),
+                        "core": {"name": build.core.name, "sha256": build.core.sha256,
+                                 "size": build.core.size},
+                        "job_id": build.job_id,
+                        "ndk_revision": build.ndk_revision,
+                        "ndk_source_properties_sha256": build.ndk_source_properties_sha256,
+                        "ninja_version": build.ninja_version,
+                        "pinned_actions": list(build.pinned_actions),
+                        "role": build.role,
+                        "run_id": build.run_id,
+                        "runner_image_os": build.runner_image_os,
+                        "runner_image_version": build.runner_image_version,
+                        "source_commit": build.source_commit,
+                        "source_date_epoch": build.source_date_epoch,
+                    }
+                    for build in ACTUAL_BUILDS
+                ],
                 "pinned_actions": [
                     "actions/checkout@0123456789abcdef0123456789abcdef01234567",
+                    "actions/download-artifact@" + "1" * 40,
                     "actions/upload-artifact@89abcdef0123456789abcdef0123456789abcdef",
                 ],
                 "pinned_toolchains": ["android-ndk@27.2.12479018+sha256:" + "d" * 64],
@@ -122,6 +230,79 @@ class ProvenanceTest(unittest.TestCase):
         )
         self.assertNotIn("RELEASE-PROVENANCE.json", str(document))
         self.assertNotIn("SHA256SUMS", str(document))
+
+    def test_provenance_rejects_planned_inputs_without_two_actual_builds(self):
+        missing = replace(BUILD_EVIDENCE, actual_builds=())
+        with self.assertRaisesRegex(ProvenanceError, "^PROVENANCE_BUILD$"):
+            build_provenance(replace(CONTEXT, build=missing), BUILD_SIBLINGS)
+        malformed = replace(BUILD_EVIDENCE, actual_builds=(ACTUAL_BUILDS[0], None))
+        with self.assertRaisesRegex(ProvenanceError, "^PROVENANCE_BUILD$"):
+            build_provenance(replace(CONTEXT, build=malformed), BUILD_SIBLINGS)  # type: ignore[arg-type]
+
+    def test_provenance_rejects_mismatched_actual_builds_and_action_versions(self):
+        second = ACTUAL_BUILDS[1]
+        mutations = (
+            replace(second, runner_image_version="20260126.1"),
+            replace(second, compiler_sha256="f" * 64),
+            replace(second, cmake_version="cmake version 4.0.0"),
+            replace(second, source_commit="c" * 40),
+            replace(second, source_date_epoch=1_700_000_001),
+            replace(second, core=replace(second.core, sha256="6" * 64)),
+            replace(second, pinned_actions=("actions/checkout@" + "0" * 40,)),
+            replace(second, pinned_actions=(
+                "actions/checkout@v9+sha:0123456789abcdef0123456789abcdef01234567",
+                "actions/upload-artifact@v4+sha:89abcdef0123456789abcdef0123456789abcdef",
+            )),
+            replace(second, run_id=901),
+            replace(second, job_id=901),
+        )
+        for mutated in mutations:
+            with self.subTest(mutated=mutated):
+                build = replace(BUILD_EVIDENCE, actual_builds=(ACTUAL_BUILDS[0], mutated))
+                with self.assertRaisesRegex(ProvenanceError, "^PROVENANCE_BUILD$"):
+                    build_provenance(replace(CONTEXT, build=build), BUILD_SIBLINGS)
+        wrong_ndk = tuple(replace(build, ndk_revision="27.3.0") for build in ACTUAL_BUILDS)
+        with self.assertRaisesRegex(ProvenanceError, "^PROVENANCE_BUILD$"):
+            build_provenance(
+                replace(CONTEXT, build=replace(BUILD_EVIDENCE, actual_builds=wrong_ndk)),
+                BUILD_SIBLINGS,
+            )
+
+    def test_cli_binds_two_actual_builds_deterministically_and_rejects_mismatch(self):
+        from tools.gba_wifi_link_release.cli import _context_dict
+
+        admitted = replace(CONTEXT, build=replace(BUILD_EVIDENCE, actual_builds=()))
+        identities = {build.role: actual_build_dict(build) for build in ACTUAL_BUILDS}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            context_path = root / "context.json"
+            identities_path = root / "identities.json"
+            context_path.write_text(json.dumps(_context_dict(admitted)), encoding="utf-8")
+            identities_path.write_text(json.dumps(identities), encoding="utf-8")
+            command = (
+                sys.executable, str(CLI), "bind-builds", "--context", str(context_path),
+                "--identities", str(identities_path),
+            )
+
+            first = subprocess.run(command, check=False, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE)
+            second = subprocess.run(command, check=False, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+
+            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertEqual(first.stdout, second.stdout)
+            bound = json.loads(first.stdout)
+            self.assertEqual(
+                [build["role"] for build in bound["build"]["actual_builds"]],
+                ["protected", "independent"],
+            )
+
+            identities["independent"]["compiler_sha256"] = "f" * 64  # type: ignore[index]
+            identities_path.write_text(json.dumps(identities), encoding="utf-8")
+            mismatch = subprocess.run(command, check=False, stdout=subprocess.PIPE,
+                                      stderr=subprocess.PIPE)
+            self.assertEqual(mismatch.returncode, 2)
+            self.assertEqual(mismatch.stderr, b"PROVENANCE_BUILD\n")
 
     def test_provenance_rejects_invalid_assets_and_gate_evidence(self):
         invalid_hash = replace(BUILD_SIBLINGS[0], sha256="A" * 64)

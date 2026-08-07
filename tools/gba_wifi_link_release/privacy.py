@@ -17,7 +17,16 @@ _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
 _TAG_RE = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 _ACTION_PIN_RE = re.compile(r"^[A-Za-z0-9._/-]+@[0-9a-f]{40}$")
+_ACTION_IDENTITY_RE = re.compile(
+    r"^(?P<name>[A-Za-z0-9._/-]+)@(?P<version>v[0-9]+(?:\.[0-9]+){0,2})"
+    r"\+sha:(?P<sha>[0-9a-f]{40})$"
+)
 _TOOLCHAIN_PIN_RE = re.compile(r"^[A-Za-z0-9._/-]+@[A-Za-z0-9._-]+\+sha256:[0-9a-f]{64}$")
+_ACTION_VERSIONS = {
+    "actions/checkout": "v6",
+    "actions/download-artifact": "v5",
+    "actions/upload-artifact": "v4",
+}
 
 
 class PrivacyError(ValueError):
@@ -68,7 +77,8 @@ def _validate_release_provenance(path: Path, root: Path, expected_names: tuple[s
     build = value.get("build")
     if (
         not isinstance(build, dict)
-        or set(build) != {"configuration", "pinned_actions", "pinned_toolchains", "runner_image"}
+        or set(build) != {"actual_builds", "configuration", "pinned_actions",
+                          "pinned_toolchains", "runner_image"}
         or not isinstance(build["runner_image"], str)
         or not build["runner_image"]
         or not isinstance(build["pinned_actions"], list)
@@ -86,6 +96,8 @@ def _validate_release_provenance(path: Path, root: Path, expected_names: tuple[s
         or not isinstance(build["configuration"], dict)
         or not build["configuration"]
         or tuple(build["configuration"].items()) != REQUIRED_BUILD_CONFIGURATION
+        or not isinstance(build["actual_builds"], list)
+        or len(build["actual_builds"]) != 2
     ):
         raise PrivacyError("PRIVACY_FIELD")
     source = value.get("source")
@@ -128,6 +140,79 @@ def _validate_release_provenance(path: Path, root: Path, expected_names: tuple[s
             raise PrivacyError("PRIVACY_HASH")
         if hashlib.sha256(candidate.read_bytes()).hexdigest() != asset["sha256"]:
             raise PrivacyError("PRIVACY_HASH")
+    actual = build["actual_builds"]
+    actual_fields = {
+        "cmake_version", "compiler_sha256", "compiler_version", "configuration",
+        "core", "job_id", "ndk_revision", "ndk_source_properties_sha256",
+        "ninja_version", "pinned_actions", "role", "run_id", "runner_image_os",
+        "runner_image_version", "source_commit", "source_date_epoch",
+    }
+    if (
+        not all(isinstance(item, dict) and set(item) == actual_fields for item in actual)
+        or tuple(item["role"] for item in actual) != ("protected", "independent")
+    ):
+        raise PrivacyError("PRIVACY_FIELD")
+    planned_actions = set(build["pinned_actions"])
+    required_actions = (
+        {"actions/checkout", "actions/download-artifact", "actions/upload-artifact"},
+        {"actions/checkout", "actions/upload-artifact"},
+    )
+    for item, expected_actions in zip(actual, required_actions):
+        actions = item["pinned_actions"]
+        matches = [
+            _ACTION_IDENTITY_RE.fullmatch(action) if isinstance(action, str) else None
+            for action in actions
+        ] if isinstance(actions, list) else []
+        core = item["core"]
+        if (
+            type(item["run_id"]) is not int or item["run_id"] <= 0
+            or type(item["job_id"]) is not int or item["job_id"] <= 0
+            or any(not isinstance(item[field], str) or not item[field]
+                   or "\n" in item[field] or "\r" in item[field] for field in (
+                       "runner_image_os", "runner_image_version", "ndk_revision",
+                       "compiler_version", "cmake_version", "ninja_version",
+                   ))
+            or not isinstance(item["ndk_source_properties_sha256"], str)
+            or not _SHA256_RE.fullmatch(item["ndk_source_properties_sha256"])
+            or not isinstance(item["compiler_sha256"], str)
+            or not _SHA256_RE.fullmatch(item["compiler_sha256"])
+            or item["source_commit"] != source["commit"]
+            or item["source_date_epoch"] != source["source_date_epoch"]
+            or not isinstance(item["configuration"], dict)
+            or tuple(item["configuration"].items()) != REQUIRED_BUILD_CONFIGURATION
+            or core != payloads[0]
+            or not isinstance(actions, list)
+            or not actions
+            or actions != sorted(actions)
+            or len(set(actions)) != len(actions)
+            or any(match is None for match in matches)
+        ):
+            raise PrivacyError("PRIVACY_FIELD")
+        valid_matches = [match for match in matches if match is not None]
+        if (
+            {match.group("name") for match in valid_matches} != expected_actions
+            or any(_ACTION_VERSIONS.get(match.group("name")) != match.group("version")
+                   for match in valid_matches)
+            or any(f'{match.group("name")}@{match.group("sha")}' not in planned_actions
+                   for match in valid_matches)
+            or (
+                f"android-ndk@{item['ndk_revision']}+sha256:"
+                f"{item['ndk_source_properties_sha256']}"
+            ) not in build["pinned_toolchains"]
+        ):
+            raise PrivacyError("PRIVACY_FIELD")
+    reproducibility_fields = (
+        "runner_image_os", "runner_image_version", "ndk_revision",
+        "ndk_source_properties_sha256", "compiler_sha256", "compiler_version",
+        "cmake_version", "ninja_version", "source_commit", "source_date_epoch",
+        "configuration", "core",
+    )
+    if (
+        any(actual[0][field] != actual[1][field] for field in reproducibility_fields)
+        or actual[0]["run_id"] != actual[1]["run_id"]
+        or actual[0]["job_id"] == actual[1]["job_id"]
+    ):
+        raise PrivacyError("PRIVACY_FIELD")
 
 
 def validate_public_tree(root: Path, contract: ReleaseContract) -> None:

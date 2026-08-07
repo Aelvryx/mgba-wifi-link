@@ -15,7 +15,13 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 
 from tools.gba_wifi_link_release.admission import REQUIRED_GATES, REQUIRED_WORKFLOW
-from tools.gba_wifi_link_release.model import BuildEvidence, GateResult, ReleaseContext
+from tools.gba_wifi_link_release.model import (
+    ActualBuildEvidence,
+    BuildEvidence,
+    GateResult,
+    ReleaseAsset,
+    ReleaseContext,
+)
 from tools.gba_wifi_link_release.packager import (
     PackageError,
     PackageInputs,
@@ -27,6 +33,40 @@ from tools.gba_wifi_link_release.verifier import VerificationError
 
 ROOT = Path(__file__).resolve().parents[3]
 TEMPLATES = ROOT / "packaging/gba-wifi-link/release/templates"
+
+
+def actual_builds(epoch: int) -> tuple[ActualBuildEvidence, ...]:
+    core_bytes = b"synthetic core\r\n"
+    core = ReleaseAsset(
+        "mgba_libretro_android.so", len(core_bytes), hashlib.sha256(core_bytes).hexdigest(),
+    )
+    common = {
+        "run_id": 900,
+        "runner_image_os": "ubuntu24",
+        "runner_image_version": "20260125.1",
+        "ndk_revision": "27.2.12479018",
+        "ndk_source_properties_sha256": "d" * 64,
+        "compiler_sha256": "e" * 64,
+        "compiler_version": "Android clang version 18.0.3",
+        "cmake_version": "cmake version 3.31.6",
+        "ninja_version": "1.12.1",
+        "source_commit": "b" * 40,
+        "source_date_epoch": epoch,
+        "configuration": (("android_abi", "arm64-v8a"), ("android_api", "21")),
+        "core": core,
+    }
+    checkout = "actions/checkout@v6+sha:0123456789abcdef0123456789abcdef01234567"
+    upload = "actions/upload-artifact@v4+sha:89abcdef0123456789abcdef0123456789abcdef"
+    return (
+        ActualBuildEvidence(
+            role="protected", job_id=901,
+            pinned_actions=(checkout, "actions/download-artifact@v5+sha:" + "1" * 40, upload),
+            **common,
+        ),
+        ActualBuildEvidence(
+            role="independent", job_id=902, pinned_actions=(checkout, upload), **common,
+        ),
+    )
 
 
 def context(epoch: int = 1_700_000_000) -> ReleaseContext:
@@ -43,9 +83,14 @@ def context(epoch: int = 1_700_000_000) -> ReleaseContext:
         notes_sha256=hashlib.sha256(b"Reviewed synthetic release notes.\n").hexdigest(),
         build=BuildEvidence(
             "synthetic-runner-2026",
-            ("actions/checkout@0123456789abcdef0123456789abcdef01234567",),
+            (
+                "actions/checkout@0123456789abcdef0123456789abcdef01234567",
+                "actions/download-artifact@" + "1" * 40,
+                "actions/upload-artifact@89abcdef0123456789abcdef0123456789abcdef",
+            ),
             ("android-ndk@27.2.12479018+sha256:" + "d" * 64,),
             (("android_abi", "arm64-v8a"), ("android_api", "21")),
+            actual_builds(epoch),
         ),
     )
 
@@ -282,10 +327,35 @@ class PackageTest(unittest.TestCase):
                         inputs = replace(inputs, release_notes=suffix)
                         changed_context = replace(changed_context, notes_sha256=hashlib.sha256(suffix).hexdigest())
                     elif field == "metadata":
-                        changed_context = replace(changed_context, source_date_epoch=1_700_000_002)
+                        changed_build = replace(
+                            changed_context.build,
+                            actual_builds=tuple(
+                                replace(build, source_date_epoch=1_700_000_002)
+                                for build in changed_context.build.actual_builds
+                            ),
+                        )
+                        changed_context = replace(
+                            changed_context, source_date_epoch=1_700_000_002,
+                            build=changed_build,
+                        )
                     else:
                         path = getattr(inputs, field)
                         path.write_bytes(path.read_bytes() + suffix)
+                        if field == "core":
+                            core = ReleaseAsset(
+                                "mgba_libretro_android.so", path.stat().st_size,
+                                hashlib.sha256(path.read_bytes()).hexdigest(),
+                            )
+                            changed_context = replace(
+                                changed_context,
+                                build=replace(
+                                    changed_context.build,
+                                    actual_builds=tuple(
+                                        replace(build, core=core)
+                                        for build in changed_context.build.actual_builds
+                                    ),
+                                ),
+                            )
                     if rejection == "PACKAGE_LICENCE":
                         with self.assertRaisesRegex(PackageError, "^PACKAGE_LICENCE$"):
                             build_release(changed_context, inputs, case_root / "release")

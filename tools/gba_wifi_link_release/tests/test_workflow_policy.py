@@ -1,5 +1,6 @@
 """Static contracts for the protected GBA Wi-Fi Link validation workflow."""
 
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -46,6 +47,15 @@ class WorkflowPolicyTest(unittest.TestCase):
             shutil.copy2(contract_source, contract)
             workflow = repo / ".github/workflows/gba-wifi-link-release.yml"
             workflow.write_text(mutate(workflow.read_text(encoding="utf-8")), encoding="utf-8")
+            value = json.loads(contract.read_text(encoding="utf-8"))
+            source = workflow.read_text(encoding="utf-8")
+            value["release_workflow"]["yaml_source_sha256"] = hashlib.sha256(
+                source.encode("utf-8")
+            ).hexdigest()
+            value["release_workflow"]["yaml_lexical_sha256"] = hashlib.sha256(
+                ("\n".join(lex_workflow_yaml(source)) + "\n").encode("utf-8")
+            ).hexdigest()
+            contract.write_text(json.dumps(value), encoding="utf-8")
             with self.assertRaises(WorkflowPolicyError):
                 validate_release_workflow_policy(repo)
 
@@ -239,6 +249,41 @@ jobs:
             2,
         )
 
+    def test_release_workflow_rejects_missing_or_mismatched_actual_build_evidence(self):
+        mutations = (
+            lambda source: source.replace(
+                '              "runner_image_os": os.environ["ImageOS"],\n', "", 1
+            ),
+            lambda source: source.replace(
+                '              "compiler_sha256": hashlib.sha256(compiler.read_bytes()).hexdigest(),\n',
+                "", 1,
+            ),
+            lambda source: source.replace(
+                '              "pinned_actions": pinned_actions,\n', "", 1
+            ),
+            lambda source: source.replace(
+                '              "job_id": job["id"],\n', "", 1
+            ),
+            lambda source: source.replace(
+                '              "compiler_sha256",\n              "compiler_version",\n',
+                '              "compiler_version",\n',
+                1,
+            ),
+            lambda source: source.replace(
+                "python3 tools/gba-wifi-link-release.py bind-builds",
+                "cp admitted/release-context.json context.json # missing actual identities",
+                1,
+            ),
+            lambda source: source.replace(
+                'f"{name}@{workflow[\'action_versions\'][name]}+sha:',
+                'f"{name}@sha:',
+                1,
+            ),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=mutate):
+                self.assert_release_rejected_after(mutate)
+
     def test_release_workflow_exact_rerun_is_read_only_through_publisher(self):
         source = (ROOT / ".github/workflows/gba-wifi-link-release.yml").read_text(encoding="utf-8")
         self.assertIn("--allow-existing-release", source)
@@ -300,7 +345,7 @@ jobs:
                 1,
             ),
             lambda source: source.replace(
-                "cmp --silent build-protected/mgba_libretro.so build-independent/mgba_libretro.so",
+                "cmp --silent build-protected/mgba_libretro_android.so build-independent/mgba_libretro_android.so",
                 "true",
                 1,
             ),
@@ -346,6 +391,20 @@ jobs:
             lambda source: source.replace(
                 "          set -euo pipefail\n          test \"$(find publisher-input",
                 "          set -euo pipefail\n          gh api --method POST repos/$GITHUB_REPOSITORY/releases\n          test \"$(find publisher-input",
+                1,
+            ),
+            lambda source: source.replace(
+                "      - name: Recheck immutable remote tag",
+                "      - name: Mutate release before tag recheck\n"
+                "        run: gh api --method PATCH repos/$GITHUB_REPOSITORY/releases/1\n\n"
+                "      - name: Recheck immutable remote tag",
+                1,
+            ),
+            lambda source: source.replace(
+                "      - name: Publish transaction and final public verification",
+                "      - name: Undeclared release command\n"
+                "        run: gh release create v0.0.0\n\n"
+                "      - name: Publish transaction and final public verification",
                 1,
             ),
             lambda source: source.replace(" verify-tag ", " render-body ", 1),

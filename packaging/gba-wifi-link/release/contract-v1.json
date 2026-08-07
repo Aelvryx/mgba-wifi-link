@@ -53,6 +53,12 @@
       "actions/download-artifact": "634f93cb2916e3fdff6788551b99b062d0335ce0",
       "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02"
     },
+    "action_versions": {
+      "actions/attest-build-provenance": "v3",
+      "actions/checkout": "v6",
+      "actions/download-artifact": "v5",
+      "actions/upload-artifact": "v4"
+    },
     "android_ndk": {
       "source_properties_sha256": "70f1c5165e6d997b18782a49cff71da7a3caacd0c4cd811da24c43359fb83cf6",
       "version": "27.2.12479018"
@@ -65,8 +71,8 @@
     ],
     "artifact_name": "gba-wifi-link-release-canonical",
     "runner_image": "ubuntu-24.04",
-    "yaml_lexical_sha256": "79bcf83e462bbe1c8896a7f11c62dc5b2867802771395eba45b1e182554235a3",
-    "yaml_source_sha256": "90bb6db6197c11240284c33a525741b1f5a0bb3caeeedbbf12955aea379dc33d"
+    "yaml_lexical_sha256": "b097277def118589d30578be4ef11c75f0cc1bdf45302f8c6da23cc759716eca",
+    "yaml_source_sha256": "2485de05be2b74578e9f7e52dae68af99371c5995369218998e58e39b8917cf6"
   },
   "release_provenance_assets": [
     "mgba_libretro_android.so",

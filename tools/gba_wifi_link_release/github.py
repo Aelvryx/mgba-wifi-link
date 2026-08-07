@@ -16,6 +16,10 @@ from .model import ReleaseContext
 MAX_JSON_BYTES = 1 << 20
 MAX_JSON_DEPTH = 20
 MAX_ASSETS = 32
+CANONICAL_SIGNER_WORKFLOW = (
+    "Aelvryx/mgba-wifi-link/.github/workflows/gba-wifi-link-release.yml"
+)
+SLSA_PROVENANCE_V1 = "https://slsa.dev/provenance/v1"
 
 
 class GitHubError(ValueError):
@@ -208,7 +212,10 @@ def _evidence_binds_subject(value: object, subject: AttestationSubject) -> bool:
         if not isinstance(verified, Mapping):
             continue
         statement = verified.get("statement")
-        if not isinstance(statement, Mapping):
+        if (
+            not isinstance(statement, Mapping)
+            or statement.get("predicateType") != SLSA_PROVENANCE_V1
+        ):
             continue
         subjects = statement.get("subject")
         if not isinstance(subjects, list) or len(subjects) > MAX_ASSETS:
@@ -230,11 +237,13 @@ class GhClient:
     """GitHub CLI implementation with no shell parsing or implicit repository."""
 
     def __init__(self, repository: str, *, gh: str = "gh",
-                 env: Mapping[str, str] | None = None):
+                 env: Mapping[str, str] | None = None,
+                 source_digest: str | None = None):
         if not isinstance(repository, str) or not repository:
             raise GitHubError("GITHUB_REPOSITORY")
         self.repository = repository
         self.gh = gh
+        self.source_digest = source_digest
         self.env = os.environ.copy()
         if env is not None:
             self.env.update(env)
@@ -314,6 +323,9 @@ class GhClient:
         """Verify existing provenance attestations for exact immutable subjects."""
         if (
             len(subjects) != 2
+            or not isinstance(self.source_digest, str)
+            or len(self.source_digest) != 40
+            or any(character not in "0123456789abcdef" for character in self.source_digest)
             or any(not _valid_subject(subject) for subject in subjects)
             or len({subject.name for subject in subjects}) != len(subjects)
         ):
@@ -323,7 +335,8 @@ class GhClient:
             try:
                 evidence = _json(self._run(
                     "attestation", "verify", str(subject.path), "--predicate-type",
-                    "https://slsa.dev/provenance/v1", "--format", "json", "--limit", "2",
+                    SLSA_PROVENANCE_V1, "--signer-workflow", CANONICAL_SIGNER_WORKFLOW,
+                    "--source-digest", self.source_digest, "--format", "json", "--limit", "2",
                 ))
             except GitHubError as error:
                 raise GitHubError("GITHUB_ATTEST") from error

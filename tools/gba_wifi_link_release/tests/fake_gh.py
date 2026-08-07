@@ -49,6 +49,19 @@ def main() -> None:
     if not arguments or arguments[0] != "api":
         if arguments[:2] == ["attestation", "verify"]:
             subject = Path(arguments[2])
+            expected = state.get("attestation_expected")
+            if isinstance(expected, dict):
+                required = {
+                    "--signer-workflow": expected.get("signer_workflow"),
+                    "--source-digest": expected.get("source_digest"),
+                }
+                if any(
+                    flag not in arguments or _option(arguments, flag) != value
+                    for flag, value in required.items()
+                ):
+                    _save(state)
+                    print("attestation identity mismatch", file=sys.stderr)
+                    raise SystemExit(1)
             mode = state.get("attestation_mode")
             if isinstance(mode, dict):
                 mode = mode.get(subject.name)
@@ -61,8 +74,10 @@ def main() -> None:
                 digest = "0" * 64
             evidence = [{
                 "verificationResult": {
-                    "statement": {"subject": [{"digest": {"sha256": digest},
-                                                "name": subject.name}]},
+                    "statement": {
+                        "predicateType": "https://slsa.dev/provenance/v1",
+                        "subject": [{"digest": {"sha256": digest}, "name": subject.name}],
+                    },
                 },
             }]
             _save(state)

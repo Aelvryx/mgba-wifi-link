@@ -14,10 +14,12 @@ import tempfile
 from .admission import (CANONICAL_REPOSITORY, REQUIRED_GATES, REQUIRED_WORKFLOW,
                         admit_release, verify_remote_tag)
 from .github import GhClient
-from .model import BuildEvidence, GateResult, ReleaseContext
+from .model import (ActualBuildEvidence, BuildEvidence, GateResult, ReleaseAsset,
+                    REQUIRED_BUILD_CONFIGURATION, ReleaseContext)
 from .packager import PackageInputs, build_release
 from .render import render_release_body
 from .publisher import publish_release
+from .provenance import bind_actual_builds
 from .verifier import verify_release
 
 
@@ -45,7 +47,9 @@ def _rename_noreplace(source: Path, destination: Path) -> None:
 def _context_dict(context: ReleaseContext) -> dict[str, object]:
     assert context.build is not None
     return {
-        "build": {"configuration": dict(context.build.configuration),
+        "build": {"actual_builds": [_actual_build_dict(build)
+                                      for build in context.build.actual_builds],
+                  "configuration": dict(context.build.configuration),
                   "pinned_actions": list(context.build.pinned_actions),
                   "pinned_toolchains": list(context.build.pinned_toolchains),
                   "runner_image": context.build.runner_image},
@@ -61,6 +65,63 @@ def _context_dict(context: ReleaseContext) -> dict[str, object]:
     }
 
 
+def _actual_build_dict(build: ActualBuildEvidence) -> dict[str, object]:
+    return {
+        "cmake_version": build.cmake_version,
+        "compiler_sha256": build.compiler_sha256,
+        "compiler_version": build.compiler_version,
+        "configuration": dict(build.configuration),
+        "core": {"name": build.core.name, "sha256": build.core.sha256,
+                 "size": build.core.size},
+        "job_id": build.job_id,
+        "ndk_revision": build.ndk_revision,
+        "ndk_source_properties_sha256": build.ndk_source_properties_sha256,
+        "ninja_version": build.ninja_version,
+        "pinned_actions": list(build.pinned_actions),
+        "role": build.role,
+        "run_id": build.run_id,
+        "runner_image_os": build.runner_image_os,
+        "runner_image_version": build.runner_image_version,
+        "source_commit": build.source_commit,
+        "source_date_epoch": build.source_date_epoch,
+    }
+
+
+def _actual_build_from_dict(value: object) -> ActualBuildEvidence:
+    required = {
+        "cmake_version", "compiler_sha256", "compiler_version", "configuration",
+        "core", "job_id", "ndk_revision", "ndk_source_properties_sha256",
+        "ninja_version", "pinned_actions", "role", "run_id", "runner_image_os",
+        "runner_image_version", "source_commit", "source_date_epoch",
+    }
+    if not isinstance(value, dict) or set(value) != required:
+        raise ValueError("CLI_BUILD_IDENTITIES")
+    core = value["core"]
+    configuration = value["configuration"]
+    if not isinstance(core, dict) or set(core) != {"name", "sha256", "size"}:
+        raise ValueError("CLI_BUILD_IDENTITIES")
+    if not isinstance(configuration, dict):
+        raise ValueError("CLI_BUILD_IDENTITIES")
+    try:
+        return ActualBuildEvidence(
+            role=value["role"], run_id=value["run_id"], job_id=value["job_id"],
+            runner_image_os=value["runner_image_os"],
+            runner_image_version=value["runner_image_version"],
+            ndk_revision=value["ndk_revision"],
+            ndk_source_properties_sha256=value["ndk_source_properties_sha256"],
+            compiler_sha256=value["compiler_sha256"],
+            compiler_version=value["compiler_version"],
+            cmake_version=value["cmake_version"], ninja_version=value["ninja_version"],
+            source_commit=value["source_commit"],
+            source_date_epoch=value["source_date_epoch"],
+            configuration=tuple(configuration.items()),
+            core=ReleaseAsset(core["name"], core["size"], core["sha256"]),
+            pinned_actions=tuple(value["pinned_actions"]),
+        )
+    except (KeyError, TypeError) as error:
+        raise ValueError("CLI_BUILD_IDENTITIES") from error
+
+
 def _context_from_dict(value: object) -> ReleaseContext:
     if not isinstance(value, dict):
         raise ValueError("CLI_CONTEXT")
@@ -71,6 +132,7 @@ def _context_from_dict(value: object) -> ReleaseContext:
         build = BuildEvidence(
             raw_build["runner_image"], tuple(raw_build["pinned_actions"]),
             tuple(raw_build["pinned_toolchains"]), tuple(raw_build["configuration"].items()),
+            tuple(_actual_build_from_dict(item) for item in raw_build.get("actual_builds", ())),
         )
         gates = tuple(GateResult(item["name"], item["workflow"], item["run_id"], item["job_id"], item["conclusion"])
                       for item in value["gates"])
@@ -84,6 +146,35 @@ def _context_from_dict(value: object) -> ReleaseContext:
 def _synthetic_context() -> ReleaseContext:
     raw = json.loads((FIXTURE / "input/context.json").read_text(encoding="utf-8"))
     notes = (FIXTURE / "release-notes/v9.8.7.md").read_bytes()
+    core_path = FIXTURE / "input/mgba_libretro_android.so"
+    core = ReleaseAsset(
+        core_path.name, core_path.stat().st_size,
+        hashlib.sha256(core_path.read_bytes()).hexdigest(),
+    )
+    checkout = "actions/checkout@v6+sha:0123456789abcdef0123456789abcdef01234567"
+    download = "actions/download-artifact@v5+sha:" + "1" * 40
+    upload = "actions/upload-artifact@v4+sha:89abcdef0123456789abcdef0123456789abcdef"
+    common = {
+        "run_id": 900,
+        "runner_image_os": "synthetic-linux",
+        "runner_image_version": "20260125.1",
+        "ndk_revision": "27.2.12479018",
+        "ndk_source_properties_sha256": "d" * 64,
+        "compiler_sha256": "e" * 64,
+        "compiler_version": "Android clang version 18.0.3",
+        "cmake_version": "cmake version 3.31.6",
+        "ninja_version": "1.12.1",
+        "source_commit": raw["commit"],
+        "source_date_epoch": raw["source_date_epoch"],
+        "configuration": REQUIRED_BUILD_CONFIGURATION,
+        "core": core,
+    }
+    actual_builds = (
+        ActualBuildEvidence(role="protected", job_id=901,
+                            pinned_actions=(checkout, download, upload), **common),
+        ActualBuildEvidence(role="independent", job_id=902,
+                            pinned_actions=(checkout, upload), **common),
+    )
     return ReleaseContext(
         repository=raw["repository"], tag=raw["tag"], tag_object=raw["tag_object"], commit=raw["commit"],
         version=raw["tag"][1:], source_date_epoch=raw["source_date_epoch"], prerelease=True,
@@ -92,9 +183,14 @@ def _synthetic_context() -> ReleaseContext:
         notes_sha256=hashlib.sha256(notes).hexdigest(),
         build=BuildEvidence(
             raw["runner_image"],
-            ("actions/checkout@0123456789abcdef0123456789abcdef01234567",),
+            (
+                "actions/checkout@0123456789abcdef0123456789abcdef01234567",
+                "actions/download-artifact@" + "1" * 40,
+                "actions/upload-artifact@89abcdef0123456789abcdef0123456789abcdef",
+            ),
             ("android-ndk@27.2.12479018+sha256:" + "d" * 64,),
             (("android_abi", "arm64-v8a"), ("android_api", "21")),
+            actual_builds,
         ),
     )
 
@@ -171,6 +267,9 @@ def _parser() -> argparse.ArgumentParser:
     verify_tag = commands.add_parser("verify-tag")
     verify_tag.add_argument("--context", required=True)
     verify_tag.add_argument("--repository", required=True)
+    bind_builds = commands.add_parser("bind-builds")
+    bind_builds.add_argument("--context", required=True)
+    bind_builds.add_argument("--identities", required=True)
     return parser
 
 
@@ -196,6 +295,16 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "verify-tag":
             context = _context_from_dict(json.loads(Path(args.context).read_text(encoding="utf-8")))
             verify_remote_tag(context, args.repository)
+        elif args.command == "bind-builds":
+            context = _context_from_dict(json.loads(Path(args.context).read_text(encoding="utf-8")))
+            raw = json.loads(Path(args.identities).read_text(encoding="utf-8"))
+            if not isinstance(raw, dict) or tuple(raw) != ("protected", "independent"):
+                raise ValueError("CLI_BUILD_IDENTITIES")
+            identities = tuple(_actual_build_from_dict(raw[role])
+                               for role in ("protected", "independent"))
+            bound = bind_actual_builds(context, identities)
+            sys.stdout.write(json.dumps(_context_dict(bound), sort_keys=True,
+                                        separators=(",", ":")) + "\n")
         else:
             if args.repository != CANONICAL_REPOSITORY:
                 raise ValueError("CLI_REPOSITORY")
@@ -207,7 +316,8 @@ def main(argv: list[str] | None = None) -> int:
             release_set = verify_release(Path(args.output), context)
             verify_remote_tag(context, args.repository)
             result = publish_release(
-                GhClient(args.repository, gh=args.gh_bin or "gh"), release_set,
+                GhClient(args.repository, gh=args.gh_bin or "gh",
+                         source_digest=context.commit), release_set,
                 Path(args.body).read_bytes(),
             )
             sys.stdout.write(json.dumps({"release_id": result.release_id, "reused": result.reused},

@@ -141,35 +141,36 @@ def _snapshot_subject(source: Path, destination: Path, asset: ReleaseAsset) -> A
 
 
 @contextmanager
-def _attestation_subjects(release_set: ReleaseSet) -> Iterator[tuple[AttestationSubject, ...]]:
+def _snapshot_release(release_set: ReleaseSet) -> Iterator[tuple[ReleaseSet, tuple[AttestationSubject, ...]]]:
     assert release_set.directory is not None
-    core = next((asset for asset in release_set.assets
-                 if asset.name == "mgba_libretro_android.so"), None)
-    archives = [asset for asset in release_set.assets if asset.name.endswith(".zip")]
-    if core is None or len(archives) != 1:
-        raise PublishError("PUBLISH_INPUT")
     with tempfile.TemporaryDirectory(prefix="gba-wifi-link-release-subject-") as directory:
         root = Path(directory)
+        snapshots = {
+            asset.name: _snapshot_subject(
+                release_set.directory / asset.name, root / asset.name, asset,
+            )
+            for asset in release_set.assets
+        }
+        archives = [asset for asset in release_set.assets if asset.name.endswith(".zip")]
+        if "mgba_libretro_android.so" not in snapshots or len(archives) != 1:
+            raise PublishError("PUBLISH_INPUT")
         yield (
-            _snapshot_subject(release_set.directory / core.name, root / core.name, core),
-            _snapshot_subject(release_set.directory / archives[0].name, root / archives[0].name,
-                              archives[0]),
+            ReleaseSet(release_set.context, release_set.assets, root),
+            (snapshots["mgba_libretro_android.so"], snapshots[archives[0].name]),
         )
 
 
-def publish_release(client: GitHubClient, release_set: ReleaseSet, body: bytes) -> PublishResult:
-    """Publish one exact release, retaining no mutation path for conflicts or reruns."""
-    if not isinstance(body, bytes):
-        raise PublishError("PUBLISH_BODY")
-    release_set = _verified_local(release_set)
+def _publish_verified(client: GitHubClient, release_set: ReleaseSet,
+                      subjects: tuple[AttestationSubject, ...], body: bytes) -> PublishResult:
     existing = client.get_release(release_set.context.tag)
     if existing is not None:
         if existing.draft:
             raise ReleaseConflict("RELEASE_CONFLICT")
         _verify_remote(client, release_set, body, existing, draft=False, conflict=True)
-        with _attestation_subjects(release_set) as subjects:
-            client.verify_attestations(subjects)
+        client.verify_attestations(subjects)
         return PublishResult(existing.id, True, True)
+
+    client.verify_attestations(subjects)
 
     created: RemoteRelease | None = None
     try:
@@ -185,8 +186,6 @@ def publish_release(client: GitHubClient, release_set: ReleaseSet, body: bytes) 
         if remote is None or remote.id != created.id:
             raise PublishError("PUBLISH_READBACK")
         _verify_remote(client, release_set, body, remote, draft=True, conflict=False)
-        with _attestation_subjects(release_set) as subjects:
-            client.verify_attestations(subjects)
     except Exception:
         if created is not None:
             _safe_cleanup(client, created, release_set)
@@ -206,3 +205,12 @@ def publish_release(client: GitHubClient, release_set: ReleaseSet, body: bytes) 
         raise ReleaseConflict("RELEASE_CONFLICT")
     _verify_remote(client, release_set, body, remote, draft=False, conflict=True)
     return PublishResult(remote.id, True, False)
+
+
+def publish_release(client: GitHubClient, release_set: ReleaseSet, body: bytes) -> PublishResult:
+    """Publish one exact release, retaining no mutation path for conflicts or reruns."""
+    if not isinstance(body, bytes):
+        raise PublishError("PUBLISH_BODY")
+    release_set = _verified_local(release_set)
+    with _snapshot_release(release_set) as (snapshot, subjects):
+        return _publish_verified(client, snapshot, subjects, body)

@@ -286,30 +286,72 @@ jobs:
       - name: Write first independent build metadata
         env:
           EXPECTED_COMMIT: ${{ needs.inspect-tag.outputs.commit }}
+          EXPECTED_JOB_NAME: Build first clean Android core
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" > build-jobs.json
           python3 - <<'PY'
           import hashlib
           import json
           import os
           from pathlib import Path
+          import subprocess
 
           output = Path("first-build")
           output.mkdir()
           core = Path("build-release-android/mgba_libretro.so")
-          target = output / "mgba_libretro.so"
+          target = output / "mgba_libretro_android.so"
           target.write_bytes(core.read_bytes())
+          contract = json.loads(Path("packaging/gba-wifi-link/release/contract-v1.json").read_text(encoding="utf-8"))
+          workflow = contract["release_workflow"]
+          jobs = json.loads(Path("build-jobs.json").read_text(encoding="utf-8")).get("jobs")
+          matches = [job for job in jobs if isinstance(job, dict) and (
+              job.get("name") == os.environ["EXPECTED_JOB_NAME"]
+              or str(job.get("name", "")).endswith(" / " + os.environ["EXPECTED_JOB_NAME"])
+          )] if isinstance(jobs, list) else []
+          if len(matches) != 1 or type(matches[0].get("id")) is not int:
+              raise SystemExit("build job identity mismatch")
+          job = matches[0]
+          ndk_root = Path(os.environ["ANDROID_HOME"]) / "ndk" / os.environ["ANDROID_NDK_VERSION"]
+          source_properties = ndk_root / "source.properties"
+          revisions = [line.split("=", 1)[1].strip() for line in source_properties.read_text(encoding="utf-8").splitlines()
+                       if line.startswith("Pkg.Revision") and "=" in line]
+          if len(revisions) != 1:
+              raise SystemExit("NDK revision mismatch")
+          compiler = ndk_root / "toolchains/llvm/prebuilt/linux-x86_64/bin/clang++"
+          action_names = ("actions/checkout", "actions/download-artifact", "actions/upload-artifact")
+          pinned_actions = sorted(
+              f"{name}@{workflow['action_versions'][name]}+sha:{workflow['action_pins'][name]}"
+              for name in action_names
+          )
+          def version(*command):
+              lines = subprocess.run(command, check=True, stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT, text=True).stdout.splitlines()
+              if not lines or not lines[0]:
+                  raise SystemExit("tool version missing")
+              return lines[0]
           metadata = {
-              "android_abi": "arm64-v8a",
-              "android_api": "21",
+              "cmake_version": version("cmake", "--version"),
+              "compiler_sha256": hashlib.sha256(compiler.read_bytes()).hexdigest(),
+              "compiler_version": version(str(compiler), "--version"),
+              "configuration": {"android_abi": "arm64-v8a", "android_api": "21"},
               "core": {
                   "name": target.name,
                   "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
                   "size": target.stat().st_size,
               },
-              "ndk_version": "27.2.12479018",
-              "schema": 1,
+              "job_id": job["id"],
+              "ndk_revision": revisions[0],
+              "ndk_source_properties_sha256": hashlib.sha256(source_properties.read_bytes()).hexdigest(),
+              "ninja_version": version("ninja", "--version"),
+              "pinned_actions": pinned_actions,
+              "role": "protected",
+              "run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "runner_image_os": os.environ["ImageOS"],
+              "runner_image_version": os.environ["ImageVersion"],
               "source_commit": os.environ["EXPECTED_COMMIT"],
+              "source_date_epoch": int(os.environ["SOURCE_DATE_EPOCH"]),
           }
           (output / "BUILD-METADATA.json").write_text(
               json.dumps(metadata, sort_keys=True, separators=(",", ":")) + "\n",
@@ -399,30 +441,72 @@ jobs:
       - name: Write independent build metadata
         env:
           EXPECTED_COMMIT: ${{ needs.inspect-tag.outputs.commit }}
+          EXPECTED_JOB_NAME: Build independent clean Android core
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" > build-jobs.json
           python3 - <<'PY'
           import hashlib
           import json
           import os
           from pathlib import Path
+          import subprocess
 
           output = Path("independent-build")
           output.mkdir()
           core = Path("build-release-android/mgba_libretro.so")
-          target = output / "mgba_libretro.so"
+          target = output / "mgba_libretro_android.so"
           target.write_bytes(core.read_bytes())
+          contract = json.loads(Path("packaging/gba-wifi-link/release/contract-v1.json").read_text(encoding="utf-8"))
+          workflow = contract["release_workflow"]
+          jobs = json.loads(Path("build-jobs.json").read_text(encoding="utf-8")).get("jobs")
+          matches = [job for job in jobs if isinstance(job, dict) and (
+              job.get("name") == os.environ["EXPECTED_JOB_NAME"]
+              or str(job.get("name", "")).endswith(" / " + os.environ["EXPECTED_JOB_NAME"])
+          )] if isinstance(jobs, list) else []
+          if len(matches) != 1 or type(matches[0].get("id")) is not int:
+              raise SystemExit("build job identity mismatch")
+          job = matches[0]
+          ndk_root = Path(os.environ["ANDROID_HOME"]) / "ndk" / os.environ["ANDROID_NDK_VERSION"]
+          source_properties = ndk_root / "source.properties"
+          revisions = [line.split("=", 1)[1].strip() for line in source_properties.read_text(encoding="utf-8").splitlines()
+                       if line.startswith("Pkg.Revision") and "=" in line]
+          if len(revisions) != 1:
+              raise SystemExit("NDK revision mismatch")
+          compiler = ndk_root / "toolchains/llvm/prebuilt/linux-x86_64/bin/clang++"
+          action_names = ("actions/checkout", "actions/upload-artifact")
+          pinned_actions = sorted(
+              f"{name}@{workflow['action_versions'][name]}+sha:{workflow['action_pins'][name]}"
+              for name in action_names
+          )
+          def version(*command):
+              lines = subprocess.run(command, check=True, stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT, text=True).stdout.splitlines()
+              if not lines or not lines[0]:
+                  raise SystemExit("tool version missing")
+              return lines[0]
           metadata = {
-              "android_abi": "arm64-v8a",
-              "android_api": "21",
+              "cmake_version": version("cmake", "--version"),
+              "compiler_sha256": hashlib.sha256(compiler.read_bytes()).hexdigest(),
+              "compiler_version": version(str(compiler), "--version"),
+              "configuration": {"android_abi": "arm64-v8a", "android_api": "21"},
               "core": {
                   "name": target.name,
                   "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
                   "size": target.stat().st_size,
               },
-              "ndk_version": "27.2.12479018",
-              "schema": 1,
+              "job_id": job["id"],
+              "ndk_revision": revisions[0],
+              "ndk_source_properties_sha256": hashlib.sha256(source_properties.read_bytes()).hexdigest(),
+              "ninja_version": version("ninja", "--version"),
+              "pinned_actions": pinned_actions,
+              "role": "independent",
+              "run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "runner_image_os": os.environ["ImageOS"],
+              "runner_image_version": os.environ["ImageVersion"],
               "source_commit": os.environ["EXPECTED_COMMIT"],
+              "source_date_epoch": int(os.environ["SOURCE_DATE_EPOCH"]),
           }
           (output / "BUILD-METADATA.json").write_text(
               json.dumps(metadata, sort_keys=True, separators=(",", ":")) + "\n",
@@ -460,15 +544,15 @@ jobs:
           EXPECTED_COMMIT: ${{ needs.inspect-tag.outputs.commit }}
         run: |
           set -euo pipefail
-          protected_sha="$(sha256sum build-protected/mgba_libretro.so | cut -d' ' -f1)"
-          independent_sha="$(sha256sum build-independent/mgba_libretro.so | cut -d' ' -f1)"
-          printf '%s  %s\n' "$protected_sha" build-protected/mgba_libretro.so > build-digests.txt
-          printf '%s  %s\n' "$independent_sha" build-independent/mgba_libretro.so >> build-digests.txt
+          protected_sha="$(sha256sum build-protected/mgba_libretro_android.so | cut -d' ' -f1)"
+          independent_sha="$(sha256sum build-independent/mgba_libretro_android.so | cut -d' ' -f1)"
+          printf '%s  %s\n' "$protected_sha" build-protected/mgba_libretro_android.so > build-digests.txt
+          printf '%s  %s\n' "$independent_sha" build-independent/mgba_libretro_android.so >> build-digests.txt
           sha256sum --check build-digests.txt
           test "$protected_sha" = "$independent_sha"
-          cmp --silent build-protected/mgba_libretro.so build-independent/mgba_libretro.so
+          cmp --silent build-protected/mgba_libretro_android.so build-independent/mgba_libretro_android.so
           mkdir matched-build
-          cp build-protected/mgba_libretro.so matched-build/mgba_libretro_android.so
+          cp build-protected/mgba_libretro_android.so matched-build/mgba_libretro_android.so
           EXPECTED_SHA="$protected_sha" python3 - <<'PY'
           import json
           import os
@@ -482,6 +566,30 @@ jobs:
               if value.get("core", {}).get("sha256") != os.environ["EXPECTED_SHA"]:
                   raise SystemExit("build digest mismatch")
               identities[name] = value
+          protected = identities["protected"]
+          independent = identities["independent"]
+          if protected.get("role") != "protected" or independent.get("role") != "independent":
+              raise SystemExit("build role mismatch")
+          if protected.get("run_id") != independent.get("run_id"):
+              raise SystemExit("build run mismatch")
+          if protected.get("job_id") == independent.get("job_id"):
+              raise SystemExit("build job mismatch")
+          reproducibility_fields = (
+              "runner_image_os",
+              "runner_image_version",
+              "ndk_revision",
+              "ndk_source_properties_sha256",
+              "compiler_sha256",
+              "compiler_version",
+              "cmake_version",
+              "ninja_version",
+              "source_commit",
+              "source_date_epoch",
+              "configuration",
+              "core",
+          )
+          if any(protected.get(field) != independent.get(field) for field in reproducibility_fields):
+              raise SystemExit("build reproducibility identity mismatch")
           Path("matched-build/BUILD-IDENTITIES.json").write_text(
               json.dumps(identities, sort_keys=True, separators=(",", ":")) + "\n",
               encoding="utf-8",
@@ -525,7 +633,10 @@ jobs:
           EXPECTED_TAG: ${{ needs.inspect-tag.outputs.tag }}
         run: |
           set -euo pipefail
-          cp admitted/release-context.json context.json
+          python3 tools/gba-wifi-link-release.py bind-builds \
+            --context admitted/release-context.json \
+            --identities matched-build/BUILD-IDENTITIES.json \
+            > context.json
           notes="packaging/gba-wifi-link/releases/${EXPECTED_TAG}/RELEASE-NOTES.md"
           mkdir package-a package-b
           python3 tools/gba-wifi-link-release.py build \

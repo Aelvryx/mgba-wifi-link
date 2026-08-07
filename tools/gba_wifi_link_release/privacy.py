@@ -99,6 +99,7 @@ def _validate_release_provenance(path: Path, root: Path, expected_names: tuple[s
         source["repository"] != "Aelvryx/mgba-wifi-link"
         or not isinstance(tag, str)
         or not _TAG_RE.fullmatch(tag)
+        or tag != _archive_tag(expected_names)
         or source["version"] != tag[1:]
         or not isinstance(source["tag_object"], str)
         or not _SHA1_RE.fullmatch(source["tag_object"])

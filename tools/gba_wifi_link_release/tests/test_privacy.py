@@ -93,6 +93,13 @@ class PrivacyTest(unittest.TestCase):
         with self.public_tree() as temporary:
             root = Path(temporary)
             document = json.loads((root / "RELEASE-PROVENANCE.json").read_bytes())
+            document["source"]["tag"] = "v9.8.8"
+            document["source"]["version"] = "9.8.8"
+            (root / "RELEASE-PROVENANCE.json").write_bytes(canonical_json(document))
+            self.assert_category_only("PRIVACY_FIELD", root, "v9.8.8")
+        with self.public_tree() as temporary:
+            root = Path(temporary)
+            document = json.loads((root / "RELEASE-PROVENANCE.json").read_bytes())
             (root / "RELEASE-PROVENANCE.json").write_text(
                 json.dumps(document, indent=2) + "\n", encoding="utf-8"
             )

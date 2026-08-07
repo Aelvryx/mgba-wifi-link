@@ -47,8 +47,26 @@ def main() -> None:
 
     release = state.get("release")
     if not arguments or arguments[0] != "api":
-        if arguments[:2] == ["attestation", "create"]:
+        if arguments[:2] == ["attestation", "verify"]:
+            subject = Path(arguments[2])
+            mode = state.get("attestation_mode")
+            if isinstance(mode, dict):
+                mode = mode.get(subject.name)
+            if mode == "missing":
+                _save(state)
+                print("no matching attestations", file=sys.stderr)
+                raise SystemExit(1)
+            digest = hashlib.sha256(subject.read_bytes()).hexdigest()
+            if mode == "invalid":
+                digest = "0" * 64
+            evidence = [{
+                "verificationResult": {
+                    "statement": {"subject": [{"digest": {"sha256": digest},
+                                                "name": subject.name}]},
+                },
+            }]
             _save(state)
+            sys.stdout.write(json.dumps(evidence, sort_keys=True, separators=(",", ":")))
             return
         raise SystemExit(64)
 

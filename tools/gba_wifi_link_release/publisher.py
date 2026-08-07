@@ -1,10 +1,15 @@
 """Fail-closed, transactional publication of an already verified release set."""
 
 from dataclasses import dataclass
+from contextlib import contextmanager
+import hashlib
+import os
 from pathlib import Path
+import stat
 import tempfile
+from typing import Iterator
 
-from .github import GitHubClient, RemoteAsset, RemoteRelease
+from .github import AttestationSubject, GitHubClient, RemoteAsset, RemoteRelease
 from .model import ReleaseAsset, ReleaseSet
 from .verifier import VerificationError, verify_release
 
@@ -97,13 +102,59 @@ def _verified_local(release_set: ReleaseSet) -> ReleaseSet:
     return verified
 
 
-def _attestation_paths(release_set: ReleaseSet) -> tuple[Path, Path]:
+def _snapshot_subject(source: Path, destination: Path, asset: ReleaseAsset) -> AttestationSubject:
+    """Capture one regular source through a no-follow descriptor into a private file."""
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise PublishError("PUBLISH_SUBJECT")
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | os.O_NOFOLLOW
+    try:
+        descriptor = os.open(source, flags)
+    except OSError as error:
+        raise PublishError("PUBLISH_SUBJECT") from error
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise PublishError("PUBLISH_SUBJECT")
+        output = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            digest = hashlib.sha256()
+            size = 0
+            while data := os.read(descriptor, 1 << 16):
+                size += len(data)
+                digest.update(data)
+                remaining = memoryview(data)
+                while remaining:
+                    written = os.write(output, remaining)
+                    if written <= 0:
+                        raise OSError("snapshot write")
+                    remaining = remaining[written:]
+        finally:
+            os.close(output)
+    except PublishError:
+        raise
+    except OSError as error:
+        raise PublishError("PUBLISH_SUBJECT") from error
+    finally:
+        os.close(descriptor)
+    if size != asset.size or digest.hexdigest() != asset.sha256:
+        raise PublishError("PUBLISH_SUBJECT")
+    return AttestationSubject(asset.name, destination, size, digest.hexdigest())
+
+
+@contextmanager
+def _attestation_subjects(release_set: ReleaseSet) -> Iterator[tuple[AttestationSubject, ...]]:
     assert release_set.directory is not None
-    core = release_set.directory / "mgba_libretro_android.so"
-    archives = [asset.name for asset in release_set.assets if asset.name.endswith(".zip")]
-    if len(archives) != 1:
+    core = next((asset for asset in release_set.assets
+                 if asset.name == "mgba_libretro_android.so"), None)
+    archives = [asset for asset in release_set.assets if asset.name.endswith(".zip")]
+    if core is None or len(archives) != 1:
         raise PublishError("PUBLISH_INPUT")
-    return core, release_set.directory / archives[0]
+    with tempfile.TemporaryDirectory(prefix="gba-wifi-link-release-subject-") as directory:
+        root = Path(directory)
+        yield (
+            _snapshot_subject(release_set.directory / core.name, root / core.name, core),
+            _snapshot_subject(release_set.directory / archives[0].name, root / archives[0].name,
+                              archives[0]),
+        )
 
 
 def publish_release(client: GitHubClient, release_set: ReleaseSet, body: bytes) -> PublishResult:
@@ -132,7 +183,8 @@ def publish_release(client: GitHubClient, release_set: ReleaseSet, body: bytes) 
         if remote is None or remote.id != created.id:
             raise PublishError("PUBLISH_READBACK")
         _verify_remote(client, release_set, body, remote, draft=True, conflict=False)
-        client.attest(_attestation_paths(release_set))
+        with _attestation_subjects(release_set) as subjects:
+            client.verify_attestations(subjects)
     except Exception:
         if created is not None:
             _safe_cleanup(client, created, release_set)

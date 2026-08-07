@@ -1,6 +1,7 @@
 """Small, fail-closed GitHub CLI adapter for the release publisher."""
 
 from dataclasses import dataclass
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -46,12 +47,22 @@ class RemoteRelease:
     assets: tuple[RemoteAsset, ...]
 
 
+@dataclass(frozen=True)
+class AttestationSubject:
+    """An immutable local subject and the digest the attestation must bind."""
+
+    name: str
+    path: Path
+    size: int
+    sha256: str
+
+
 class GitHubClient(Protocol):
     def get_release(self, tag: str) -> RemoteRelease | None: ...
     def create_draft(self, context: ReleaseContext, body: bytes) -> RemoteRelease: ...
     def upload(self, release_id: int, path: Path) -> RemoteAsset: ...
     def download_assets(self, release_id: int, output: Path) -> None: ...
-    def attest(self, paths: tuple[Path, ...]) -> None: ...
+    def verify_attestations(self, subjects: tuple[AttestationSubject, ...]) -> None: ...
     def publish(self, release_id: int) -> None: ...
     def delete_draft(self, release_id: int) -> None: ...
 
@@ -158,6 +169,63 @@ def _remote_release(value: object) -> RemoteRelease:
     )
 
 
+def _valid_subject(subject: AttestationSubject) -> bool:
+    return (
+        isinstance(subject, AttestationSubject)
+        and isinstance(subject.name, str)
+        and Path(subject.name).name == subject.name
+        and isinstance(subject.path, Path)
+        and type(subject.size) is int
+        and subject.size >= 0
+        and isinstance(subject.sha256, str)
+        and len(subject.sha256) == 64
+        and all(character in "0123456789abcdef" for character in subject.sha256)
+    )
+
+
+def _subject_digest(subject: AttestationSubject) -> str:
+    if not _valid_subject(subject):
+        raise GitHubError("GITHUB_ATTEST")
+    try:
+        with subject.path.open("rb") as source:
+            digest = hashlib.file_digest(source, "sha256").hexdigest()
+        if subject.path.stat().st_size != subject.size or digest != subject.sha256:
+            raise GitHubError("GITHUB_ATTEST")
+    except GitHubError:
+        raise
+    except OSError as error:
+        raise GitHubError("GITHUB_ATTEST") from error
+    return digest
+
+
+def _evidence_binds_subject(value: object, subject: AttestationSubject) -> bool:
+    if not isinstance(value, list) or not value or len(value) > MAX_ASSETS:
+        return False
+    for evidence in value:
+        if not isinstance(evidence, Mapping):
+            continue
+        verified = evidence.get("verificationResult")
+        if not isinstance(verified, Mapping):
+            continue
+        statement = verified.get("statement")
+        if not isinstance(statement, Mapping):
+            continue
+        subjects = statement.get("subject")
+        if not isinstance(subjects, list) or len(subjects) > MAX_ASSETS:
+            continue
+        for candidate in subjects:
+            if not isinstance(candidate, Mapping):
+                continue
+            digest = candidate.get("digest")
+            if (
+                candidate.get("name") == subject.name
+                and isinstance(digest, Mapping)
+                and digest.get("sha256") == subject.sha256
+            ):
+                return True
+    return False
+
+
 class GhClient:
     """GitHub CLI implementation with no shell parsing or implicit repository."""
 
@@ -242,10 +310,25 @@ class GhClient:
                 "--header", "Accept: application/octet-stream", "--output", str(destination),
             )
 
-    def attest(self, paths: tuple[Path, ...]) -> None:
-        if len(paths) != 2 or any(not path.is_file() for path in paths):
+    def verify_attestations(self, subjects: tuple[AttestationSubject, ...]) -> None:
+        """Verify existing provenance attestations for exact immutable subjects."""
+        if (
+            len(subjects) != 2
+            or any(not _valid_subject(subject) for subject in subjects)
+            or len({subject.name for subject in subjects}) != len(subjects)
+        ):
             raise GitHubError("GITHUB_ATTEST")
-        self._run("attestation", "create", *(str(path) for path in paths))
+        for subject in subjects:
+            _subject_digest(subject)
+            try:
+                evidence = _json(self._run(
+                    "attestation", "verify", str(subject.path), "--predicate-type",
+                    "https://slsa.dev/provenance/v1", "--format", "json", "--limit", "2",
+                ))
+            except GitHubError as error:
+                raise GitHubError("GITHUB_ATTEST") from error
+            if not _evidence_binds_subject(evidence, subject):
+                raise GitHubError("GITHUB_ATTEST")
 
     def publish(self, release_id: int) -> None:
         if type(release_id) is not int or release_id <= 0:

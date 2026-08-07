@@ -14,18 +14,18 @@
 
 ## 2. Create tracked offline release material
 
-- [ ] 2.1 Add
+- [x] 2.1 Add
   `packaging/gba-wifi-link/v0.2.0/INSTALL-AND-USAGE.md` with concise neutral
   installation, connection, latency, saving, limitations, troubleshooting,
   privacy, support, and upstream-independence guidance.
-- [ ] 2.2 Add
+- [x] 2.2 Add
   `packaging/gba-wifi-link/v0.2.0/SOURCE-AND-PROVENANCE.md` identifying the
   exact tag, source commit and URL, core and fixture hashes, licence, fixture
   status, and documentation-only repack boundary.
-- [ ] 2.3 Cross-check both files against current README, `SUPPORT.md`,
+- [x] 2.3 Cross-check both files against current README, `SUPPORT.md`,
   `SECURITY.md`, `docs/gba-wifi-link.md`, and the v0.2.0 release description;
   resolve every material conflict.
-- [ ] 2.4 Audit the tracked release inputs for private device nicknames,
+- [x] 2.4 Audit the tracked release inputs for private device nicknames,
   qualification-specific model instructions, serials, addresses, local paths,
   commercial content, saves, raw inputs, and unpublished evidence.
 

@@ -87,6 +87,38 @@ The private rollback snapshot remains retained until the public-alpha sharing
 change is complete. It contains the original release body and assets in case a
 later release-management problem requires recovery.
 
+## Second documentation-only correction
+
+Later on 2026-08-07, review found that the public guide and `SUPPORT.md` still
+asked users to provide endpoint logs, contradicting the recorded privacy
+boundary and the future sanitized-diagnostic workflow in issue #20. The guide
+now requests only bounded, non-sensitive report fields and explicitly forbids
+public endpoint, core, or RetroArch logs until that separate workflow exists.
+`SUPPORT.md` applies the same public-reporting boundary.
+
+Before replacement, the complete current live prerelease body and six assets
+were downloaded into a new private rollback snapshot. The prior standalone
+guide, bundle, and manifest hashes were respectively
+`880190bf1b65f3f44690163e2374f79f813a274e31547dbced4920e1fb4e64e8`,
+`167019d858e811cc35abd70a5300fbb24caf77c32b76e6b7efc3ecaca7cc22f5`, and
+`1a777399d6fc1e621f381e4e5a251f6b1164d8a82a1cc53dd88631c3ffdece5d`.
+
+The revised standalone guide SHA-256 is
+`93357893a8b967cb0961a6818e2b6b9b957ea92bef3eed1d00bfe9846f3970dd`, the
+revised bundle SHA-256 is
+`0bdf9546a7e8d25e8064d0db3849c0d68c627fd03d5da35606dc61e1c84c851f`, and the
+revised standalone manifest SHA-256 is
+`13222ac91cffe21a5286aa7f53af79b6d9e571753fc9a3d21ef4d342e67f4669`.
+The source tag, source commit, Android core, and both fixture hashes remained
+exactly unchanged.
+
+The prerelease was temporarily held as a draft for replacement of only those
+three mutable assets and its updated disclosure. A fresh authenticated download
+after republishing verified the revised standalone manifest, the extracted
+archive's internal manifest, its exact seven-member allow-list, the updated
+log-reporting prohibition, and the preserved core and fixture hashes. The
+release is again a published prerelease with exactly six assets.
+
 ## Onboarding feedback policy
 
 A separate staged cold-reader rehearsal is deliberately waived for this

@@ -62,12 +62,16 @@ link state.
 
 ## Privacy and reporting
 
-For support, include the release or commit, core SHA-256, RetroArch version,
-platform, host/client roles, network topology, game title and revision
-identity, exact steps, last visible message, and both endpoint logs where
-available. Do not upload commercial ROMs, BIOS files, copyrighted extracts,
-private save data, addresses, or controller-input histories. Report suspected
-security vulnerabilities through GitHub's private security-reporting flow.
+For a public support report, include only the release or commit, core SHA-256
+when using an unpublished build, RetroArch version, platform, host/client
+roles, general network type (trusted LAN or direct Android hotspot, without
+addresses), game title and revision identity, exact steps, and the last visible
+message. Do not upload, attach, or paste endpoint, core, or RetroArch logs.
+The project has not yet published a sanitized diagnostic workflow; issue #20
+tracks that separate work. Do not upload commercial ROMs, BIOS files,
+copyrighted extracts, private save data, addresses, or controller-input
+histories. Report suspected security vulnerabilities through GitHub's private
+security-reporting flow.
 
 ## Source, licence, and support
 

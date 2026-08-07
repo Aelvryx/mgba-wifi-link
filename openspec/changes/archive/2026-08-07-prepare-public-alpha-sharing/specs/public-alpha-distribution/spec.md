@@ -1,3 +1,9 @@
+## Purpose
+
+Define how an experimental GBA Wi-Fi Link alpha is packaged, verified,
+corrected, and shared with a limited audience while preserving executable
+identity, privacy, provenance, and honest support boundaries.
+
 ## ADDED Requirements
 
 ### Requirement: Public alpha artifacts have one coherent identity

@@ -57,12 +57,35 @@ with `sha256sum -c`.  The extracted root contained exactly
 `SOURCE-AND-PROVENANCE.md`, `gba-link-continuous.gba`,
 `gba-link-test.gba`, and `mgba_libretro_android.so`.
 
-## Publication rollback
+## Corrected public prerelease
 
-Publication remains pending.  Before replacing release assets, retain the
-verified rollback snapshot, including the original guide and bundle hashes
-recorded above, so the prior five-file release asset set can be restored if the
-replacement is interrupted or an issue is found.
+On 2026-08-07 the release at
+<https://github.com/Aelvryx/mgba-wifi-link/releases/tag/v0.2.0> was temporarily
+held as a draft while its documentation-only assets were replaced. It is again
+published as a prerelease with exactly six assets:
+
+- `mgba_libretro_android.so` —
+  `b16873176e358883acc7e7cb8f0312b9a275610a6a9e84c87e092accc3748910`
+- `gba-link-test.gba` —
+  `2f662e4bcf2ac81c438ae5eacc786b2d2984c00807d3656b4990da66a99edc13`
+- `gba-link-continuous.gba` —
+  `c1fe01752d4f5863d6e3e1a9866b061aaadf2927ccc3df31ba9ecbf4bc68fe9d`
+- `INSTALL-AND-USAGE.md` —
+  `880190bf1b65f3f44690163e2374f79f813a274e31547dbced4920e1fb4e64e8`
+- `mgba-gba-wifi-link-v0.2.0-android-arm64.zip` —
+  `167019d858e811cc35abd70a5300fbb24caf77c32b76e6b7efc3ecaca7cc22f5`
+- `SHA256SUMS` —
+  `1a777399d6fc1e621f381e4e5a251f6b1164d8a82a1cc53dd88631c3ffdece5d`
+
+A fresh authenticated download from the published release verified the
+standalone manifest and the archive's internal manifest. The downloaded guide,
+archive, and manifest were byte-identical to the independently reviewed local
+release set. The release body carries a prominent documentation-only correction
+note. The source tag, Android core, and both fixtures are unchanged.
+
+The private rollback snapshot remains retained until the public-alpha sharing
+change is complete. It contains the original release body and assets in case a
+later release-management problem requires recovery.
 
 ## Newcomer rehearsal
 

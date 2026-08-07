@@ -1,6 +1,8 @@
 """Non-publishing command line entry points for release package construction."""
 
 import argparse
+import ctypes
+import errno
 import hashlib
 import json
 import os
@@ -18,6 +20,23 @@ from .verifier import verify_release
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "tools/gba_wifi_link_release/fixtures/synthetic"
+_AT_FDCWD = -100
+_RENAME_NOREPLACE = 1
+
+
+def _rename_noreplace(source: Path, destination: Path) -> None:
+    """Atomically install a sibling directory only when destination is absent."""
+    try:
+        renameat2 = ctypes.CDLL(None, use_errno=True).renameat2
+    except AttributeError as error:
+        raise OSError(errno.ENOSYS, "renameat2 unavailable") from error
+    renameat2.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int,
+                          ctypes.c_char_p, ctypes.c_uint)
+    renameat2.restype = ctypes.c_int
+    if renameat2(_AT_FDCWD, os.fsencode(source), _AT_FDCWD,
+                 os.fsencode(destination), _RENAME_NOREPLACE) != 0:
+        error_number = ctypes.get_errno()
+        raise OSError(error_number, os.strerror(error_number), destination)
 
 
 def _context_dict(context: ReleaseContext) -> dict[str, object]:
@@ -101,23 +120,19 @@ def _inputs(args: argparse.Namespace) -> PackageInputs:
 
 
 def _build_atomic(context: ReleaseContext, inputs: PackageInputs, output: Path,
-                  *, before_reserve=None) -> None:
+                  *, before_install=None, renamer=_rename_noreplace) -> None:
     if output.exists() or output.is_symlink() or not output.parent.is_dir():
         raise ValueError("CLI_OUTPUT")
     staging_parent = Path(tempfile.mkdtemp(prefix=f".{output.name}.", dir=output.parent))
     staging = staging_parent / output.name
     try:
         build_release(context, inputs, staging)
-        if before_reserve is not None:
-            before_reserve()
+        if before_install is not None:
+            before_install()
         try:
-            # mkdir is an atomic no-replace reservation of the final pathname.
-            output.mkdir(mode=0o700)
+            renamer(staging, output)
         except OSError as error:
-            raise ValueError("CLI_OUTPUT") from error
-        for staged_file in staging.iterdir():
-            os.rename(staged_file, output / staged_file.name)
-        staging.rmdir()
+            raise ValueError("CLI_INSTALL") from error
         verify_release(output, context)
     finally:
         shutil.rmtree(staging_parent, ignore_errors=True)

@@ -3,6 +3,7 @@
 from dataclasses import replace
 import hashlib
 import json
+import errno
 from pathlib import Path
 import stat
 import subprocess
@@ -178,7 +179,7 @@ class PackageTest(unittest.TestCase):
             with redirect_stderr(StringIO()):
                 self.assertNotEqual(main(["build", "--fixture", "synthetic", "--output", str(output)]), 0)
 
-    def test_atomic_build_reserves_an_absent_final_path_without_overwriting_a_racer(self):
+    def test_atomic_build_never_overwrites_a_destination_that_appears_before_install(self):
         from tools.gba_wifi_link_release.cli import _build_atomic
 
         with tempfile.TemporaryDirectory() as directory:
@@ -189,9 +190,37 @@ class PackageTest(unittest.TestCase):
                 output.mkdir()
                 (output / "racer-marker").write_text("preserve\n", encoding="utf-8")
 
-            with self.assertRaisesRegex(ValueError, "^CLI_OUTPUT$"):
-                _build_atomic(context(), self.make_inputs(root), output, before_reserve=racer)
+            with self.assertRaisesRegex(ValueError, "^CLI_INSTALL$"):
+                _build_atomic(context(), self.make_inputs(root), output, before_install=racer)
             self.assertEqual((output / "racer-marker").read_text(encoding="utf-8"), "preserve\n")
+
+    def test_atomic_build_preserves_existing_empty_and_nonempty_destinations(self):
+        from tools.gba_wifi_link_release.cli import _build_atomic
+
+        for nonempty in (False, True):
+            with self.subTest(nonempty=nonempty), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                output = root / "release"
+                output.mkdir()
+                if nonempty:
+                    (output / "marker").write_text("keep\n", encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "^CLI_OUTPUT$"):
+                    _build_atomic(context(), self.make_inputs(root), output)
+                self.assertEqual((output / "marker").exists(), nonempty)
+
+    def test_atomic_build_leaves_no_final_path_when_no_replace_install_fails(self):
+        from tools.gba_wifi_link_release.cli import _build_atomic
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "release"
+
+            def fail_install(source: Path, destination: Path) -> None:
+                raise OSError(errno.EIO, "injected install failure")
+
+            with self.assertRaisesRegex(ValueError, "^CLI_INSTALL$"):
+                _build_atomic(context(), self.make_inputs(root), output, renamer=fail_install)
+            self.assertFalse(output.exists())
 
     def test_two_clean_synthetic_cli_runs_are_byte_identical(self):
         from tools.gba_wifi_link_release.cli import main
@@ -215,35 +244,55 @@ class PackageTest(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_declared_input_changes_alter_the_release_or_are_rejected(self):
+    def test_declared_inputs_have_exact_public_asset_impact_maps(self):
         cases = (
-            ("core", b"changed core\n", None),
-            ("test_fixture", b"changed test fixture\n", None),
-            ("continuous_fixture", b"changed continuous fixture\n", None),
-            ("install_template", b"\nChanged install text.\n", "VERIFY_STALE"),
-            ("source_template", b"\nChanged source text.\n", "VERIFY_STALE"),
-            ("licence", b"substituted licence\n", "PACKAGE_LICENCE"),
+            ("core", b"changed core\n", None, {
+                "mgba_libretro_android.so", "mgba-gba-wifi-link-v9.8.7-android-arm64.zip",
+                "RELEASE-PROVENANCE.json", "SHA256SUMS",
+            }),
+            ("test_fixture", b"changed test fixture\n", None, {
+                "gba-link-test.gba", "mgba-gba-wifi-link-v9.8.7-android-arm64.zip",
+                "RELEASE-PROVENANCE.json", "SHA256SUMS",
+            }),
+            ("continuous_fixture", b"changed continuous fixture\n", None, {
+                "gba-link-continuous.gba", "mgba-gba-wifi-link-v9.8.7-android-arm64.zip",
+                "RELEASE-PROVENANCE.json", "SHA256SUMS",
+            }),
+            ("release_notes", b"Changed reviewed notes.\n", None, {
+                "mgba-gba-wifi-link-v9.8.7-android-arm64.zip", "RELEASE-PROVENANCE.json", "SHA256SUMS",
+            }),
+            ("metadata", b"", None, {
+                "mgba-gba-wifi-link-v9.8.7-android-arm64.zip", "RELEASE-PROVENANCE.json", "SHA256SUMS",
+            }),
+            ("install_template", b"\nChanged install text.\n", "VERIFY_STALE", set()),
+            ("source_template", b"\nChanged source text.\n", "VERIFY_STALE", set()),
+            ("licence", b"substituted licence\n", "PACKAGE_LICENCE", set()),
         )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             baseline_inputs = self.make_inputs(root)
             build_release(context(), baseline_inputs, root / "baseline")
-            baseline = (root / "baseline/mgba-gba-wifi-link-v9.8.7-android-arm64.zip").read_bytes()
-            for field, suffix, rejection in cases:
+            baseline_assets = {path.name: path.read_bytes() for path in (root / "baseline").iterdir()}
+            for field, suffix, rejection, changed in cases:
                 with self.subTest(field=field), tempfile.TemporaryDirectory(dir=root) as case_directory:
                     case_root = Path(case_directory)
                     inputs = self.make_inputs(case_root)
-                    path = getattr(inputs, field)
-                    path.write_bytes(path.read_bytes() + suffix)
+                    changed_context = context()
+                    if field == "release_notes":
+                        inputs = replace(inputs, release_notes=suffix)
+                        changed_context = replace(changed_context, notes_sha256=hashlib.sha256(suffix).hexdigest())
+                    elif field == "metadata":
+                        changed_context = replace(changed_context, source_date_epoch=1_700_000_002)
+                    else:
+                        path = getattr(inputs, field)
+                        path.write_bytes(path.read_bytes() + suffix)
                     if rejection == "PACKAGE_LICENCE":
                         with self.assertRaisesRegex(PackageError, "^PACKAGE_LICENCE$"):
-                            build_release(context(), inputs, case_root / "release")
+                            build_release(changed_context, inputs, case_root / "release")
                     elif rejection == "VERIFY_STALE":
                         with self.assertRaisesRegex(VerificationError, "^VERIFY_STALE$"):
-                            build_release(context(), inputs, case_root / "release")
+                            build_release(changed_context, inputs, case_root / "release")
                     else:
-                        build_release(context(), inputs, case_root / "release")
-                        self.assertNotEqual(
-                            baseline,
-                            (case_root / "release/mgba-gba-wifi-link-v9.8.7-android-arm64.zip").read_bytes(),
-                        )
+                        build_release(changed_context, inputs, case_root / "release")
+                        actual = {path.name: path.read_bytes() for path in (case_root / "release").iterdir()}
+                        self.assertEqual({name for name in actual if actual[name] != baseline_assets[name]}, changed)

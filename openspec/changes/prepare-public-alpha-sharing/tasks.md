@@ -31,19 +31,19 @@
 
 ## 3. Assemble and verify the corrected artifact set
 
-- [ ] 3.1 Create a fresh temporary staging directory and copy into it only the
+- [x] 3.1 Create a fresh temporary staging directory and copy into it only the
   hash-verified original core and fixtures, the two tracked release texts, and
   the repository root `LICENSE`.
-- [ ] 3.2 Generate an internal `SHA256SUMS` covering every staged archive member
+- [x] 3.2 Generate an internal `SHA256SUMS` covering every staged archive member
   except itself, using stable relative filenames and no private paths.
-- [ ] 3.3 Build `mgba-gba-wifi-link-v0.2.0-android-arm64.zip` with a deterministic
+- [x] 3.3 Build `mgba-gba-wifi-link-v0.2.0-android-arm64.zip` with a deterministic
   file order and timestamps, then prove a clean reconstruction is byte-identical.
-- [ ] 3.4 Generate the standalone release `SHA256SUMS` covering the standalone
+- [x] 3.4 Generate the standalone release `SHA256SUMS` covering the standalone
   core, both fixtures, standalone guide, and corrected archive, but not itself.
-- [ ] 3.5 Verify the exact archive allow-list, uniqueness of every member,
+- [x] 3.5 Verify the exact archive allow-list, uniqueness of every member,
   internal and external checksum scopes, immutable payload hashes, text privacy,
   licence inclusion, and exact source pointer in a clean directory.
-- [ ] 3.6 Add a sanitized public-alpha readiness record documenting the old and
+- [x] 3.6 Add a sanitized public-alpha readiness record documenting the old and
   corrected documentation/archive identities, the preserved executable
   identities, exact reconstruction commands, and rollback boundary.
 

@@ -81,7 +81,7 @@
 - [x] 4.5 Add tests that provenance contains no recursive digest, no environment
   secret, and no signed attestation envelope, while human and machine identity
   fields remain mutually consistent.
-- [ ] 4.6 Extend the permanent product-boundary audit to recognize the new release
+- [x] 4.6 Extend the permanent product-boundary audit to recognize the new release
   tooling/workflow and prohibit retired product identities or versioned runtime
   leakage in user-facing release names.
 
@@ -156,12 +156,12 @@
 - [x] 7.4 Add version-neutral installation/provenance templates and a synthetic
   example release-notes input; keep `packaging/gba-wifi-link/v0.2.0` unchanged and
   explicitly historical.
-- [ ] 7.5 Update README and public packaging language to describe fully automated
+- [x] 7.5 Update README and public packaging language to describe fully automated
   immutable future releases without promising stable status or upstream support.
-- [ ] 7.6 Update ROADMAP.md from “supportable alpha” to the approved “maintainable
+- [x] 7.6 Update ROADMAP.md from “supportable alpha” to the approved “maintainable
   alpha,” remove issue #20 from the release gate, place issue #21 first, and keep
   the project neutral rather than soliciting or forbidding feedback.
-- [ ] 7.7 Update SUPPORT.md and issue-template guidance only as needed to retain
+- [x] 7.7 Update SUPPORT.md and issue-template guidance only as needed to retain
   available issue channels without a report request, service promise, or diagnostic
   bundle dependency.
 - [ ] 7.8 Update issue #21 and the v0.2.1 milestone description/title to match full

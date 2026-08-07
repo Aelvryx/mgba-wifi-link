@@ -73,8 +73,8 @@
     ],
     "artifact_name": "gba-wifi-link-release-canonical",
     "runner_image": "ubuntu-24.04",
-    "yaml_lexical_sha256": "ef8ef0f8e194bf72cef416e15f529590551a803a54c7aa922d015d1b4b0963e5",
-    "yaml_source_sha256": "ad07f41b8b92ceaadd776beabc0461966c0526e9ab0e34ba269c06edfff817a0"
+    "yaml_lexical_sha256": "498608b0bb6152da55788217b379dda3c85bdcded809c1ebd6c49abb851929be",
+    "yaml_source_sha256": "15a03abd489dad63f3493aabc7cfb962058b2f97e0c61e8ddc4405ec2a38b84e"
   },
   "release_provenance_assets": [
     "mgba_libretro_android.so",

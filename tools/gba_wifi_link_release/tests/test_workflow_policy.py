@@ -235,6 +235,24 @@ jobs:
     def test_release_workflow_satisfies_the_automatic_tag_contract(self):
         validate_release_workflow_policy(ROOT)
 
+    def test_release_workflow_checks_the_live_immutable_tag_policy_before_admission(self):
+        source = (ROOT / ".github/workflows/gba-wifi-link-release.yml").read_text(encoding="utf-8")
+        self.assertIn("- name: Verify immutable release-tag policy", source)
+        self.assertIn("python3 tools/gba-wifi-link-release.py verify-tag-policy", source)
+        self.assertLess(
+            source.index("- name: Verify immutable release-tag policy"),
+            source.index("- name: Inspect canonical annotated source"),
+        )
+        step = (
+            "      - name: Verify immutable release-tag policy\n"
+            "        env:\n"
+            "          GH_TOKEN: ${{ github.token }}\n"
+            "        run: |\n"
+            "          set -euo pipefail\n"
+            "          python3 tools/gba-wifi-link-release.py verify-tag-policy\n"
+        )
+        self.assert_release_rejected_after(lambda text: text.replace(step, "", 1))
+
     def test_release_workflow_has_two_post_validation_clean_compile_jobs(self):
         source = (ROOT / ".github/workflows/gba-wifi-link-release.yml").read_text(encoding="utf-8")
         self.assertEqual(

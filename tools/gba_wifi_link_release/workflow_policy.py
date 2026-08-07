@@ -642,6 +642,20 @@ def validate_release_workflow_policy(repo: Path) -> None:
     if any(fragment not in text for fragment in graph):
         raise WorkflowPolicyError("RELEASE_WORKFLOW_GRAPH")
 
+    tag_policy_step = (
+        "      - name: Verify immutable release-tag policy\n"
+        "        env:\n"
+        "          GH_TOKEN: ${{ github.token }}\n"
+        "        run: |\n"
+        "          set -euo pipefail\n"
+        "          python3 tools/gba-wifi-link-release.py verify-tag-policy\n"
+    )
+    inspect_source = text.find("      - name: Inspect canonical annotated source\n")
+    if text.count(tag_policy_step) != 1 or text.find(tag_policy_step) < 0 or (
+        inspect_source < 0 or text.find(tag_policy_step) > inspect_source
+    ):
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_TAG_POLICY")
+
     action_pins = contract.get("action_pins")
     if not isinstance(action_pins, dict) or set(action_pins) != {
         "actions/attest-build-provenance", "actions/checkout",

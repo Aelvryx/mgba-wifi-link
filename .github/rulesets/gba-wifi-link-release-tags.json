@@ -1,0 +1,26 @@
+{
+  "repository": "Aelvryx/mgba-wifi-link",
+  "ruleset": {
+    "bypass_actors": [],
+    "conditions": {
+      "ref_name": {
+        "exclude": [],
+        "include": [
+          "refs/tags/v*"
+        ]
+      }
+    },
+    "enforcement": "active",
+    "name": "GBA Wi-Fi Link release tags",
+    "rules": [
+      {
+        "type": "deletion"
+      },
+      {
+        "type": "non_fast_forward"
+      }
+    ],
+    "target": "tag"
+  },
+  "schema": 1
+}

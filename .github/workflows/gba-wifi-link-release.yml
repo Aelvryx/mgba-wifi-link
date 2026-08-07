@@ -1,0 +1,645 @@
+name: GBA Wi-Fi Link release
+
+on:
+  push:
+    tags:
+      - v*
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: gba-wifi-link-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  inspect-tag:
+    name: Inspect exact annotated tag
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+      tag: ${{ steps.source.outputs.tag }}
+      tag_object: ${{ steps.source.outputs.tag_object }}
+    steps:
+      - name: Check out complete tag history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
+
+      - name: Inspect canonical annotated source
+        id: source
+        env:
+          EVENT_CREATED: ${{ github.event.created }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_REF_NAME: ${{ github.ref_name }}
+          EVENT_REF_TYPE: ${{ github.ref_type }}
+        run: |
+          set -euo pipefail
+          test "$EVENT_NAME" = push
+          test "$EVENT_REF_TYPE" = tag
+          test "$EVENT_REF" = "refs/tags/$EVENT_REF_NAME"
+          test "$EVENT_CREATED" = true
+          [[ "$EVENT_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          git fetch --no-tags origin master:refs/remotes/origin/master
+          python3 - "$EVENT_REF_NAME" "$GITHUB_OUTPUT" <<'PY'
+          from pathlib import Path
+          import sys
+          from tools.gba_wifi_link_release.admission import require_annotated_tag
+
+          tag = sys.argv[1]
+          tag_object, commit = require_annotated_tag(Path("."), tag)
+          with Path(sys.argv[2]).open("a", encoding="utf-8") as output:
+              output.write(f"commit={commit}\ntag={tag}\ntag_object={tag_object}\n")
+          PY
+
+  protected-validation:
+    name: Protected exact-commit validation
+    needs: inspect-tag
+    uses: ./.github/workflows/gba-wifi-link-ci.yml
+    with:
+      source_commit: ${{ needs.inspect-tag.outputs.commit }}
+
+  admit:
+    name: Admit protected release source
+    needs: [inspect-tag, protected-validation]
+    outputs:
+      release_exists: ${{ steps.evidence.outputs.release_exists }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out admitted source with complete history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.inspect-tag.outputs.commit }}
+
+      - name: Collect current protected evidence
+        id: evidence
+        env:
+          EXPECTED_COMMIT: ${{ needs.inspect-tag.outputs.commit }}
+          EXPECTED_TAG: ${{ needs.inspect-tag.outputs.tag }}
+          EXPECTED_TAG_OBJECT: ${{ needs.inspect-tag.outputs.tag_object }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin master:refs/remotes/origin/master
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" > current-jobs.json
+          set +e
+          gh api --include "repos/${GITHUB_REPOSITORY}/releases/tags/${EXPECTED_TAG}" > release-response.txt 2>&1
+          release_status=$?
+          set -e
+          if test "$release_status" -eq 0; then
+            release_exists=true
+          else
+            grep --extended-regexp '^HTTP/[^ ]+ 404 ' release-response.txt
+            test "$release_status" -eq 1
+            release_exists=false
+          fi
+          printf 'release_exists=%s\n' "$release_exists" >> "$GITHUB_OUTPUT"
+          RELEASE_EXISTS="$release_exists" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+
+          required = (
+              "Complete normal mGBA suite",
+              "Focused tests (normal)",
+              "Focused tests (ASan + UBSan)",
+              "Focused tests (TSan)",
+              "Fixture reproducibility",
+              "Android arm64 libretro build",
+          )
+          jobs_value = json.loads(Path("current-jobs.json").read_text(encoding="utf-8"))
+          jobs = jobs_value.get("jobs")
+          if not isinstance(jobs, list):
+              raise SystemExit("release evidence jobs missing")
+          commit = os.environ["EXPECTED_COMMIT"]
+          gates = []
+          for required_name in required:
+              matches = [job for job in jobs if isinstance(job, dict) and (
+                  job.get("name") == required_name
+                  or str(job.get("name", "")).endswith(" / " + required_name)
+              )]
+              if len(matches) != 1:
+                  raise SystemExit("release evidence gate mismatch")
+              job = matches[0]
+              gates.append({
+                  "commit": commit,
+                  "conclusion": job.get("conclusion"),
+                  "job_id": job.get("id"),
+                  "name": required_name,
+                  "run_id": int(os.environ["GITHUB_RUN_ID"]),
+                  "workflow": "GBA Wi-Fi Link",
+              })
+          contract = json.loads(Path("packaging/gba-wifi-link/release/contract-v1.json").read_text(encoding="utf-8"))
+          workflow = contract["release_workflow"]
+          action_pins = [f"{name}@{digest}" for name, digest in workflow["action_pins"].items()]
+          ndk = workflow["android_ndk"]
+          source_date_epoch = int(subprocess.run(
+              ("git", "show", "-s", "--format=%ct", commit),
+              check=True, stdout=subprocess.PIPE, text=True,
+          ).stdout.strip())
+          release_exists = os.environ["RELEASE_EXISTS"] == "true"
+          evidence = {
+              "build": {
+                  "configuration": {"android_abi": "arm64-v8a", "android_api": "21"},
+                  "pinned_actions": sorted(action_pins),
+                  "pinned_toolchains": [
+                      f"android-ndk@{ndk['version']}+sha256:{ndk['source_properties_sha256']}"
+                  ],
+                  "runner_image": workflow["runner_image"],
+              },
+              "commit": commit,
+              "event": {
+                  "created": True,
+                  "event_name": "create",
+                  "ref": os.environ["EXPECTED_TAG"],
+                  "ref_type": "tag",
+                  "tag_object": os.environ["EXPECTED_TAG_OBJECT"],
+              },
+              "gates": gates,
+              "release": {"exists": release_exists},
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "source_date_epoch": source_date_epoch,
+          }
+          Path("release-evidence.json").write_text(
+              json.dumps(evidence, sort_keys=True, separators=(",", ":")) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Admit exact source without release mutation
+        env:
+          EXPECTED_TAG: ${{ needs.inspect-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir admitted
+          python3 tools/gba-wifi-link-release.py admit \
+            --repo . --tag "$EXPECTED_TAG" --evidence release-evidence.json \
+            --allow-existing-release \
+            > admitted/release-context.json
+
+      - name: Upload canonical admitted context
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: gba-wifi-link-release-context
+          path: admitted/release-context.json
+          if-no-files-found: error
+          retention-days: 7
+
+  protected-build:
+    name: Build first clean Android core
+    needs: [inspect-tag, admit]
+    runs-on: ubuntu-24.04
+    env:
+      ANDROID_NDK_SOURCE_PROPERTIES_SHA256: 70f1c5165e6d997b18782a49cff71da7a3caacd0c4cd811da24c43359fb83cf6
+      ANDROID_NDK_VERSION: 27.2.12479018
+    steps:
+      - name: Check out first independent exact source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          clean: true
+          fetch-depth: 0
+          ref: ${{ needs.inspect-tag.outputs.commit }}
+
+      - name: Download protected Android build
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: gba-wifi-link-android-arm64-release-input
+          path: protected-build
+
+      - name: Verify first source and protected handoff identity
+        env:
+          EXPECTED_COMMIT: ${{ needs.inspect-tag.outputs.commit }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
+          test -z "$(git status --short --untracked-files=no)"
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$EXPECTED_COMMIT")"
+          [[ "$SOURCE_DATE_EPOCH" =~ ^[0-9]+$ ]]
+          printf 'SOURCE_DATE_EPOCH=%s\n' "$SOURCE_DATE_EPOCH" >> "$GITHUB_ENV"
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          core = Path("protected-build/mgba_libretro.so")
+          metadata = json.loads(Path("protected-build/BUILD-METADATA.json").read_text(encoding="utf-8"))
+          digest = hashlib.sha256(core.read_bytes()).hexdigest()
+          if metadata.get("source_commit") != os.environ["EXPECTED_COMMIT"]:
+              raise SystemExit("protected build source mismatch")
+          if metadata.get("ndk_version") != "27.2.12479018":
+              raise SystemExit("protected build NDK mismatch")
+          if metadata.get("core") != {"name": "mgba_libretro.so", "sha256": digest, "size": core.stat().st_size}:
+              raise SystemExit("protected build core mismatch")
+          PY
+
+      - name: Install first build tools and pinned NDK
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes cmake ninja-build
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "ndk;${ANDROID_NDK_VERSION}"
+          echo "${ANDROID_NDK_SOURCE_PROPERTIES_SHA256}  ${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}/source.properties" \
+            | sha256sum --check -
+
+      - name: Configure first Android arm64 core
+        env:
+          EXPECTED_COMMIT: ${{ needs.inspect-tag.outputs.commit }}
+          EXPECTED_TAG: ${{ needs.inspect-tag.outputs.tag }}
+          PKG_CONFIG_LIBDIR: /tmp/mgba-release-empty-pkgconfig
+          PKG_CONFIG_PATH: ""
+        run: |
+          set -euo pipefail
+          mkdir -p "$PKG_CONFIG_LIBDIR"
+          commit_short="${EXPECTED_COMMIT:0:12}"
+          cmake -S . -B build-release-android -G Ninja \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DSKIP_GIT=ON -DGIT_COMMIT="$EXPECTED_COMMIT" \
+            -DGIT_COMMIT_SHORT="$commit_short" -DGIT_TAG="$EXPECTED_TAG" \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-21 \
+            -DBUILD_QT=OFF -DBUILD_SDL=OFF -DBUILD_LIBRETRO=ON \
+            -DBUILD_TEST=OFF -DBUILD_SUITE=OFF -DBUILD_CINEMA=OFF \
+            -DBUILD_HEADLESS=OFF -DBUILD_EXAMPLE=OFF
+
+      - name: Build and inspect first Android core
+        env:
+          EXPECTED_COMMIT: ${{ needs.inspect-tag.outputs.commit }}
+          EXPECTED_TAG: ${{ needs.inspect-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cmake --build build-release-android --parallel 2 --target mgba_libretro
+          test -s build-release-android/mgba_libretro.so
+          file build-release-android/mgba_libretro.so | grep --fixed-strings 'ARM aarch64'
+          strings build-release-android/mgba_libretro.so | grep --fixed-strings "$EXPECTED_COMMIT"
+          strings build-release-android/mgba_libretro.so | grep --fixed-strings "$EXPECTED_TAG"
+          python3 tools/audit-gba-wifi-link-boundary.py \
+            --binary-only --binary build-release-android/mgba_libretro.so
+
+      - name: Write first independent build metadata
+        env:
+          EXPECTED_COMMIT: ${{ needs.inspect-tag.outputs.commit }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          output = Path("first-build")
+          output.mkdir()
+          core = Path("build-release-android/mgba_libretro.so")
+          target = output / "mgba_libretro.so"
+          target.write_bytes(core.read_bytes())
+          metadata = {
+              "android_abi": "arm64-v8a",
+              "android_api": "21",
+              "core": {
+                  "name": target.name,
+                  "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+                  "size": target.stat().st_size,
+              },
+              "ndk_version": "27.2.12479018",
+              "schema": 1,
+              "source_commit": os.environ["EXPECTED_COMMIT"],
+          }
+          (output / "BUILD-METADATA.json").write_text(
+              json.dumps(metadata, sort_keys=True, separators=(",", ":")) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Upload first independent clean build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: gba-wifi-link-release-build-protected
+          path: first-build
+          if-no-files-found: error
+          retention-days: 7
+
+  independent-build:
+    name: Build independent clean Android core
+    needs: [inspect-tag, admit]
+    runs-on: ubuntu-24.04
+    env:
+      ANDROID_NDK_SOURCE_PROPERTIES_SHA256: 70f1c5165e6d997b18782a49cff71da7a3caacd0c4cd811da24c43359fb83cf6
+      ANDROID_NDK_VERSION: 27.2.12479018
+    steps:
+      - name: Check out independent exact source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          clean: true
+          fetch-depth: 0
+          ref: ${{ needs.inspect-tag.outputs.commit }}
+
+      - name: Verify independent source identity
+        env:
+          EXPECTED_COMMIT: ${{ needs.inspect-tag.outputs.commit }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
+          test -z "$(git status --short)"
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$EXPECTED_COMMIT")"
+          [[ "$SOURCE_DATE_EPOCH" =~ ^[0-9]+$ ]]
+          printf 'SOURCE_DATE_EPOCH=%s\n' "$SOURCE_DATE_EPOCH" >> "$GITHUB_ENV"
+
+      - name: Install independent build tools and pinned NDK
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes cmake ninja-build
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "ndk;${ANDROID_NDK_VERSION}"
+          echo "${ANDROID_NDK_SOURCE_PROPERTIES_SHA256}  ${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}/source.properties" \
+            | sha256sum --check -
+
+      - name: Configure independent Android arm64 core
+        env:
+          EXPECTED_COMMIT: ${{ needs.inspect-tag.outputs.commit }}
+          EXPECTED_TAG: ${{ needs.inspect-tag.outputs.tag }}
+          PKG_CONFIG_LIBDIR: /tmp/mgba-release-empty-pkgconfig
+          PKG_CONFIG_PATH: ""
+        run: |
+          set -euo pipefail
+          mkdir -p "$PKG_CONFIG_LIBDIR"
+          commit_short="${EXPECTED_COMMIT:0:12}"
+          cmake -S . -B build-release-android -G Ninja \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DSKIP_GIT=ON -DGIT_COMMIT="$EXPECTED_COMMIT" \
+            -DGIT_COMMIT_SHORT="$commit_short" -DGIT_TAG="$EXPECTED_TAG" \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-21 \
+            -DBUILD_QT=OFF -DBUILD_SDL=OFF -DBUILD_LIBRETRO=ON \
+            -DBUILD_TEST=OFF -DBUILD_SUITE=OFF -DBUILD_CINEMA=OFF \
+            -DBUILD_HEADLESS=OFF -DBUILD_EXAMPLE=OFF
+
+      - name: Build and inspect independent Android arm64 core
+        env:
+          EXPECTED_COMMIT: ${{ needs.inspect-tag.outputs.commit }}
+          EXPECTED_TAG: ${{ needs.inspect-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cmake --build build-release-android --parallel 2 --target mgba_libretro
+          test -s build-release-android/mgba_libretro.so
+          file build-release-android/mgba_libretro.so | grep --fixed-strings 'ARM aarch64'
+          strings build-release-android/mgba_libretro.so | grep --fixed-strings "$EXPECTED_COMMIT"
+          strings build-release-android/mgba_libretro.so | grep --fixed-strings "$EXPECTED_TAG"
+          python3 tools/audit-gba-wifi-link-boundary.py \
+            --binary-only --binary build-release-android/mgba_libretro.so
+
+      - name: Write independent build metadata
+        env:
+          EXPECTED_COMMIT: ${{ needs.inspect-tag.outputs.commit }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          output = Path("independent-build")
+          output.mkdir()
+          core = Path("build-release-android/mgba_libretro.so")
+          target = output / "mgba_libretro.so"
+          target.write_bytes(core.read_bytes())
+          metadata = {
+              "android_abi": "arm64-v8a",
+              "android_api": "21",
+              "core": {
+                  "name": target.name,
+                  "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+                  "size": target.stat().st_size,
+              },
+              "ndk_version": "27.2.12479018",
+              "schema": 1,
+              "source_commit": os.environ["EXPECTED_COMMIT"],
+          }
+          (output / "BUILD-METADATA.json").write_text(
+              json.dumps(metadata, sort_keys=True, separators=(",", ":")) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Upload independent clean build identity
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: gba-wifi-link-release-build-independent
+          path: independent-build
+          if-no-files-found: error
+          retention-days: 7
+
+  compare-builds:
+    name: Compare independent Android builds
+    needs: [inspect-tag, admit, protected-build, independent-build]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download protected clean build
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: gba-wifi-link-release-build-protected
+          path: build-protected
+
+      - name: Download independent clean build
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: gba-wifi-link-release-build-independent
+          path: build-independent
+
+      - name: Admit byte-identical Android core
+        env:
+          EXPECTED_COMMIT: ${{ needs.inspect-tag.outputs.commit }}
+        run: |
+          set -euo pipefail
+          protected_sha="$(sha256sum build-protected/mgba_libretro.so | cut -d' ' -f1)"
+          independent_sha="$(sha256sum build-independent/mgba_libretro.so | cut -d' ' -f1)"
+          printf '%s  %s\n' "$protected_sha" build-protected/mgba_libretro.so > build-digests.txt
+          printf '%s  %s\n' "$independent_sha" build-independent/mgba_libretro.so >> build-digests.txt
+          sha256sum --check build-digests.txt
+          test "$protected_sha" = "$independent_sha"
+          cmp --silent build-protected/mgba_libretro.so build-independent/mgba_libretro.so
+          mkdir matched-build
+          cp build-protected/mgba_libretro.so matched-build/mgba_libretro_android.so
+          EXPECTED_SHA="$protected_sha" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          identities = {}
+          for name in ("protected", "independent"):
+              value = json.loads(Path(f"build-{name}/BUILD-METADATA.json").read_text(encoding="utf-8"))
+              if value.get("source_commit") != os.environ["EXPECTED_COMMIT"]:
+                  raise SystemExit("build source mismatch")
+              if value.get("core", {}).get("sha256") != os.environ["EXPECTED_SHA"]:
+                  raise SystemExit("build digest mismatch")
+              identities[name] = value
+          Path("matched-build/BUILD-IDENTITIES.json").write_text(
+              json.dumps(identities, sort_keys=True, separators=(",", ":")) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Upload matched canonical core
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: gba-wifi-link-release-matched-core
+          path: matched-build
+          if-no-files-found: error
+          retention-days: 7
+
+  package:
+    name: Build and verify deterministic release twice
+    needs: [inspect-tag, compare-builds]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out admitted packaging source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          clean: true
+          fetch-depth: 0
+          ref: ${{ needs.inspect-tag.outputs.commit }}
+
+      - name: Download admitted context
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: gba-wifi-link-release-context
+          path: admitted
+
+      - name: Download matched canonical core
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: gba-wifi-link-release-matched-core
+          path: matched-build
+
+      - name: Build compare and verify two clean packages
+        env:
+          EXPECTED_TAG: ${{ needs.inspect-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cp admitted/release-context.json context.json
+          notes="packaging/gba-wifi-link/releases/${EXPECTED_TAG}/RELEASE-NOTES.md"
+          mkdir package-a package-b
+          python3 tools/gba-wifi-link-release.py build \
+            --context context.json --output package-a/release \
+            --core matched-build/mgba_libretro_android.so \
+            --test-fixture tools/gba-link-test-rom/fixtures/gba-link-test.gba \
+            --continuous-fixture tools/gba-link-test-rom/fixtures/gba-link-continuous.gba \
+            --licence LICENSE \
+            --install-template packaging/gba-wifi-link/release/templates/INSTALL-AND-USAGE.md.in \
+            --source-template packaging/gba-wifi-link/release/templates/SOURCE-AND-PROVENANCE.md.in \
+            --notes "$notes"
+          python3 tools/gba-wifi-link-release.py build \
+            --context context.json --output package-b/release \
+            --core matched-build/mgba_libretro_android.so \
+            --test-fixture tools/gba-link-test-rom/fixtures/gba-link-test.gba \
+            --continuous-fixture tools/gba-link-test-rom/fixtures/gba-link-continuous.gba \
+            --licence LICENSE \
+            --install-template packaging/gba-wifi-link/release/templates/INSTALL-AND-USAGE.md.in \
+            --source-template packaging/gba-wifi-link/release/templates/SOURCE-AND-PROVENANCE.md.in \
+            --notes "$notes"
+          diff --recursive --no-dereference package-a/release package-b/release
+          python3 tools/gba-wifi-link-release.py verify --context context.json --output package-a/release
+          python3 tools/gba-wifi-link-release.py verify --context context.json --output package-b/release
+          python3 tools/gba-wifi-link-release.py render-body \
+            --context context.json --notes "$notes" > release-body-a.md
+          python3 tools/gba-wifi-link-release.py render-body \
+            --context context.json --notes "$notes" > release-body-b.md
+          cmp --silent release-body-a.md release-body-b.md
+
+      - name: Assemble immutable canonical publisher input
+        run: |
+          set -euo pipefail
+          mkdir -p publisher-input/release-tool/tools/gba_wifi_link_release
+          cp -R package-a/release publisher-input/release
+          cp context.json publisher-input/release-context.json
+          cp release-body-a.md publisher-input/release-body.md
+          cp tools/gba-wifi-link-release.py publisher-input/release-tool/tools/gba-wifi-link-release.py
+          for module in __init__ admission cli github model packager privacy provenance publisher render text_policy verifier; do
+            cp "tools/gba_wifi_link_release/${module}.py" \
+              "publisher-input/release-tool/tools/gba_wifi_link_release/${module}.py"
+          done
+          mkdir -p publisher-input/release-tool/packaging/gba-wifi-link/release/templates
+          cp packaging/gba-wifi-link/release/contract-v1.json \
+            publisher-input/release-tool/packaging/gba-wifi-link/release/contract-v1.json
+          cp packaging/gba-wifi-link/release/templates/INSTALL-AND-USAGE.md.in \
+            publisher-input/release-tool/packaging/gba-wifi-link/release/templates/INSTALL-AND-USAGE.md.in
+          cp packaging/gba-wifi-link/release/templates/SOURCE-AND-PROVENANCE.md.in \
+            publisher-input/release-tool/packaging/gba-wifi-link/release/templates/SOURCE-AND-PROVENANCE.md.in
+          cp LICENSE publisher-input/release-tool/LICENSE
+          find publisher-input/release-tool -type f ! -name MANIFEST.sha256 -print0 | sort -z | \
+            xargs -0 sha256sum > publisher-input/release-tool/MANIFEST.sha256
+
+      - name: Upload one immutable canonical publisher artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: gba-wifi-link-release-canonical
+          path: publisher-input
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Attest and automatically publish
+    needs: [admit, package]
+    runs-on: ubuntu-24.04
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - name: Download canonical publisher input
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: gba-wifi-link-release-canonical
+          path: publisher-input
+
+      - name: Verify canonical release before mutation
+        run: |
+          set -euo pipefail
+          test "$(find publisher-input -mindepth 1 -maxdepth 1 -printf '%f\n' | sort | tr '\n' ' ')" = \
+            "release release-body.md release-context.json release-tool "
+          diff --unified \
+            <(cut -c67- publisher-input/release-tool/MANIFEST.sha256 | sort) \
+            <(find publisher-input/release-tool -type f ! -name MANIFEST.sha256 | sort)
+          sha256sum --check publisher-input/release-tool/MANIFEST.sha256
+          python3 publisher-input/release-tool/tools/gba-wifi-link-release.py verify \
+            --context publisher-input/release-context.json \
+            --output publisher-input/release
+
+      - name: Recheck immutable remote tag
+        run: |
+          set -euo pipefail
+          python3 publisher-input/release-tool/tools/gba-wifi-link-release.py verify-tag \
+            --context publisher-input/release-context.json \
+            --repository "$GITHUB_REPOSITORY"
+
+      - name: Attest admitted core
+        if: ${{ needs.admit.outputs.release_exists != 'true' }}
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: publisher-input/release/mgba_libretro_android.so
+
+      - name: Attest admitted archive
+        if: ${{ needs.admit.outputs.release_exists != 'true' }}
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: publisher-input/release/mgba-gba-wifi-link-*-android-arm64.zip
+
+      - name: Publish transaction and final public verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 publisher-input/release-tool/tools/gba-wifi-link-release.py publish \
+            --context publisher-input/release-context.json \
+            --output publisher-input/release \
+            --body publisher-input/release-body.md \
+            --repository "$GITHUB_REPOSITORY"

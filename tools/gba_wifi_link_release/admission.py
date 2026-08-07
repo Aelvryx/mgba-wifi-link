@@ -146,9 +146,10 @@ def _validate_tag_event(evidence: Mapping[str, object], tag: str, tag_object: st
         raise AdmissionError("TAG_EVENT")
 
 
-def _validate_release_conflict(evidence: Mapping[str, object]) -> None:
+def _validate_release_conflict(evidence: Mapping[str, object], *, allow_existing: bool) -> None:
     release = evidence.get("release")
-    if not isinstance(release, Mapping) or release.get("exists") is not False:
+    exists = release.get("exists") if isinstance(release, Mapping) else None
+    if type(exists) is not bool or (exists and not allow_existing):
         raise AdmissionError("RELEASE_CONFLICT")
 
 
@@ -258,14 +259,15 @@ def _validated_notes(repo: Path, tag: str, commit: str, context_values: tuple[st
     return notes
 
 
-def admit_release(repo: Path, tag: str, evidence: Mapping[str, object]) -> ReleaseContext:
+def admit_release(repo: Path, tag: str, evidence: Mapping[str, object], *,
+                  allow_existing_release: bool = False) -> ReleaseContext:
     """Validate local source and exact protected evidence without publishing."""
     if not isinstance(evidence, Mapping):
         raise AdmissionError("EVIDENCE")
     tag_object, commit = require_annotated_tag(repo, tag)
     repository = _validate_repository(repo, evidence)
     _validate_tag_event(evidence, tag, tag_object)
-    _validate_release_conflict(evidence)
+    _validate_release_conflict(evidence, allow_existing=allow_existing_release)
     evidence_commit = _required_str(evidence, "commit")
     if not SHA1_RE.fullmatch(evidence_commit) or evidence_commit != commit:
         raise AdmissionError("EVIDENCE_COMMIT")

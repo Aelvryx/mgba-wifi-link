@@ -10,6 +10,7 @@ from tools.gba_wifi_link_release.workflow_policy import (
     WorkflowPolicyError,
     lex_workflow_yaml,
     normalize_workflow,
+    validate_release_workflow_policy,
     validate_workflow_policy,
 )
 
@@ -35,6 +36,18 @@ class WorkflowPolicyTest(unittest.TestCase):
             workflow.write_text(mutate(workflow.read_text(encoding="utf-8")), encoding="utf-8")
             with self.assertRaises(WorkflowPolicyError):
                 validate_workflow_policy(repo)
+
+    def assert_release_rejected_after(self, mutate) -> None:
+        with self.copy_policy_repo() as temporary:
+            repo = Path(temporary)
+            contract_source = ROOT / "packaging/gba-wifi-link/release/contract-v1.json"
+            contract = repo / "packaging/gba-wifi-link/release/contract-v1.json"
+            contract.parent.mkdir(parents=True)
+            shutil.copy2(contract_source, contract)
+            workflow = repo / ".github/workflows/gba-wifi-link-release.yml"
+            workflow.write_text(mutate(workflow.read_text(encoding="utf-8")), encoding="utf-8")
+            with self.assertRaises(WorkflowPolicyError):
+                validate_release_workflow_policy(repo)
 
     def test_protected_workflow_satisfies_the_reusable_read_only_contract(self):
         validate_workflow_policy(ROOT)
@@ -208,3 +221,168 @@ jobs:
         for mutate in mutations:
             with self.subTest(mutation=mutate):
                 self.assert_rejected_after(mutate)
+
+    def test_release_workflow_satisfies_the_automatic_tag_contract(self):
+        validate_release_workflow_policy(ROOT)
+
+    def test_release_workflow_has_two_post_validation_clean_compile_jobs(self):
+        source = (ROOT / ".github/workflows/gba-wifi-link-release.yml").read_text(encoding="utf-8")
+        self.assertEqual(
+            source.count("cmake --build build-release-android --parallel 2 --target mgba_libretro"),
+            2,
+        )
+        self.assertEqual(source.count("-DSKIP_GIT=ON"), 2)
+        self.assertEqual(source.count('-DGIT_COMMIT="$EXPECTED_COMMIT"'), 2)
+        self.assertEqual(source.count('-DGIT_TAG="$EXPECTED_TAG"'), 2)
+        self.assertEqual(
+            source.count('SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$EXPECTED_COMMIT")"'),
+            2,
+        )
+
+    def test_release_workflow_exact_rerun_is_read_only_through_publisher(self):
+        source = (ROOT / ".github/workflows/gba-wifi-link-release.yml").read_text(encoding="utf-8")
+        self.assertIn("--allow-existing-release", source)
+        self.assertIn("release_exists: ${{ steps.evidence.outputs.release_exists }}", source)
+        condition = "if: ${{ needs.admit.outputs.release_exists != 'true' }}"
+        self.assertIn(condition, source)
+        self.assertEqual(source.count(condition), 2)
+
+    def test_release_workflow_rejects_trigger_concurrency_or_human_gate_mutations(self):
+        mutations = (
+            lambda source: source.replace("      - v*", "      - release-*", 1),
+            lambda source: source.replace("on:\n  push:", "on:\n  workflow_dispatch:\n  push:", 1),
+            lambda source: source.replace("github.ref }}", "github.sha }}", 1),
+            lambda source: source.replace("cancel-in-progress: false", "cancel-in-progress: true", 1),
+            lambda source: source.replace(
+                "  publish:\n    name: Attest and automatically publish",
+                "  publish:\n    environment: production\n    name: Attest and automatically publish",
+                1,
+            ),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=mutate):
+                self.assert_release_rejected_after(mutate)
+
+    def test_release_workflow_rejects_permission_boundary_mutations(self):
+        mutations = (
+            lambda source: source.replace(
+                "permissions:\n  actions: read\n  contents: read",
+                "permissions:\n  actions: read\n  contents: write",
+                1,
+            ),
+            lambda source: source.replace("      attestations: write", "      attestations: read", 1),
+            lambda source: source.replace("      id-token: write", "      id-token: read", 1),
+            lambda source: source.replace(
+                "  compare-builds:\n    name:",
+                "  compare-builds:\n    permissions:\n      contents: write\n    name:",
+                1,
+            ),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=mutate):
+                self.assert_release_rejected_after(mutate)
+
+    def test_release_workflow_rejects_graph_and_reproducibility_mutations(self):
+        mutations = (
+            lambda source: source.replace(
+                "    needs: [inspect-tag, protected-validation]\n",
+                "    needs: inspect-tag\n",
+                1,
+            ),
+            lambda source: source.replace(
+                "    needs: [inspect-tag, admit]\n",
+                "    needs: inspect-tag\n",
+                1,
+            ),
+            lambda source: source.replace(
+                "    needs: [inspect-tag, admit, protected-build, independent-build]",
+                "    needs: [inspect-tag, admit, protected-build]",
+                1,
+            ),
+            lambda source: source.replace(
+                "cmp --silent build-protected/mgba_libretro.so build-independent/mgba_libretro.so",
+                "true",
+                1,
+            ),
+            lambda source: source.replace("sha256sum --check build-digests.txt", "true", 1),
+            lambda source: source.replace(
+                "    needs: [inspect-tag, compare-builds]\n",
+                "    needs: inspect-tag\n",
+                1,
+            ),
+            lambda source: source.replace(
+                "    needs: [admit, package]\n", "    needs: [admit, compare-builds]\n", 1
+            ),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=mutate):
+                self.assert_release_rejected_after(mutate)
+
+    def test_release_workflow_rejects_action_pin_and_artifact_handoff_mutations(self):
+        mutations = (
+            lambda source: source.replace("actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803", "actions/checkout@v6", 1),
+            lambda source: source.replace("actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0", "actions/download-artifact@v5", 1),
+            lambda source: source.replace("actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02", "actions/upload-artifact@v4", 1),
+            lambda source: source.replace("actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a", "actions/attest-build-provenance@v3", 1),
+            lambda source: source.replace("name: gba-wifi-link-release-canonical", "name: arbitrary-publisher-input", 1),
+            lambda source: source.replace("if-no-files-found: error", "if-no-files-found: warn", 1),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=mutate):
+                self.assert_release_rejected_after(mutate)
+
+    def test_release_workflow_rejects_publisher_isolation_or_ordering_mutations(self):
+        mutations = (
+            lambda source: source.replace(
+                "    steps:\n      - name: Download canonical publisher input",
+                "    steps:\n      - name: Check out source\n        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6\n\n      - name: Download canonical publisher input",
+                1,
+            ),
+            lambda source: source.replace(
+                "      - name: Verify canonical release before mutation",
+                "      - name: Build replacement core\n        run: cmake --build build\n\n      - name: Verify canonical release before mutation",
+                1,
+            ),
+            lambda source: source.replace(
+                "          set -euo pipefail\n          test \"$(find publisher-input",
+                "          set -euo pipefail\n          gh api --method POST repos/$GITHUB_REPOSITORY/releases\n          test \"$(find publisher-input",
+                1,
+            ),
+            lambda source: source.replace(" verify-tag ", " render-body ", 1),
+            lambda source: source.replace(
+                "      - name: Attest admitted core",
+                "      - name: Download replacement\n        run: curl https://example.invalid/core -o publisher-input/release/mgba_libretro_android.so\n\n      - name: Attest admitted core",
+                1,
+            ),
+            lambda source: source.replace(
+                "      - name: Attest admitted core",
+                "      - name: Attest admitted core\n        continue-on-error: true",
+                1,
+            ),
+            lambda source: source.replace(
+                "      - name: Publish transaction and final public verification",
+                "      - name: Publish transaction and final public verification\n        if: always()",
+                1,
+            ),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=mutate):
+                self.assert_release_rejected_after(mutate)
+
+    def test_release_workflow_rejects_missing_gate_corruption_tag_or_conflict_guards(self):
+        mutations = (
+            lambda source: source.replace("        required = (", "        required = (\n            # missing gate", 1).replace(
+                '            "Fixture reproducibility",\n', "", 1
+            ),
+            lambda source: source.replace("verify --context context.json --output package-b/release", "true # missing second package verification", 1),
+            lambda source: source.replace(" verify-tag ", " verify ", 1),
+            lambda source: source.replace(
+                '"release": {"exists": release_exists}',
+                '"release": {"exists": False}',
+                1,
+            ),
+            lambda source: source.replace("          test \"$release_status\" -eq 1", "          true # ignore release lookup failure", 1),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=mutate):
+                self.assert_release_rejected_after(mutate)

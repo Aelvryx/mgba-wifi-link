@@ -46,6 +46,28 @@
     "RELEASE-PROVENANCE.json",
     "SHA256SUMS"
   ],
+  "release_workflow": {
+    "action_pins": {
+      "actions/attest-build-provenance": "977bb373ede98d70efdf65b84cb5f73e068dcc2a",
+      "actions/checkout": "d23441a48e516b6c34aea4fa41551a30e30af803",
+      "actions/download-artifact": "634f93cb2916e3fdff6788551b99b062d0335ce0",
+      "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02"
+    },
+    "android_ndk": {
+      "source_properties_sha256": "70f1c5165e6d997b18782a49cff71da7a3caacd0c4cd811da24c43359fb83cf6",
+      "version": "27.2.12479018"
+    },
+    "artifact_entries": [
+      "release",
+      "release-body.md",
+      "release-context.json",
+      "release-tool"
+    ],
+    "artifact_name": "gba-wifi-link-release-canonical",
+    "runner_image": "ubuntu-24.04",
+    "yaml_lexical_sha256": "79bcf83e462bbe1c8896a7f11c62dc5b2867802771395eba45b1e182554235a3",
+    "yaml_source_sha256": "90bb6db6197c11240284c33a525741b1f5a0bb3caeeedbbf12955aea379dc33d"
+  },
   "release_provenance_assets": [
     "mgba_libretro_android.so",
     "gba-link-test.gba",

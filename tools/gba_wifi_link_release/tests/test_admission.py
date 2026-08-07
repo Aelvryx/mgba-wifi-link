@@ -249,6 +249,11 @@ class AdmissionTest(unittest.TestCase):
         with self.assertRaisesRegex(AdmissionError, "RELEASE_CONFLICT"):
             admit_release(repo, "v9.8.7", invalid)
 
+        context = admit_release(
+            repo, "v9.8.7", invalid, allow_existing_release=True,
+        )
+        self.assertEqual(context.commit, commit)
+
     def test_source_date_epoch_is_derived_from_the_peeled_commit(self):
         repo = make_repo()
         self.addCleanupRepo(repo)

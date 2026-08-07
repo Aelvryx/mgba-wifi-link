@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from tools.gba_wifi_link_release.github import (
     AttestationSubject,
@@ -294,7 +295,12 @@ class PublisherTest(unittest.TestCase):
 
             self.assertTrue(result.published)
             self.assertTrue(result.reused)
-            self.assertEqual(client.calls, [("get", "v9.8.7"), ("download", 5)])
+            self.assertEqual(client.calls, [
+                ("get", "v9.8.7"),
+                ("download", 5),
+                ("verify-attestations", "mgba_libretro_android.so",
+                 "mgba-gba-wifi-link-v9.8.7-android-arm64.zip"),
+            ])
 
     def test_existing_public_conflicts_are_never_mutated(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -377,12 +383,16 @@ class PublisherTest(unittest.TestCase):
             __import__("os").environ.update(environment)
             try:
                 published = StringIO()
-                with redirect_stdout(published):
-                    self.assertEqual(main([
-                        "publish", "--context", str(context_path), "--output", str(release_set.directory),
-                        "--body", str(body_path), "--repository", "Aelvryx/mgba-wifi-link",
-                        "--test-mode", "--gh-bin", str(FAKE_GH),
-                    ]), 0)
+                with patch("tools.gba_wifi_link_release.cli.verify_remote_tag") as remote_check:
+                    with redirect_stdout(published):
+                        self.assertEqual(main([
+                            "publish", "--context", str(context_path), "--output", str(release_set.directory),
+                            "--body", str(body_path), "--repository", "Aelvryx/mgba-wifi-link",
+                            "--test-mode", "--gh-bin", str(FAKE_GH),
+                        ]), 0)
+                    remote_check.assert_called_once_with(
+                        release_set.context, "Aelvryx/mgba-wifi-link"
+                    )
                 self.assertEqual(published.getvalue(), '{"release_id":1,"reused":false}\n')
                 with redirect_stderr(StringIO()):
                     self.assertNotEqual(main([

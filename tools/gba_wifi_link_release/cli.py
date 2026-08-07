@@ -12,7 +12,7 @@ import sys
 import tempfile
 
 from .admission import (CANONICAL_REPOSITORY, REQUIRED_GATES, REQUIRED_WORKFLOW,
-                        admit_release)
+                        admit_release, verify_remote_tag)
 from .github import GhClient
 from .model import BuildEvidence, GateResult, ReleaseContext
 from .packager import PackageInputs, build_release
@@ -148,6 +148,7 @@ def _parser() -> argparse.ArgumentParser:
     admit.add_argument("--repo", required=True)
     admit.add_argument("--tag", required=True)
     admit.add_argument("--evidence", required=True)
+    admit.add_argument("--allow-existing-release", action="store_true")
     for name in ("build", "verify", "render-body"):
         command = commands.add_parser(name)
         command.add_argument("--fixture", choices=("synthetic",))
@@ -167,6 +168,9 @@ def _parser() -> argparse.ArgumentParser:
     publish.add_argument("--repository", required=True)
     publish.add_argument("--gh-bin")
     publish.add_argument("--test-mode", action="store_true", help=argparse.SUPPRESS)
+    verify_tag = commands.add_parser("verify-tag")
+    verify_tag.add_argument("--context", required=True)
+    verify_tag.add_argument("--repository", required=True)
     return parser
 
 
@@ -175,7 +179,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "admit":
             context = admit_release(Path(args.repo), args.tag,
-                                    json.loads(Path(args.evidence).read_text(encoding="utf-8")))
+                                    json.loads(Path(args.evidence).read_text(encoding="utf-8")),
+                                    allow_existing_release=args.allow_existing_release)
             sys.stdout.write(json.dumps(_context_dict(context), sort_keys=True,
                                         separators=(",", ":")) + "\n")
         elif args.command == "build":
@@ -188,6 +193,9 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("CLI_INPUT")
             notes = (FIXTURE / "release-notes/v9.8.7.md").read_bytes() if args.fixture else Path(args.notes).read_bytes()
             sys.stdout.write(render_release_body(context, notes.decode("utf-8")).decode("utf-8"))
+        elif args.command == "verify-tag":
+            context = _context_from_dict(json.loads(Path(args.context).read_text(encoding="utf-8")))
+            verify_remote_tag(context, args.repository)
         else:
             if args.repository != CANONICAL_REPOSITORY:
                 raise ValueError("CLI_REPOSITORY")
@@ -197,6 +205,7 @@ def main(argv: list[str] | None = None) -> int:
             if context.repository != args.repository:
                 raise ValueError("CLI_REPOSITORY")
             release_set = verify_release(Path(args.output), context)
+            verify_remote_tag(context, args.repository)
             result = publish_release(
                 GhClient(args.repository, gh=args.gh_bin or "gh"), release_set,
                 Path(args.body).read_bytes(),

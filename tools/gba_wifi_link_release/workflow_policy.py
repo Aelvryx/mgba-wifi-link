@@ -12,8 +12,11 @@ import re
 
 
 _WORKFLOW = Path(".github/workflows/gba-wifi-link-ci.yml")
+_RELEASE_WORKFLOW = Path(".github/workflows/gba-wifi-link-release.yml")
+_RELEASE_CONTRACT = Path("packaging/gba-wifi-link/release/contract-v1.json")
 _HISTORY = Path("tools/gba_wifi_link_release/fixtures/v0.2.0-history.json")
 _SHA = re.compile(r"^[0-9a-f]{40}$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _USES = re.compile(r"^\s*uses:\s*([^\s#]+)(?:\s+#.*)?\s*$", re.MULTILINE)
 _SOURCE_COMMIT = "${{ inputs.source_commit || github.sha }}"
 _PERMISSIONS_KEY = re.compile(
@@ -351,3 +354,213 @@ def validate_workflow_policy(repo: Path) -> None:
     if actual != history["ci_baseline"]:
         raise WorkflowPolicyError("WORKFLOW_BASELINE")
     _validate_reusable_contract(text, history)
+
+
+def _read_release_workflow(repo: Path) -> tuple[str, dict[str, object]]:
+    try:
+        text = (repo / _RELEASE_WORKFLOW).read_text(encoding="utf-8")
+        contract = json.loads((repo / _RELEASE_CONTRACT).read_text(encoding="utf-8"))
+        workflow = contract["release_workflow"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as error:
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_INPUT") from error
+    if not isinstance(workflow, dict):
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_CONTRACT")
+    return text, workflow
+
+
+def _release_required(text: str, fragment: str, category: str) -> None:
+    if fragment not in text:
+        raise WorkflowPolicyError(category)
+
+
+def validate_release_workflow_policy(repo: Path) -> None:
+    """Reject release automation that weakens the reviewed fail-closed graph."""
+    text, contract = _read_release_workflow(repo)
+    expected_source_fingerprint = contract.get("yaml_source_sha256")
+    source_fingerprint = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    if (
+        not isinstance(expected_source_fingerprint, str)
+        or not _SHA256.fullmatch(expected_source_fingerprint)
+        or expected_source_fingerprint != source_fingerprint
+    ):
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_SOURCE")
+    tokens = lex_workflow_yaml(text)
+    expected_fingerprint = contract.get("yaml_lexical_sha256")
+    fingerprint = hashlib.sha256(("\n".join(tokens) + "\n").encode("utf-8")).hexdigest()
+    if expected_fingerprint != fingerprint:
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_YAML")
+
+    trigger = "on:\n  push:\n    tags:\n      - v*\n"
+    if text.count(trigger) != 1 or "workflow_dispatch" in text:
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_TRIGGER")
+    concurrency = (
+        "concurrency:\n"
+        "  group: gba-wifi-link-release-${{ github.ref }}\n"
+        "  cancel-in-progress: false"
+    )
+    _release_required(text, concurrency, "RELEASE_WORKFLOW_CONCURRENCY")
+    if "environment:" in text:
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_MANUAL_GATE")
+
+    permission_keys = list(_PERMISSIONS_KEY.finditer(text))
+    top_permissions = "permissions:\n  actions: read\n  contents: read\n\nconcurrency:"
+    publisher_permissions = (
+        "    permissions:\n"
+        "      attestations: write\n"
+        "      contents: write\n"
+        "      id-token: write\n"
+        "    steps:"
+    )
+    if (
+        len(permission_keys) != 2
+        or not text[permission_keys[0].start():].startswith(top_permissions)
+        or not text[permission_keys[1].start():].startswith(publisher_permissions)
+    ):
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_PERMISSION")
+
+    expected_jobs = [
+        "inspect-tag", "protected-validation", "admit", "protected-build",
+        "independent-build", "compare-builds", "package", "publish",
+    ]
+    jobs = re.findall(r"^  ([a-z0-9-]+):\n    name:", text, re.MULTILINE)
+    if jobs != expected_jobs:
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_GRAPH")
+    graph = (
+        "  protected-validation:\n    name: Protected exact-commit validation\n    needs: inspect-tag\n",
+        "  admit:\n    name: Admit protected release source\n    needs: [inspect-tag, protected-validation]\n",
+        "  protected-build:\n    name: Build first clean Android core\n    needs: [inspect-tag, admit]\n",
+        "  independent-build:\n    name: Build independent clean Android core\n    needs: [inspect-tag, admit]\n",
+        "  compare-builds:\n    name: Compare independent Android builds\n    needs: [inspect-tag, admit, protected-build, independent-build]\n",
+        "  package:\n    name: Build and verify deterministic release twice\n    needs: [inspect-tag, compare-builds]\n",
+        "  publish:\n    name: Attest and automatically publish\n    needs: [admit, package]\n",
+    )
+    if any(fragment not in text for fragment in graph):
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_GRAPH")
+
+    action_pins = contract.get("action_pins")
+    if not isinstance(action_pins, dict) or set(action_pins) != {
+        "actions/attest-build-provenance", "actions/checkout",
+        "actions/download-artifact", "actions/upload-artifact",
+    }:
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_ACTION_PIN")
+    expected_actions = {
+        name: f"{name}@{digest}" for name, digest in action_pins.items()
+        if isinstance(name, str) and isinstance(digest, str) and _SHA.fullmatch(digest)
+    }
+    if len(expected_actions) != 4:
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_ACTION_PIN")
+    uses = _USES.findall(text)
+    third_party = [value for value in uses if not value.startswith("./")]
+    if (
+        set(third_party) != set(expected_actions.values())
+        or third_party.count(expected_actions["actions/checkout"]) != 5
+        or third_party.count(expected_actions["actions/download-artifact"]) != 6
+        or third_party.count(expected_actions["actions/upload-artifact"]) != 5
+        or third_party.count(expected_actions["actions/attest-build-provenance"]) != 2
+    ):
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_ACTION_PIN")
+
+    artifact_name = contract.get("artifact_name")
+    entries = contract.get("artifact_entries")
+    if artifact_name != "gba-wifi-link-release-canonical" or entries != [
+        "release", "release-body.md", "release-context.json", "release-tool",
+    ]:
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_ARTIFACT")
+    canonical_upload = (
+        "      - name: Upload one immutable canonical publisher artifact\n"
+        f"        uses: {expected_actions['actions/upload-artifact']} # v4\n"
+        "        with:\n"
+        f"          name: {artifact_name}\n"
+        "          path: publisher-input\n"
+        "          if-no-files-found: error\n"
+        "          retention-days: 7"
+    )
+    canonical_download = (
+        "      - name: Download canonical publisher input\n"
+        f"        uses: {expected_actions['actions/download-artifact']} # v5\n"
+        "        with:\n"
+        f"          name: {artifact_name}\n"
+        "          path: publisher-input"
+    )
+    if canonical_upload not in text or canonical_download not in text or text.count(artifact_name) != 2:
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_ARTIFACT")
+    if "if-no-files-found: warn" in text or text.count("if-no-files-found: error") != 5:
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_ARTIFACT")
+
+    reproducibility_guards = (
+        "cmake --build build-release-android --parallel 2 --target mgba_libretro",
+        '-DGIT_COMMIT="$EXPECTED_COMMIT"',
+        '-DGIT_TAG="$EXPECTED_TAG"',
+        "sha256sum --check build-digests.txt",
+        'test "$protected_sha" = "$independent_sha"',
+        "cmp --silent build-protected/mgba_libretro.so build-independent/mgba_libretro.so",
+        "diff --recursive --no-dereference package-a/release package-b/release",
+        "verify --context context.json --output package-a/release",
+        "verify --context context.json --output package-b/release",
+        "cmp --silent release-body-a.md release-body-b.md",
+    )
+    if (
+        any(fragment not in text for fragment in reproducibility_guards)
+        or text.count("cmake -S . -B build-release-android -G Ninja") != 2
+        or text.count("cmake --build build-release-android --parallel 2 --target mgba_libretro") != 2
+        or text.count("-DSKIP_GIT=ON") != 2
+        or text.count('-DGIT_COMMIT="$EXPECTED_COMMIT"') != 2
+        or text.count('-DGIT_TAG="$EXPECTED_TAG"') != 2
+        or text.count('SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$EXPECTED_COMMIT")"') != 2
+        or text.count("python3 tools/gba-wifi-link-release.py build") != 2
+    ):
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_REPRODUCIBILITY")
+
+    gate_fragment = (
+        "          required = (\n"
+        "              \"Complete normal mGBA suite\",\n"
+        "              \"Focused tests (normal)\",\n"
+        "              \"Focused tests (ASan + UBSan)\",\n"
+        "              \"Focused tests (TSan)\",\n"
+        "              \"Fixture reproducibility\",\n"
+        "              \"Android arm64 libretro build\",\n"
+        "          )"
+    )
+    failure_guards = (
+        gate_fragment,
+        'test "$release_status" -eq 1',
+        '"release": {"exists": release_exists}',
+        "cut -c67- publisher-input/release-tool/MANIFEST.sha256",
+        "sha256sum --check publisher-input/release-tool/MANIFEST.sha256",
+        "--allow-existing-release",
+        "release_exists: ${{ steps.evidence.outputs.release_exists }}",
+    )
+    if any(fragment not in text for fragment in failure_guards):
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_FAILURE_GUARD")
+
+    publisher_start = text.find("\n  publish:\n")
+    if publisher_start < 0:
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_PUBLISHER")
+    publisher = text[publisher_start:]
+    if publisher.count("if: ${{ needs.admit.outputs.release_exists != 'true' }}") != 2:
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_RERUN")
+    publisher_uses = _USES.findall(publisher)
+    if publisher_uses != [
+        expected_actions["actions/download-artifact"],
+        expected_actions["actions/attest-build-provenance"],
+        expected_actions["actions/attest-build-provenance"],
+    ]:
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_PUBLISHER")
+    forbidden = (
+        "actions/checkout@", "cmake", "ninja", "make ", "sdkmanager", "apt-get",
+        "render-body", "curl ", "wget ", "continue-on-error:", "if: always()",
+        " cp ", " mv ",
+    )
+    if any(value in publisher for value in forbidden):
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_PUBLISHER")
+    order = [
+        publisher.find("- name: Verify canonical release before mutation"),
+        publisher.find("- name: Recheck immutable remote tag"),
+        publisher.find("- name: Attest admitted core"),
+        publisher.find("- name: Attest admitted archive"),
+        publisher.find("- name: Publish transaction and final public verification"),
+    ]
+    if any(index < 0 for index in order) or order != sorted(order):
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_PUBLISHER_ORDER")
+    if " verify-tag " not in publisher or publisher.count(" publish ") != 1:
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_TAG_RECHECK")

@@ -167,6 +167,8 @@ def publish_release(client: GitHubClient, release_set: ReleaseSet, body: bytes) 
         if existing.draft:
             raise ReleaseConflict("RELEASE_CONFLICT")
         _verify_remote(client, release_set, body, existing, draft=False, conflict=True)
+        with _attestation_subjects(release_set) as subjects:
+            client.verify_attestations(subjects)
         return PublishResult(existing.id, True, True)
 
     created: RemoteRelease | None = None

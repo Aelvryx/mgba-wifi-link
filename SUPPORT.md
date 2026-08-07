@@ -14,7 +14,8 @@ facts:
 - fork release or full commit;
 - core SHA-256 when using an unpublished build;
 - RetroArch version and platform;
-- host/client roles and network topology;
+- host/client roles and general network type (trusted LAN or direct Android
+  hotspot, without addresses);
 - game title and region/revision identity without uploading the ROM;
 - exact steps and the last visible message;
 

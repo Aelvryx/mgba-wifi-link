@@ -30,7 +30,11 @@ The corrected bundle replaces the guide and adds the current
 `SOURCE-AND-PROVENANCE.md` and `LICENSE`; its executables and fixtures are the
 preserved payloads above.
 
-## Corrected artifact identities
+## First documentation-only correction identities (superseded)
+
+The following first-correction hashes are retained as historical rollback
+evidence only. They were superseded by the second documentation-only correction
+below and are not the current public asset identities.
 
 The corrected standalone `INSTALL-AND-USAGE.md` SHA-256 is
 `880190bf1b65f3f44690163e2374f79f813a274e31547dbced4920e1fb4e64e8`.
@@ -57,7 +61,7 @@ with `sha256sum -c`.  The extracted root contained exactly
 `SOURCE-AND-PROVENANCE.md`, `gba-link-continuous.gba`,
 `gba-link-test.gba`, and `mgba_libretro_android.so`.
 
-## Corrected public prerelease
+## First corrected public prerelease (superseded)
 
 On 2026-08-07 the release at
 <https://github.com/Aelvryx/mgba-wifi-link/releases/tag/v0.2.0> was temporarily
@@ -77,11 +81,12 @@ published as a prerelease with exactly six assets:
 - `SHA256SUMS` —
   `1a777399d6fc1e621f381e4e5a251f6b1164d8a82a1cc53dd88631c3ffdece5d`
 
-A fresh authenticated download from the published release verified the
+A fresh authenticated download from that published release verified the
 standalone manifest and the archive's internal manifest. The downloaded guide,
 archive, and manifest were byte-identical to the independently reviewed local
-release set. The release body carries a prominent documentation-only correction
-note. The source tag, Android core, and both fixtures are unchanged.
+release set. That first-correction release body carried a prominent
+documentation-only correction note. The source tag, Android core, and both
+fixtures were unchanged.
 
 The private rollback snapshot remains retained until the public-alpha sharing
 change is complete. It contains the original release body and assets in case a
@@ -118,6 +123,10 @@ after republishing verified the revised standalone manifest, the extracted
 archive's internal manifest, its exact seven-member allow-list, the updated
 log-reporting prohibition, and the preserved core and fixture hashes. The
 release is again a published prerelease with exactly six assets.
+
+The current release description identifies the same source commit and all three
+immutable payload hashes (Android core plus both fixture ROMs) alongside the
+current mutable guide, archive, and manifest hashes.
 
 ## Onboarding feedback policy
 

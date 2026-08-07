@@ -7,7 +7,10 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not upload commercial ROMs, BIOS files, private saves, IP addresses, or raw controller histories.
+        Include only bounded, non-sensitive facts. Do not upload commercial ROMs,
+        BIOS files, private saves, IP addresses, private paths, or raw controller
+        histories. Do not upload, attach, or paste endpoint, core, or RetroArch
+        logs until issue #20 provides a sanitized diagnostic workflow.
   - type: input
     id: build
     attributes:
@@ -18,8 +21,8 @@ body:
   - type: input
     id: frontend
     attributes:
-      label: Frontend and devices
-      description: RetroArch version, OS, and both device models.
+      label: Frontend and platform
+      description: RetroArch version and platform or OS. Do not include device identifiers.
     validations:
       required: true
   - type: input
@@ -43,6 +46,13 @@ body:
         - Other
     validations:
       required: true
+  - type: input
+    id: connection
+    attributes:
+      label: Endpoint roles and network type
+      description: Host/client roles and trusted LAN or direct Android hotspot only; do not include addresses.
+    validations:
+      required: true
   - type: textarea
     id: steps
     attributes:
@@ -55,11 +65,11 @@ body:
       label: Expected and actual result
     validations:
       required: true
-  - type: textarea
-    id: logs
+  - type: input
+    id: visible-message
     attributes:
-      label: Sanitized evidence
-      description: Paste relevant host/client excerpts or link to sanitized logs.
+      label: Last visible message
+      description: Enter the last visible message, if any. Do not paste logs or attach log files.
   - type: checkboxes
     id: checks
     attributes:
@@ -68,4 +78,6 @@ body:
         - label: I used identical ROM bytes on both endpoints.
           required: true
         - label: I removed commercial content, saves, addresses, paths, and input history from the report.
+          required: true
+        - label: I did not include endpoint, core, or RetroArch logs; issue #20 has not yet published a sanitized workflow.
           required: true

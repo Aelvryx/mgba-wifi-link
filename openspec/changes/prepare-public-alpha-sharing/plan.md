@@ -5,6 +5,10 @@
 > superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
 
+The plan's step checkboxes are procedural guidance, including conditional
+steps. `tasks.md` and the SDD ledger/reports are the authoritative execution
+record; do not mechanically mark conditional plan steps complete.
+
 **Goal:** Correct the published v0.2.0 documentation bundle, prove its binary
 identity and public usability, and open limited public-alpha sharing without
 changing runtime behavior.

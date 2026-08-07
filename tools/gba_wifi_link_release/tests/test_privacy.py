@@ -70,26 +70,35 @@ class PrivacyTest(unittest.TestCase):
         with self.public_tree() as temporary:
             validate_public_tree(Path(temporary), CONTRACT)
 
-    def test_public_https_url_is_not_misclassified_as_a_private_path(self):
-        with self.public_tree() as temporary:
-            root = Path(temporary)
-            (root / "INSTALL-AND-USAGE.md").write_text(
-                "Read https://github.com/Aelvryx/mgba-wifi-link/releases.\n",
-                encoding="utf-8",
-            )
-            payloads = tuple(
-                ReleaseAsset(name, len((root / name).read_bytes()),
-                             hashlib.sha256((root / name).read_bytes()).hexdigest())
-                for name in (
-                    "mgba_libretro_android.so",
-                    "gba-link-test.gba",
-                    "gba-link-continuous.gba",
-                    "INSTALL-AND-USAGE.md",
-                    "mgba-gba-wifi-link-v9.8.7-android-arm64.zip",
-                )
-            )
-            (root / "RELEASE-PROVENANCE.json").write_bytes(release_provenance(CONTEXT, payloads))
-            validate_public_tree(root, CONTRACT)
+    def test_schema_v1_project_and_release_urls_are_public_text(self):
+        urls = (
+            "https://github.com/Aelvryx/mgba-wifi-link",
+            "https://github.com/Aelvryx/mgba-wifi-link/releases",
+            "https://github.com/Aelvryx/mgba-wifi-link/releases/tag/v9.8.7",
+        )
+        for index, url in enumerate(urls):
+            with self.subTest(case=index):
+                with self.public_tree() as temporary:
+                    root = Path(temporary)
+                    (root / "INSTALL-AND-USAGE.md").write_text(
+                        f"Read {url}.\n",
+                        encoding="utf-8",
+                    )
+                    payloads = tuple(
+                        ReleaseAsset(name, len((root / name).read_bytes()),
+                                     hashlib.sha256((root / name).read_bytes()).hexdigest())
+                        for name in (
+                            "mgba_libretro_android.so",
+                            "gba-link-test.gba",
+                            "gba-link-continuous.gba",
+                            "INSTALL-AND-USAGE.md",
+                            "mgba-gba-wifi-link-v9.8.7-android-arm64.zip",
+                        )
+                    )
+                    (root / "RELEASE-PROVENANCE.json").write_bytes(
+                        release_provenance(CONTEXT, payloads)
+                    )
+                    validate_public_tree(root, CONTRACT)
 
     def test_release_provenance_requires_canonical_json_and_typed_source_fields(self):
         with self.public_tree() as temporary:
@@ -155,9 +164,14 @@ class PrivacyTest(unittest.TestCase):
             "https://github.com/%2Fprivate%2FSYNTHETIC_PRIVACY_SINGLE_PATH",
             "https://github.com/%252Fprivate%252FSYNTHETIC_PRIVACY_DOUBLE_PATH",
             "https://github.com/Aelvryx/../private/SYNTHETIC_PRIVACY_TRAVERSAL",
+            "https://github.com/root/SYNTHETIC_PRIVACY_RAW_ROOT",
+            "https://github.com/%2Fmnt%2FSYNTHETIC_PRIVACY_ENCODED_MNT",
+            "https://github.com/%252Froot%252FSYNTHETIC_PRIVACY_DOUBLE_ROOT",
+            "https://github.com/C:%5CUsers%5CSYNTHETIC_PRIVACY_DRIVE",
+            "https://github.com/%5C%5Chost%5Cshare%5CSYNTHETIC_PRIVACY_UNC",
         )
-        for canary in cases:
-            with self.subTest(canary=canary):
+        for index, canary in enumerate(cases):
+            with self.subTest(case=index):
                 with self.public_tree() as temporary:
                     root = Path(temporary)
                     (root / "INSTALL-AND-USAGE.md").write_text(canary + "\n", encoding="utf-8")

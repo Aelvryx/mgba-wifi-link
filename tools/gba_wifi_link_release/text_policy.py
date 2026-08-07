@@ -8,11 +8,14 @@ _MAX_URL_DECODE_PASSES = 3
 _MAX_URL_COMPONENT_BYTES = 4_096
 _ESCAPED_BYTE_RE = re.compile(r"%[0-9A-Fa-f]{2}")
 _PUBLIC_URL_RE = re.compile(r"https?://[^\s`]+")
+_PUBLIC_URL_PATH_RE = re.compile(
+    r"^/Aelvryx/mgba-wifi-link(?:/?|/issues(?:/[1-9][0-9]*)?/?|"
+    r"/releases(?:/tag/v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\."
+    r"(?:0|[1-9][0-9]*))?/?)$"
+)
+_URL_TRAILING_PROSE = ".,;:!)]}"
 _PRIVATE_PATH_RE = re.compile(r"(?<![A-Za-z0-9])(?:~[\\/]|/(?:[^\s`]+)|[A-Za-z]:[\\/][^\s`]*)")
 _TRAVERSAL_PATH_RE = re.compile(r"(?<![A-Za-z0-9])\.\.[\\/]")
-_PRIVATE_URL_PATH_RE = re.compile(
-    r"(?i)(?:^|/)(?:etc|home|private|tmp|users|var)(?:/|$)|(?:^|/)[A-Za-z]:[\\/]|(?:^|/)~(?:/|$)"
-)
 _IPV4_RE = re.compile(r"(?<![0-9])(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(?:\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}(?![0-9])")
 _IPV6_RE = re.compile(r"(?<![A-Za-z0-9])(?:[0-9A-Fa-f]{1,4}:){2,}[0-9A-Fa-f:]*")
 _MAC_RE = re.compile(r"(?<![0-9A-Fa-f])(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}(?![0-9A-Fa-f])")
@@ -39,24 +42,35 @@ def _decoded_url_component(value: str) -> str | None:
     return None if _ESCAPED_BYTE_RE.search(value) else value
 
 
+def _is_allowed_public_url(candidate: str) -> bool:
+    """Accept only canonical schema-v1 links to this project's public surfaces."""
+    url = candidate.rstrip(_URL_TRAILING_PROSE)
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return False
+    if (
+        parts.scheme != "https"
+        or parts.netloc != "github.com"
+        or parts.username is not None
+        or parts.password is not None
+        or "?" in url
+        or "#" in url
+    ):
+        return False
+    raw_components = (parts.path, parts.query, parts.fragment)
+    decoded_components = tuple(_decoded_url_component(value) for value in raw_components)
+    if any(value is None for value in decoded_components):
+        return False
+    if decoded_components != raw_components:
+        return False
+    return _PUBLIC_URL_PATH_RE.fullmatch(parts.path) is not None
+
+
 def classify_private_text(text: str) -> str | None:
     """Return a category without returning any source text or sensitive value."""
     for url in _PUBLIC_URL_RE.findall(text):
-        try:
-            parts = urlsplit(url)
-        except ValueError:
-            return "PATH"
-        if parts.username is not None or parts.password is not None:
-            return "PATH"
-        path = _decoded_url_component(parts.path)
-        query = _decoded_url_component(parts.query)
-        fragment = _decoded_url_component(parts.fragment)
-        if path is None or query is None or fragment is None:
-            return "PATH"
-        if _PRIVATE_URL_PATH_RE.search(path) or _TRAVERSAL_PATH_RE.search(path):
-            return "PATH"
-        url_material = query + "\n" + fragment
-        if _PRIVATE_PATH_RE.search(url_material) or _TRAVERSAL_PATH_RE.search(url_material):
+        if not _is_allowed_public_url(url):
             return "PATH"
     public_url_free = _PUBLIC_URL_RE.sub("", text)
     if _PRIVATE_PATH_RE.search(public_url_free) or _TRAVERSAL_PATH_RE.search(public_url_free):

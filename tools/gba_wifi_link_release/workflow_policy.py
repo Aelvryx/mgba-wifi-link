@@ -5,6 +5,7 @@ reviewed source contract, so these checks validate its exact, security-relevant
 spelling and normalize only the behavioral fields frozen in the history fixture.
 """
 
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -19,10 +20,56 @@ _PERMISSIONS_KEY = re.compile(
     r"(?:^|[,{])[^\S\r\n]*(?:permissions|['\"]permissions['\"])[^\S\r\n]*:",
     re.MULTILINE,
 )
+_PLAIN_KEY = re.compile(r"^(?P<key>[A-Za-z_][A-Za-z0-9_-]*)[ \t]*:(?P<value>.*)$")
+_BLOCK_SCALAR = re.compile(r"^[>|][0-9+\-]*?(?:\s*(?:#.*)?)$")
 
 
 class WorkflowPolicyError(ValueError):
     """A stable reason that a workflow source contract was violated."""
+
+
+def lex_workflow_yaml(text: str) -> tuple[str, ...]:
+    """Lex the deliberately plain YAML subset used by the reviewed workflow.
+
+    This is not a general YAML parser. It rejects syntax that could change key
+    meaning (complex/quoted keys, tags, anchors, aliases, merge keys, and flow
+    maps), while treating literal and folded block-scalar bodies as opaque.
+    """
+    tokens: list[str] = []
+    scalar_indent: int | None = None
+    for line in text.splitlines():
+        leading = len(line) - len(line.lstrip(" "))
+        if scalar_indent is not None:
+            if not line.strip() or leading > scalar_indent:
+                continue
+            scalar_indent = None
+        if "\t" in line:
+            raise WorkflowPolicyError("WORKFLOW_YAML_SYNTAX")
+        content = line[leading:]
+        if not content or content.startswith("#"):
+            continue
+        is_list = content.startswith("- ")
+        item = content[2:] if is_list else content
+        if item.startswith(("?", ":", "'", '"', "!", "&", "*", "<<:")):
+            raise WorkflowPolicyError("WORKFLOW_YAML_SYNTAX")
+        key = _PLAIN_KEY.fullmatch(item)
+        if key is None:
+            if is_list:
+                tokens.append(f"L:{leading}:{item}")
+                continue
+            raise WorkflowPolicyError("WORKFLOW_YAML_SYNTAX")
+        value = key.group("value")
+        value_without_expression = re.sub(r"\$\{\{.*?\}\}", "", value)
+        if (
+            "{" in value_without_expression
+            or "}" in value_without_expression
+            or re.search(r"(?:^|[\s:])[!&*][^\s]*", value_without_expression)
+        ):
+            raise WorkflowPolicyError("WORKFLOW_YAML_SYNTAX")
+        tokens.append(f"M:{leading}:{'-' if is_list else ''}{key.group('key')}")
+        if _BLOCK_SCALAR.fullmatch(value.strip()):
+            scalar_indent = leading
+    return tuple(tokens)
 
 
 def _read(repo: Path) -> tuple[str, dict[str, object]]:
@@ -286,9 +333,20 @@ def _validate_reusable_contract(text: str, history: dict[str, object]) -> None:
         raise WorkflowPolicyError("WORKFLOW_SOURCE_COMMIT")
 
 
+def _validate_yaml_subset(text: str, history: dict[str, object]) -> None:
+    expected = history.get("workflow_yaml_lexical_sha256")
+    if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
+        raise WorkflowPolicyError("WORKFLOW_YAML_SYNTAX")
+    tokens = lex_workflow_yaml(text)
+    actual = hashlib.sha256(("\n".join(tokens) + "\n").encode("utf-8")).hexdigest()
+    if actual != expected:
+        raise WorkflowPolicyError("WORKFLOW_YAML_SYNTAX")
+
+
 def validate_workflow_policy(repo: Path) -> None:
     """Reject any drift from protected CI behavior or its constrained handoff."""
     text, history = _read(repo)
+    _validate_yaml_subset(text, history)
     actual = normalize_workflow(repo)
     if actual != history["ci_baseline"]:
         raise WorkflowPolicyError("WORKFLOW_BASELINE")

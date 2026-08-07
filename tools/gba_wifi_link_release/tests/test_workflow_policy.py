@@ -8,6 +8,7 @@ import unittest
 
 from tools.gba_wifi_link_release.workflow_policy import (
     WorkflowPolicyError,
+    lex_workflow_yaml,
     normalize_workflow,
     validate_workflow_policy,
 )
@@ -37,6 +38,21 @@ class WorkflowPolicyTest(unittest.TestCase):
 
     def test_protected_workflow_satisfies_the_reusable_read_only_contract(self):
         validate_workflow_policy(ROOT)
+
+    def test_yaml_lexer_skips_block_scalars_and_preserves_github_expressions(self):
+        source = """name: ${{ github.workflow }}
+jobs:
+  example:
+    steps:
+      - name: ${{ github.sha }}
+        run: |
+          printf 'permissions: {id-token: write}\\n'
+          printf '<<: *alias\\n'
+"""
+        self.assertEqual(
+            lex_workflow_yaml(source),
+            ("M:0:name", "M:0:jobs", "M:2:example", "M:4:steps", "M:6:-name", "M:8:run"),
+        )
 
     def test_history_freezes_the_complete_normalized_ci_baseline(self):
         history = json.loads(HISTORY.read_text(encoding="utf-8"))
@@ -146,6 +162,20 @@ class WorkflowPolicyTest(unittest.TestCase):
             ),
             lambda source: source.replace(
                 job, job + "    ignored: { permissions: {id-token: write} }\n", 1,
+            ),
+            lambda source: source.replace(
+                job, job + "    ? permissions\n    : {contents: read, id-token: write}\n", 1,
+            ),
+            lambda source: source.replace(
+                job, job + '    "permiss\\u0069ons": {contents: read, id-token: write}\n', 1,
+            ),
+            lambda source: source.replace(
+                job, job + "    !!str permissions: {contents: read, id-token: write}\n", 1,
+            ),
+            lambda source: source.replace(
+                job,
+                job + "    defaults: &write_permissions {id-token: write}\n    <<: *write_permissions\n",
+                1,
             ),
         )
         for mutate in mutations:

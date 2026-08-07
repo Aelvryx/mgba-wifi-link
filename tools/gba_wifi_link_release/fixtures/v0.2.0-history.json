@@ -157,6 +157,7 @@
       "shell": "bash"
     }
   },
+  "workflow_yaml_lexical_sha256": "733b6557164c617e7526a33b7876cc8db3c9680a8c0df6b83984577ca7e48be1",
   "archive_members": [
     {
       "name": "mgba_libretro_android.so",

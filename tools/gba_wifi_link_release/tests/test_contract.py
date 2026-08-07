@@ -43,6 +43,11 @@ class ContractTest(unittest.TestCase):
         )
         self.assertEqual(fixture.read_bytes(), b"synthetic core v9.8.7\n")
 
+    def test_synthetic_license_matches_the_repository_mpl_2_0_text(self):
+        repository = Path(__file__).resolve().parents[3]
+        fixture = repository / "tools/gba_wifi_link_release/fixtures/synthetic/input/LICENSE"
+        self.assertEqual(fixture.read_bytes(), (repository / "LICENSE").read_bytes())
+
     def test_contract_exposes_normalized_archive_and_checksum_rules(self):
         contract = load_contract(CONTRACT)
         self.assertEqual(

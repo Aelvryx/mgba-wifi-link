@@ -49,14 +49,14 @@
 
 ## 4. Validate the repository change
 
-- [ ] 4.1 Run strict OpenSpec validation for
+- [x] 4.1 Run strict OpenSpec validation for
   `prepare-public-alpha-sharing` and resolve every structural or semantic
   failure.
-- [ ] 4.2 Run repository documentation and boundary-policy checks applicable to
+- [x] 4.2 Run repository documentation and boundary-policy checks applicable to
   the new packaging inputs, including a clean privacy-pattern audit.
-- [ ] 4.3 Review the repository diff and prove it contains no production source,
+- [x] 4.3 Review the repository diff and prove it contains no production source,
   protocol, fixture, generated binary, or unrelated roadmap change.
-- [ ] 4.4 Open a focused pull request, run the protected checks, and obtain
+- [x] 4.4 Open a focused pull request, run the protected checks, and obtain
   review of the packaging content, checksum contract, and recoverable
   publication sequence before touching the GitHub release.
 

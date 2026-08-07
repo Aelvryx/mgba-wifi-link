@@ -37,32 +37,32 @@
   classification for `v0.x`.
 - [x] 2.7 Implement tracked release-note validation and deterministic release-body
   rendering from reviewed prose plus canonical generated facts.
-- [ ] 2.8 Expose a non-publishing CLI entry point that emits canonical admitted
+- [x] 2.8 Expose a non-publishing CLI entry point that emits canonical admitted
   metadata or a bounded machine-readable failure without mutating GitHub.
 
 ## 3. Implement deterministic package construction test-first
 
-- [ ] 3.1 Add failing golden tests for exact public-asset and archive-member
+- [x] 3.1 Add failing golden tests for exact public-asset and archive-member
   inventories, canonical names, file modes, ordering, timestamps, ownership,
   line endings, JSON bytes, and compression settings.
-- [ ] 3.2 Add failing tests for missing, extra, duplicate, renamed, symlinked,
+- [x] 3.2 Add failing tests for missing, extra, duplicate, renamed, symlinked,
   absolute, traversal, non-regular, unsafe-mode, and non-normalized inputs.
-- [ ] 3.3 Implement deterministic guide and human provenance rendering from the
+- [x] 3.3 Implement deterministic guide and human provenance rendering from the
   canonical model without copying runtime-private or historical correction data.
 - [x] 3.4 Implement canonical `BUILD-PROVENANCE.json` construction and validate its
   schema, exact protected evidence, source, runner, action, toolchain, configuration,
   deterministic epoch, and sibling-payload identities.
-- [ ] 3.5 Implement deterministic archive construction and its internal
+- [x] 3.5 Implement deterministic archive construction and its internal
   `SHA256SUMS`, covering every archive member except the checksum file itself.
 - [x] 3.6 Implement canonical `RELEASE-PROVENANCE.json` after archive construction,
   recording the five non-provenance public payload assets without recursive hashes.
-- [ ] 3.7 Implement standalone `SHA256SUMS` last, covering all six preceding project
+- [x] 3.7 Implement standalone `SHA256SUMS` last, covering all six preceding project
   assets and excluding itself and GitHub-generated source archives/attestations.
-- [ ] 3.8 Implement clean-directory verification for both extracted archive and
+- [x] 3.8 Implement clean-directory verification for both extracted archive and
   standalone release scopes, including exclusive membership and every SHA-256.
-- [ ] 3.9 Add a two-run golden test proving that identical synthetic inputs produce
+- [x] 3.9 Add a two-run golden test proving that identical synthetic inputs produce
   byte-identical rendered documents, provenance, checksums, and archive bytes.
-- [ ] 3.10 Add a regression proving that changing any declared input changes the
+- [x] 3.10 Add a regression proving that changing any declared input changes the
   intended dependent output while leaving unrelated immutable payloads untouched.
 
 ## 4. Enforce release privacy and provenance boundaries

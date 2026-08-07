@@ -128,3 +128,14 @@ class RenderTest(unittest.TestCase):
             with self.subTest(notes=notes):
                 with self.assertRaisesRegex(AdmissionError, "^NOTES_PRIVACY_PATH$"):
                     render_release_body(self.admitted_context(notes), notes)
+
+    def test_render_rejects_url_authority_and_path_bypasses(self):
+        for notes in (
+            "Read https://username:password@github.com/Aelvryx/mgba-wifi-link/issues/1\n",
+            "Read https://github.com/%2Fprivate%2FSYNTHETIC_RENDER_SINGLE\n",
+            "Read https://github.com/%252Fprivate%252FSYNTHETIC_RENDER_DOUBLE\n",
+            "Read https://github.com/Aelvryx/../private/SYNTHETIC_RENDER_TRAVERSAL\n",
+        ):
+            with self.subTest(notes=notes):
+                with self.assertRaisesRegex(AdmissionError, "^NOTES_PRIVACY_PATH$"):
+                    render_release_body(self.admitted_context(notes), notes)

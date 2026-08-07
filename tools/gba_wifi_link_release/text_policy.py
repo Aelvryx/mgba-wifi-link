@@ -10,6 +10,9 @@ _ESCAPED_BYTE_RE = re.compile(r"%[0-9A-Fa-f]{2}")
 _PUBLIC_URL_RE = re.compile(r"https?://[^\s`]+")
 _PRIVATE_PATH_RE = re.compile(r"(?<![A-Za-z0-9])(?:~[\\/]|/(?:[^\s`]+)|[A-Za-z]:[\\/][^\s`]*)")
 _TRAVERSAL_PATH_RE = re.compile(r"(?<![A-Za-z0-9])\.\.[\\/]")
+_PRIVATE_URL_PATH_RE = re.compile(
+    r"(?i)(?:^|/)(?:etc|home|private|tmp|users|var)(?:/|$)|(?:^|/)[A-Za-z]:[\\/]|(?:^|/)~(?:/|$)"
+)
 _IPV4_RE = re.compile(r"(?<![0-9])(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(?:\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}(?![0-9])")
 _IPV6_RE = re.compile(r"(?<![A-Za-z0-9])(?:[0-9A-Fa-f]{1,4}:){2,}[0-9A-Fa-f:]*")
 _MAC_RE = re.compile(r"(?<![0-9A-Fa-f])(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}(?![0-9A-Fa-f])")
@@ -43,9 +46,14 @@ def classify_private_text(text: str) -> str | None:
             parts = urlsplit(url)
         except ValueError:
             return "PATH"
+        if parts.username is not None or parts.password is not None:
+            return "PATH"
+        path = _decoded_url_component(parts.path)
         query = _decoded_url_component(parts.query)
         fragment = _decoded_url_component(parts.fragment)
-        if query is None or fragment is None:
+        if path is None or query is None or fragment is None:
+            return "PATH"
+        if _PRIVATE_URL_PATH_RE.search(path) or _TRAVERSAL_PATH_RE.search(path):
             return "PATH"
         url_material = query + "\n" + fragment
         if _PRIVATE_PATH_RE.search(url_material) or _TRAVERSAL_PATH_RE.search(url_material):

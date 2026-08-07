@@ -295,6 +295,20 @@ class AdmissionTest(unittest.TestCase):
                 with self.assertRaisesRegex(AdmissionError, "^NOTES_PRIVACY_PATH$"):
                     admit_release(repo, "v9.8.7", evidence(repo, commit))
 
+    def test_notes_reject_url_authority_and_path_bypasses(self):
+        for notes in (
+            "Read https://username:password@github.com/Aelvryx/mgba-wifi-link/issues/1\n",
+            "Read https://github.com/%2Fprivate%2FSYNTHETIC_ADMISSION_SINGLE\n",
+            "Read https://github.com/%252Fprivate%252FSYNTHETIC_ADMISSION_DOUBLE\n",
+            "Read https://github.com/Aelvryx/../private/SYNTHETIC_ADMISSION_TRAVERSAL\n",
+        ):
+            with self.subTest(notes=notes):
+                repo = make_repo(notes=notes)
+                self.addCleanupRepo(repo)
+                commit = git(repo, "rev-parse", "v9.8.7^{commit}")
+                with self.assertRaisesRegex(AdmissionError, "^NOTES_PRIVACY_PATH$"):
+                    admit_release(repo, "v9.8.7", evidence(repo, commit))
+
     def test_private_path_address_and_prohibited_claim_notes_are_rejected(self):
         for notes, reason in (
             ("Read /home/reviewer/private-notes.md\n", "NOTES_PRIVACY_PATH"),

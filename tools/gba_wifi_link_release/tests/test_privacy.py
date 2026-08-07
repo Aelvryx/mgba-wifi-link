@@ -149,6 +149,20 @@ class PrivacyTest(unittest.TestCase):
                     (root / "INSTALL-AND-USAGE.md").write_text(canary + "\n", encoding="utf-8")
                     self.assert_category_only("PRIVACY_PATH", root, canary)
 
+    def test_url_authority_and_path_bypasses_are_rejected_from_public_text(self):
+        cases = (
+            "https://username:password@github.com/Aelvryx/mgba-wifi-link/issues/1",
+            "https://github.com/%2Fprivate%2FSYNTHETIC_PRIVACY_SINGLE_PATH",
+            "https://github.com/%252Fprivate%252FSYNTHETIC_PRIVACY_DOUBLE_PATH",
+            "https://github.com/Aelvryx/../private/SYNTHETIC_PRIVACY_TRAVERSAL",
+        )
+        for canary in cases:
+            with self.subTest(canary=canary):
+                with self.public_tree() as temporary:
+                    root = Path(temporary)
+                    (root / "INSTALL-AND-USAGE.md").write_text(canary + "\n", encoding="utf-8")
+                    self.assert_category_only("PRIVACY_PATH", root, canary)
+
     def test_release_provenance_rejects_noncanonical_build_evidence(self):
         cases = (
             ("pinned_actions", ["actions/checkout@v4"], "PRIVACY_FIELD"),

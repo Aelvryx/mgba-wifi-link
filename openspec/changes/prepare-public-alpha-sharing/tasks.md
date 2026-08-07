@@ -62,20 +62,20 @@
 
 ## 5. Correct the v0.2.0 prerelease
 
-- [ ] 5.1 Reconfirm that the complete corrected local set passes every identity,
+- [x] 5.1 Reconfirm that the complete corrected local set passes every identity,
   archive, checksum, privacy, and source-provenance check immediately before
   remote mutation.
-- [ ] 5.2 Make the prerelease temporarily non-advertised during replacement when
+- [x] 5.2 Make the prerelease temporarily non-advertised during replacement when
   GitHub supports doing so without changing its tag or source identity.
-- [ ] 5.3 Replace the stale standalone guide, archive, and checksum manifest while
+- [x] 5.3 Replace the stale standalone guide, archive, and checksum manifest while
   preserving the byte-identical standalone core and fixture assets.
-- [ ] 5.4 Update the release description with a visible documentation-only repack
+- [x] 5.4 Update the release description with a visible documentation-only repack
   disclosure, preserved source/core/fixture identities, and corrected guide,
   archive, and checksum identities.
-- [ ] 5.5 Redownload every public asset into a new empty directory and repeat the
+- [x] 5.5 Redownload every public asset into a new empty directory and repeat the
   complete external and extracted verification before restoring normal
   prerelease visibility or sharing its link.
-- [ ] 5.6 If any replacement or verification step fails, restore the preserved
+- [x] 5.6 If any replacement or verification step fails, restore the preserved
   original release body and assets or keep the release unadvertised; never
   knowingly leave a mixed public asset set.
 

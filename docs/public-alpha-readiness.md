@@ -6,7 +6,7 @@ This record covers a documentation-only repack of the existing `v0.2.0`
 public-alpha assets.  It prepares the Android ARM64 core, the two CC0 fixture
 ROMs, corrected guidance, a deterministic bundle, and checksum manifests for
 replacement on the existing prerelease.  It does not rebuild executable code,
-change the tag, or publish anything.
+change the tag, or publish a new release.
 
 ## Preserved source and executable identities
 

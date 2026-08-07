@@ -1,14 +1,14 @@
 ## 1. Preserve the published baseline
 
-- [ ] 1.1 Download the current v0.2.0 release body, asset metadata, core,
+- [x] 1.1 Download the current v0.2.0 release body, asset metadata, core,
   fixtures, guide, archive, and checksum manifest into a private temporary
   rollback directory.
-- [ ] 1.2 Verify the downloaded assets against the original standalone
+- [x] 1.2 Verify the downloaded assets against the original standalone
   `SHA256SUMS` and verify the archive's internal manifest before using any
   payload as a repack input.
-- [ ] 1.3 Assert and record the immutable tag, source commit, Android-core hash,
+- [x] 1.3 Assert and record the immutable tag, source commit, Android-core hash,
   and two fixture hashes from the approved design.
-- [ ] 1.4 Record the original guide, archive, checksum, release-body, and remote
+- [x] 1.4 Record the original guide, archive, checksum, release-body, and remote
   asset identities needed to restore the existing prerelease if publication
   fails.
 

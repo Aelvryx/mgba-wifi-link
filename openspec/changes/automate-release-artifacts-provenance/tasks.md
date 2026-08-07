@@ -123,22 +123,22 @@
 - [x] 6.4 Make the Android protected job upload its inspected core and canonical
   build metadata through a fixed artifact contract without granting write
   permissions.
-- [ ] 6.5 Add a second independent clean Android build job with the same pinned
+- [x] 6.5 Add a second independent clean Android build job with the same pinned
   NDK/configuration and compare both core bytes and hashes before admission.
-- [ ] 6.6 Add the `v*` tag-triggered release workflow with per-tag non-cancelling
+- [x] 6.6 Add the `v*` tag-triggered release workflow with per-tag non-cancelling
   concurrency, read-only default permissions, annotated-tag admission, reusable
   protected validation, dual-build admission, packaging, and canonical artifact
   upload.
-- [ ] 6.7 Add the final publisher job with only the required `contents: write`,
+- [x] 6.7 Add the final publisher job with only the required `contents: write`,
   `attestations: write`, and `id-token: write` permissions and no build/source
   steps.
-- [ ] 6.8 Issue and verify GitHub build-provenance attestations for the exact
+- [x] 6.8 Issue and verify GitHub build-provenance attestations for the exact
   admitted core and deterministic archive while keeping envelopes outside package
   checksum scopes.
-- [ ] 6.9 Add workflow-policy tests for triggers, concurrency, permissions, job
+- [x] 6.9 Add workflow-policy tests for triggers, concurrency, permissions, job
   dependencies, immutable artifact handoff, pinned actions, publisher isolation,
   and absence of a manual publication gate.
-- [ ] 6.10 Add workflow failure-path tests or fixtures proving that missing gates,
+- [x] 6.10 Add workflow failure-path tests or fixtures proving that missing gates,
   mismatched builds, failed packaging, failed attestation, tag movement, and remote
   conflict cannot reach public publication.
 

@@ -18,6 +18,14 @@
     "gba-link-test.gba",
     "mgba_libretro_android.so"
   ],
+  "build_provenance_siblings": [
+    "INSTALL-AND-USAGE.md",
+    "LICENSE",
+    "SOURCE-AND-PROVENANCE.md",
+    "gba-link-continuous.gba",
+    "gba-link-test.gba",
+    "mgba_libretro_android.so"
+  ],
   "file_mode": "0644",
   "public_assets": [
     "mgba_libretro_android.so",
@@ -25,6 +33,11 @@
     "gba-link-continuous.gba",
     "INSTALL-AND-USAGE.md",
     "mgba-gba-wifi-link-{tag}-android-arm64.zip",
+    "RELEASE-PROVENANCE.json",
+    "SHA256SUMS"
+  ],
+  "public_text_assets": [
+    "INSTALL-AND-USAGE.md",
     "RELEASE-PROVENANCE.json",
     "SHA256SUMS"
   ],

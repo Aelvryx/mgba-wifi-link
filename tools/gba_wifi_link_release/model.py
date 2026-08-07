@@ -48,8 +48,10 @@ class ReleaseContract:
     public_assets: tuple[str, ...]
     archive_members: tuple[str, ...]
     archive_sha256_members: tuple[str, ...]
+    build_provenance_siblings: tuple[str, ...]
     release_provenance_assets: tuple[str, ...]
     standalone_sha256_assets: tuple[str, ...]
+    public_text_assets: tuple[str, ...]
     file_mode: str
     zip_compression: str
     zip_compression_level: int
@@ -66,8 +68,10 @@ def load_contract(path: Path) -> ReleaseContract:
         public_assets=tuple(data["public_assets"]),
         archive_members=tuple(data["archive_members"]),
         archive_sha256_members=tuple(data["archive_sha256_members"]),
+        build_provenance_siblings=tuple(data["build_provenance_siblings"]),
         release_provenance_assets=tuple(data["release_provenance_assets"]),
         standalone_sha256_assets=tuple(data["standalone_sha256_assets"]),
+        public_text_assets=tuple(data["public_text_assets"]),
         file_mode=data["file_mode"],
         zip_compression=data["zip"]["compression"],
         zip_compression_level=data["zip"]["compression_level"],

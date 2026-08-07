@@ -144,8 +144,10 @@ class QualificationHelperTest(unittest.TestCase):
     frontend_package_version = "1.22.2_GIT"
     crc32 = "0x8e91cd13"
     remote_base = "/mock/qualification"
-    thor_serial = "thor-test"
-    odin_serial = "odin-test"
+    p0_serial = "p0-test"
+    p1_serial = "p1-test"
+    p0_controller = "Physical Controller P0"
+    p1_controller = "Physical Controller P1"
     latency_policy = "stable"
     selected_delay = 2
 
@@ -184,8 +186,10 @@ class QualificationHelperTest(unittest.TestCase):
                 "EXPECTED_FRONTEND_PACKAGE_VERSION": self.frontend_package_version,
                 "EXPECTED_CONTENT_CRC32": self.crc32,
                 "EXPECTED_ROM_SHA256": "b" * 64,
-                "THOR_SERIAL": self.thor_serial,
-                "ODIN_SERIAL": self.odin_serial,
+                "P0_SERIAL": self.p0_serial,
+                "P1_SERIAL": self.p1_serial,
+                "P0_CONTROLLER": self.p0_controller,
+                "P1_CONTROLLER": self.p1_controller,
                 "EXPECTED_LATENCY_POLICY": self.latency_policy,
                 "EXPECTED_SELECTED_DELAY": str(self.selected_delay),
             }
@@ -220,8 +224,8 @@ class QualificationHelperTest(unittest.TestCase):
     def create_run_inputs(self) -> None:
         devices = []
         for name, serial, controller, role in (
-            ("thor", self.thor_serial, "Ayn Odin", "host"),
-            ("odin", self.odin_serial, "Ayn Odin (Xbox Mode)", "client"),
+            ("p0", self.p0_serial, "Physical Controller P0", "host"),
+            ("p1", self.p1_serial, "Physical Controller P1", "client"),
         ):
             config = self.run_root / "device-snapshots" / f"{name}-qualification.cfg"
             options = self.run_root / "device-snapshots" / f"{name}-mgba-qualification.opt"
@@ -324,7 +328,7 @@ class QualificationHelperTest(unittest.TestCase):
         if delay is None:
             delay = self.selected_delay
         if role is None:
-            role = 0 if serial == self.thor_serial else 1
+            role = 0 if serial == self.p0_serial else 1
         log = self.device_path(serial, f"{self.remote_root}/logs/retroarch.log")
         log.parent.mkdir(parents=True, exist_ok=True)
         controller_lines = "\n".join(
@@ -366,8 +370,17 @@ class QualificationHelperTest(unittest.TestCase):
         calls = self.fake_root / "calls.log"
         self.assertFalse(calls.exists() and calls.read_text(encoding="utf-8"))
 
+    def test_endpoint_serials_are_private_required_inputs(self) -> None:
+        for variable in ("P0_SERIAL", "P1_SERIAL"):
+            with self.subTest(variable=variable):
+                result = self.run_helper("cleanup", remove_env=(variable,))
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(variable, result.stderr)
+        calls = self.fake_root / "calls.log"
+        self.assertFalse(calls.exists() and calls.read_text(encoding="utf-8"))
+
     def test_existing_remote_run_fails_before_staging(self) -> None:
-        self.device_path(self.odin_serial, self.remote_root).mkdir(parents=True)
+        self.device_path(self.p1_serial, self.remote_root).mkdir(parents=True)
         result = self.run_helper("stage")
         self.assertNotEqual(result.returncode, 0)
         calls = (self.fake_root / "calls.log").read_text(encoding="utf-8")
@@ -375,19 +388,19 @@ class QualificationHelperTest(unittest.TestCase):
         self.assertNotIn("mkdir -p", calls)
 
     def test_remote_hash_mismatch_fails(self) -> None:
-        result = self.run_helper("stage", extra_env={"FAKE_REMOTE_HASH_MISMATCH": self.thor_serial})
+        result = self.run_helper("stage", extra_env={"FAKE_REMOTE_HASH_MISMATCH": self.p0_serial})
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("remote hash mismatch", result.stderr)
 
     def test_launch_validates_both_staged_endpoints_before_starting_either(self) -> None:
         self.stage()
-        result = self.run_helper("launch", extra_env={"FAKE_REMOTE_HASH_MISMATCH": self.odin_serial})
+        result = self.run_helper("launch", extra_env={"FAKE_REMOTE_HASH_MISMATCH": self.p1_serial})
         self.assertNotEqual(result.returncode, 0)
         calls = (self.fake_root / "calls.log").read_text(encoding="utf-8")
         self.assertNotIn("am start", calls)
 
     def test_cleanup_targets_only_run_directory(self) -> None:
-        for serial in (self.thor_serial, self.odin_serial):
+        for serial in (self.p0_serial, self.p1_serial):
             self.device_path(serial, self.remote_root).mkdir(parents=True)
         result = self.run_helper("cleanup")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -404,8 +417,10 @@ class QualificationHelperTest(unittest.TestCase):
             "EXPECTED_RELEASE_TAG",
             "EXPECTED_CORE_SHA256",
             "EXPECTED_CORE_VERSION",
+            "P0_CONTROLLER",
+            "P1_CONTROLLER",
         )
-        for serial in (self.thor_serial, self.odin_serial):
+        for serial in (self.p0_serial, self.p1_serial):
             self.device_path(serial, self.remote_root).mkdir(parents=True)
         result = self.run_helper("cleanup", remove_env=candidate_variables)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -418,39 +433,46 @@ class QualificationHelperTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("EXPECTED_RELEASE_COMMIT", result.stderr)
 
+    def test_candidate_commands_require_private_controller_names(self) -> None:
+        for variable in ("P0_CONTROLLER", "P1_CONTROLLER"):
+            with self.subTest(variable=variable):
+                result = self.run_helper("preflight", remove_env=(variable,))
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(variable, result.stderr)
+
     def test_duplicate_qualification_config_key_is_rejected(self) -> None:
-        thor_config = self.run_root / "device-snapshots/thor-qualification.cfg"
-        with thor_config.open("a", encoding="utf-8") as output:
+        p0_config = self.run_root / "device-snapshots/p0-qualification.cfg"
+        with p0_config.open("a", encoding="utf-8") as output:
             output.write('savefile_directory = "/normal/saves"\n')
         manifest = json.loads((self.run_root / "manifest.json").read_text(encoding="utf-8"))
-        manifest["devices"][0]["configuration_sha256"] = self.sha(thor_config)
+        manifest["devices"][0]["configuration_sha256"] = self.sha(p0_config)
         (self.run_root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         result = self.run_helper("preflight")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("repeats key 'savefile_directory'", result.stderr)
 
     def test_run_specific_core_options_must_be_enabled(self) -> None:
-        thor_config = self.run_root / "device-snapshots/thor-qualification.cfg"
-        thor_config.write_text(
-            thor_config.read_text(encoding="utf-8").replace(
+        p0_config = self.run_root / "device-snapshots/p0-qualification.cfg"
+        p0_config.write_text(
+            p0_config.read_text(encoding="utf-8").replace(
                 'global_core_options = "true"',
                 'global_core_options = "false"',
             ),
             encoding="utf-8",
         )
         manifest = json.loads((self.run_root / "manifest.json").read_text(encoding="utf-8"))
-        manifest["devices"][0]["configuration_sha256"] = self.sha(thor_config)
+        manifest["devices"][0]["configuration_sha256"] = self.sha(p0_config)
         (self.run_root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         result = self.run_helper("preflight")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("effective config value global_core_options", result.stderr)
 
     def test_duplicate_latency_option_is_rejected(self) -> None:
-        thor_options = self.run_root / "device-snapshots/thor-mgba-qualification.opt"
-        with thor_options.open("a", encoding="utf-8") as output:
+        p0_options = self.run_root / "device-snapshots/p0-mgba-qualification.opt"
+        with p0_options.open("a", encoding="utf-8") as output:
             output.write('mgba_link_netplay_latency = "stable"\n')
         manifest = json.loads((self.run_root / "manifest.json").read_text(encoding="utf-8"))
-        manifest["devices"][0]["core_options_sha256"] = self.sha(thor_options)
+        manifest["devices"][0]["core_options_sha256"] = self.sha(p0_options)
         (self.run_root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         result = self.run_helper("preflight")
         self.assertNotEqual(result.returncode, 0)
@@ -466,7 +488,7 @@ class QualificationHelperTest(unittest.TestCase):
         self.assertIn("loaded core identity", result.stderr)
 
     def test_effective_latency_policy_is_enforced(self) -> None:
-        options = self.run_root / "device-snapshots/thor-mgba-qualification.opt"
+        options = self.run_root / "device-snapshots/p0-mgba-qualification.opt"
         with options.open("a", encoding="utf-8") as output:
             output.write('mgba_link_netplay_latency = "low_latency"\n')
         manifest_path = self.run_root / "manifest.json"
@@ -479,20 +501,20 @@ class QualificationHelperTest(unittest.TestCase):
 
     def test_controller_and_runtime_gate_accepts_clean_endpoints(self) -> None:
         self.stage()
-        self.write_log(self.thor_serial, [("Ayn Odin", 1)])
-        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
+        self.write_log(self.p0_serial, [("Physical Controller P0", 1)])
+        self.write_log(self.p1_serial, [("Physical Controller P1", 1)])
         result = self.run_helper("check-controls")
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_runtime_gate_rejects_role_reversed_endpoints(self) -> None:
         self.stage()
         for serial, controller, wrong_role in (
-            (self.thor_serial, "Ayn Odin", 1),
-            (self.odin_serial, "Ayn Odin (Xbox Mode)", 0),
+            (self.p0_serial, "Physical Controller P0", 1),
+            (self.p1_serial, "Physical Controller P1", 0),
         ):
             with self.subTest(serial=serial):
-                self.write_log(self.thor_serial, [("Ayn Odin", 1)])
-                self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
+                self.write_log(self.p0_serial, [("Physical Controller P0", 1)])
+                self.write_log(self.p1_serial, [("Physical Controller P1", 1)])
                 self.write_log(serial, [(controller, 1)], role=wrong_role)
                 result = self.run_helper("check-controls")
                 self.assertNotEqual(result.returncode, 0)
@@ -500,11 +522,11 @@ class QualificationHelperTest(unittest.TestCase):
 
     def test_runtime_gate_rejects_disagreeing_attach_and_calibration_roles(self) -> None:
         self.stage()
-        self.write_log(self.thor_serial, [("Ayn Odin", 1)])
-        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
-        thor_log = self.device_path(self.thor_serial, f"{self.remote_root}/logs/retroarch.log")
-        thor_log.write_text(
-            thor_log.read_text(encoding="utf-8").replace("calibration P0", "calibration P1"),
+        self.write_log(self.p0_serial, [("Physical Controller P0", 1)])
+        self.write_log(self.p1_serial, [("Physical Controller P1", 1)])
+        p0_log = self.device_path(self.p0_serial, f"{self.remote_root}/logs/retroarch.log")
+        p0_log.write_text(
+            p0_log.read_text(encoding="utf-8").replace("calibration P0", "calibration P1"),
             encoding="utf-8",
         )
         result = self.run_helper("check-controls")
@@ -513,10 +535,10 @@ class QualificationHelperTest(unittest.TestCase):
 
     def test_runtime_gate_rejects_stale_role_and_mixed_session_records(self) -> None:
         self.stage()
-        self.write_log(self.thor_serial, [("Ayn Odin", 1)])
-        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
-        thor_log = self.device_path(self.thor_serial, f"{self.remote_root}/logs/retroarch.log")
-        with thor_log.open("a", encoding="utf-8") as output:
+        self.write_log(self.p0_serial, [("Physical Controller P0", 1)])
+        self.write_log(self.p1_serial, [("Physical Controller P1", 1)])
+        p0_log = self.device_path(self.p0_serial, f"{self.remote_root}/logs/retroarch.log")
+        with p0_log.open("a", encoding="utf-8") as output:
             output.write(
                 "attach P1 policy=1 delay=2 calibration=25ms "
                 "provisional=11 generation=12\n"
@@ -525,8 +547,8 @@ class QualificationHelperTest(unittest.TestCase):
         self.assertNotEqual(stale_role.returncode, 0)
         self.assertIn("endpoint role", stale_role.stderr)
 
-        self.write_log(self.thor_serial, [("Ayn Odin", 1)])
-        with thor_log.open("a", encoding="utf-8") as output:
+        self.write_log(self.p0_serial, [("Physical Controller P0", 1)])
+        with p0_log.open("a", encoding="utf-8") as output:
             output.write(
                 "attach P0 policy=1 delay=2 calibration=25ms "
                 "provisional=11 generation=12\n"
@@ -537,11 +559,11 @@ class QualificationHelperTest(unittest.TestCase):
 
     def test_runtime_gate_rejects_mixed_calibration_component_sessions(self) -> None:
         self.stage()
-        self.write_log(self.thor_serial, [("Ayn Odin", 1)])
-        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
-        thor_log = self.device_path(self.thor_serial, f"{self.remote_root}/logs/retroarch.log")
-        thor_log.write_text(
-            thor_log.read_text(encoding="utf-8").replace(
+        self.write_log(self.p0_serial, [("Physical Controller P0", 1)])
+        self.write_log(self.p1_serial, [("Physical Controller P1", 1)])
+        p0_log = self.device_path(self.p0_serial, f"{self.remote_root}/logs/retroarch.log")
+        p0_log.write_text(
+            p0_log.read_text(encoding="utf-8").replace(
                 "cal-rtt P0 s=9", "cal-rtt P0 s=11"
             ),
             encoding="utf-8",
@@ -560,7 +582,7 @@ class QualificationHelperTest(unittest.TestCase):
             "product_floor": 1,
             "expected_selected_delay": 1,
         }
-        for index, name in enumerate(("thor", "odin")):
+        for index, name in enumerate(("p0", "p1")):
             options = self.run_root / "device-snapshots" / f"{name}-mgba-qualification.opt"
             options.write_text(
                 'mgba_link_netplay_latency = "low_latency"\n',
@@ -574,10 +596,10 @@ class QualificationHelperTest(unittest.TestCase):
         }
         result = self.run_helper("stage", extra_env=override)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.write_log(self.thor_serial, [("Ayn Odin", 1)], policy=2, floor=1, delay=1)
+        self.write_log(self.p0_serial, [("Physical Controller P0", 1)], policy=2, floor=1, delay=1)
         self.write_log(
-            self.odin_serial,
-            [("Ayn Odin (Xbox Mode)", 1)],
+            self.p1_serial,
+            [("Physical Controller P1", 1)],
             policy=2,
             floor=1,
             delay=1,
@@ -587,34 +609,34 @@ class QualificationHelperTest(unittest.TestCase):
 
     def test_controller_gate_rejects_virtual_and_displaced_controller(self) -> None:
         self.stage()
-        self.write_log(self.thor_serial, [("Virtual", 1), ("Ayn Odin", 2)])
-        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
+        self.write_log(self.p0_serial, [("Virtual", 1), ("Physical Controller P0", 2)])
+        self.write_log(self.p1_serial, [("Physical Controller P1", 1)])
         result = self.run_helper("check-controls")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("latest effective controller", result.stderr)
 
     def test_controller_gate_rejects_absent_expected_controller(self) -> None:
         self.stage()
-        self.write_log(self.thor_serial, [])
-        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
+        self.write_log(self.p0_serial, [])
+        self.write_log(self.p1_serial, [("Physical Controller P1", 1)])
         result = self.run_helper("check-controls")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("no assignments", result.stderr)
 
     def test_controller_gate_uses_latest_effective_assignment(self) -> None:
         self.stage()
-        self.write_log(self.thor_serial, [("Ayn Odin", 1), ("Virtual", 1)])
-        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
+        self.write_log(self.p0_serial, [("Physical Controller P0", 1), ("Virtual", 1)])
+        self.write_log(self.p1_serial, [("Physical Controller P1", 1)])
         stale_then_invalid = self.run_helper("check-controls")
         self.assertNotEqual(stale_then_invalid.returncode, 0)
 
-        self.write_log(self.thor_serial, [("Virtual", 1), ("Ayn Odin", 1)])
+        self.write_log(self.p0_serial, [("Virtual", 1), ("Physical Controller P0", 1)])
         clean_relaunch = self.run_helper("check-controls")
         self.assertEqual(clean_relaunch.returncode, 0, clean_relaunch.stderr)
 
     def test_runtime_frontend_core_and_content_identities_fail_closed(self) -> None:
         self.stage()
-        thor_log = self.device_path(self.thor_serial, f"{self.remote_root}/logs/retroarch.log")
+        p0_log = self.device_path(self.p0_serial, f"{self.remote_root}/logs/retroarch.log")
         cases = (
             (f"RetroArch {self.frontend_version}", "RetroArch 9.9.9", "frontend identity"),
             (
@@ -627,10 +649,10 @@ class QualificationHelperTest(unittest.TestCase):
         )
         for old, new, expected_error in cases:
             with self.subTest(expected_error=expected_error):
-                self.write_log(self.thor_serial, [("Ayn Odin", 1)])
-                self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
-                thor_log.write_text(
-                    thor_log.read_text(encoding="utf-8").replace(old, new), encoding="utf-8"
+                self.write_log(self.p0_serial, [("Physical Controller P0", 1)])
+                self.write_log(self.p1_serial, [("Physical Controller P1", 1)])
+                p0_log.write_text(
+                    p0_log.read_text(encoding="utf-8").replace(old, new), encoding="utf-8"
                 )
                 result = self.run_helper("check-controls")
                 self.assertNotEqual(result.returncode, 0)
@@ -638,9 +660,9 @@ class QualificationHelperTest(unittest.TestCase):
 
     def test_runtime_registration_uses_structure_not_human_prose(self) -> None:
         self.stage()
-        self.write_log(self.thor_serial, [("Ayn Odin", 1)])
-        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
-        for serial in (self.thor_serial, self.odin_serial):
+        self.write_log(self.p0_serial, [("Physical Controller P0", 1)])
+        self.write_log(self.p1_serial, [("Physical Controller P1", 1)])
+        for serial in (self.p0_serial, self.p1_serial):
             log = self.device_path(serial, f"{self.remote_root}/logs/retroarch.log")
             log.write_text(
                 log.read_text(encoding="utf-8").replace(
@@ -655,10 +677,10 @@ class QualificationHelperTest(unittest.TestCase):
 
     def test_runtime_missing_or_malformed_structured_registration_fails(self) -> None:
         self.stage()
-        self.write_log(self.thor_serial, [("Ayn Odin", 1)])
-        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
-        thor_log = self.device_path(
-            self.thor_serial, f"{self.remote_root}/logs/retroarch.log"
+        self.write_log(self.p0_serial, [("Physical Controller P0", 1)])
+        self.write_log(self.p1_serial, [("Physical Controller P1", 1)])
+        p0_log = self.device_path(
+            self.p0_serial, f"{self.remote_root}/logs/retroarch.log"
         )
         structured = (
             "product schema=1 id=mgba-gba-wifi-link "
@@ -669,9 +691,9 @@ class QualificationHelperTest(unittest.TestCase):
             ("product schema=1 path=/private", "malformed structured product"),
         ):
             with self.subTest(replacement=replacement):
-                self.write_log(self.thor_serial, [("Ayn Odin", 1)])
-                thor_log.write_text(
-                    thor_log.read_text(encoding="utf-8").replace(
+                self.write_log(self.p0_serial, [("Physical Controller P0", 1)])
+                p0_log.write_text(
+                    p0_log.read_text(encoding="utf-8").replace(
                         structured, replacement
                     ),
                     encoding="utf-8",
@@ -682,10 +704,10 @@ class QualificationHelperTest(unittest.TestCase):
 
     def test_runtime_structured_failure_is_role_and_session_bound(self) -> None:
         self.stage()
-        self.write_log(self.thor_serial, [("Ayn Odin", 1)])
-        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
-        thor_log = self.device_path(
-            self.thor_serial, f"{self.remote_root}/logs/retroarch.log"
+        self.write_log(self.p0_serial, [("Physical Controller P0", 1)])
+        self.write_log(self.p1_serial, [("Physical Controller P1", 1)])
+        p0_log = self.device_path(
+            self.p0_serial, f"{self.remote_root}/logs/retroarch.log"
         )
         cases = (
             (
@@ -710,8 +732,8 @@ class QualificationHelperTest(unittest.TestCase):
         )
         for record, expected_error in cases:
             with self.subTest(expected_error=expected_error):
-                self.write_log(self.thor_serial, [("Ayn Odin", 1)])
-                with thor_log.open("a", encoding="utf-8") as output:
+                self.write_log(self.p0_serial, [("Physical Controller P0", 1)])
+                with p0_log.open("a", encoding="utf-8") as output:
                     output.write(record + "\n")
                 result = self.run_helper("check-controls")
                 self.assertNotEqual(result.returncode, 0)
@@ -719,17 +741,17 @@ class QualificationHelperTest(unittest.TestCase):
 
     def test_runtime_policy_and_selected_delay_fail_closed(self) -> None:
         self.stage()
-        thor_log = self.device_path(self.thor_serial, f"{self.remote_root}/logs/retroarch.log")
+        p0_log = self.device_path(self.p0_serial, f"{self.remote_root}/logs/retroarch.log")
         cases = (
             ("policy=1", "policy=2", "runtime latency policy"),
             ("delay=2", "delay=3", "runtime selected input delay"),
         )
         for old, new, expected_error in cases:
             with self.subTest(expected_error=expected_error):
-                self.write_log(self.thor_serial, [("Ayn Odin", 1)])
-                self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
-                thor_log.write_text(
-                    thor_log.read_text(encoding="utf-8").replace(old, new), encoding="utf-8"
+                self.write_log(self.p0_serial, [("Physical Controller P0", 1)])
+                self.write_log(self.p1_serial, [("Physical Controller P1", 1)])
+                p0_log.write_text(
+                    p0_log.read_text(encoding="utf-8").replace(old, new), encoding="utf-8"
                 )
                 result = self.run_helper("check-controls")
                 self.assertNotEqual(result.returncode, 0)
@@ -737,17 +759,17 @@ class QualificationHelperTest(unittest.TestCase):
 
     def test_runtime_missing_or_malformed_calibration_fails_closed(self) -> None:
         self.stage()
-        thor_log = self.device_path(self.thor_serial, f"{self.remote_root}/logs/retroarch.log")
+        p0_log = self.device_path(self.p0_serial, f"{self.remote_root}/logs/retroarch.log")
         cases = (
             ("calibration P0", "calibration-missing P0", "complete latency calibration evidence"),
             ("p50=2000us p95=3000us", "p50=5000us p95=3000us", "percentiles are malformed"),
         )
         for old, new, expected_error in cases:
             with self.subTest(expected_error=expected_error):
-                self.write_log(self.thor_serial, [("Ayn Odin", 1)])
-                self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
-                thor_log.write_text(
-                    thor_log.read_text(encoding="utf-8").replace(old, new), encoding="utf-8"
+                self.write_log(self.p0_serial, [("Physical Controller P0", 1)])
+                self.write_log(self.p1_serial, [("Physical Controller P1", 1)])
+                p0_log.write_text(
+                    p0_log.read_text(encoding="utf-8").replace(old, new), encoding="utf-8"
                 )
                 result = self.run_helper("check-controls")
                 self.assertNotEqual(result.returncode, 0)
@@ -755,9 +777,9 @@ class QualificationHelperTest(unittest.TestCase):
 
     def test_latest_log_must_contain_current_calibration(self) -> None:
         self.stage()
-        self.write_log(self.thor_serial, [("Ayn Odin", 1)])
-        self.write_log(self.odin_serial, [("Ayn Odin (Xbox Mode)", 1)])
-        stale = self.device_path(self.thor_serial, f"{self.remote_root}/logs/retroarch.log")
+        self.write_log(self.p0_serial, [("Physical Controller P0", 1)])
+        self.write_log(self.p1_serial, [("Physical Controller P1", 1)])
+        stale = self.device_path(self.p0_serial, f"{self.remote_root}/logs/retroarch.log")
         current = stale.with_name("retroarch-current.log")
         current.write_text(
             stale.read_text(encoding="utf-8").replace("calibration P0", "calibration-missing P0"),

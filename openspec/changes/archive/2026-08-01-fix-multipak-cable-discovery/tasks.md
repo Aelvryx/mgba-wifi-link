@@ -105,7 +105,7 @@
 ## 9. Independent-review remediation
 
 - [x] 9.1 Restrict run IDs to one normal path component, validate local and remote containment before every staging or destructive action, and refuse an existing remote run directory.
-- [x] 9.2 Parse each endpoint's latest effective Android Autoconf assignments, require the expected physical AYN controller on port 1, and reject `Virtual`, displaced, absent, stale, or ambiguous assignments.
+- [x] 9.2 Parse each endpoint's latest effective Android Autoconf assignments, require the manifest-declared physical controller on port 1, and reject `Virtual`, displaced, absent, stale, or ambiguous assignments.
 - [x] 9.3 Make the private run manifest an enforced helper input; validate effective final configuration values, exact artifact identity, frontend/content/runtime identity, isolated paths, fresh staging, and local-to-remote hashes before human handoff.
 - [x] 9.4 Record the app-private installed-core hash as unavailable with an explicit reason, distinguish staged-artifact custody from loaded-core identity evidence, and document the required human-owned core installation/identity confirmation.
 - [x] 9.5 Add a mocked ADB/config/log/manifest qualification-helper regression covering path escape, stale directories, ordering, identity/hash failures, and endpoint-specific controller acceptance; run it in CI.

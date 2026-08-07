@@ -9,16 +9,16 @@ for `make-wifi-link-netplay-realtime`.
 
 ## Scope and privacy
 
-Two stock RetroArch 1.22.2 Android frontends ran the approved ARM64 core from upstream-facing implementation head `a5a215929fbd5dffceaba2b1be9fc8f520e346bc` (published core SHA-256 `c319602f9aebb65ebd74af7c417e6b837ff4ffdabda8235d82ce4372c5990432`) on an AYN Thor and an AYN Odin2 Portal over the same Wi-Fi LAN.
+Two stock RetroArch 1.22.2 Android frontends ran the approved ARM64 core from upstream-facing implementation head `a5a215929fbd5dffceaba2b1be9fc8f520e346bc` (published core SHA-256 `c319602f9aebb65ebd74af7c417e6b837ff4ffdabda8235d82ce4372c5990432`) on physical host and client devices over the same Wi-Fi LAN.
 
 The captures used isolated diagnostic configurations and save directories. Normal RetroArch configuration and user saves were not modified. Commercial ROM content, screenshots, raw saves, device serials, IP addresses, and raw Android dumps are not committed. This report retains only derived measurements and hashes for the four core logs:
 
 | Capture | SHA-256 |
 | --- | --- |
-| Run 1 Thor core log | `5c0dec1daa22b1c26fd3be0406d5d488923491c4773d63b7373b3c619e7414cf` |
-| Run 1 Odin core log | `d4c12dd94d19c10d0f61c420a73b21f09ca6f74033d4b692c828aff03db133c3` |
-| Run 2 Thor core log | `c61fbe4f394089cb33959745de479da1ebc56476936587cf9fcdfe59c9671741` |
-| Run 2 Odin core log | `1a51eb60f84dbb2518f248598201e6d48df8450f52a19d3f846e412a5d256dfa` |
+| Run 1 P0 core log | `5c0dec1daa22b1c26fd3be0406d5d488923491c4773d63b7373b3c619e7414cf` |
+| Run 1 P1 core log | `d4c12dd94d19c10d0f61c420a73b21f09ca6f74033d4b692c828aff03db133c3` |
+| Run 2 P0 core log | `c61fbe4f394089cb33959745de479da1ebc56476936587cf9fcdfe59c9671741` |
+| Run 2 P1 core log | `1a51eb60f84dbb2518f248598201e6d48df8450f52a19d3f846e412a5d256dfa` |
 
 At the time of capture, metrics were reproduced from equivalent traces with
 the now-retired analyzer:
@@ -62,12 +62,12 @@ Android logcat showed an `AudioTrack` stop/restart storm beginning with Netpacke
 
 | Device | Stop calls in storm cluster | Cluster span | Calls/s | Median frames delivered | p95 frames | Calls at or below 1,024 frames |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Thor | 15,944 | 284.807 s | 55.98 | 384 | 576 | 15,942 |
-| Odin | 16,055 | 375.038 s | 42.81 | 384 | 576 | 16,053 |
+| P0 | 15,944 | 284.807 s | 55.98 | 384 | 576 | 15,942 |
+| P1 | 16,055 | 375.038 s | 42.81 | 384 | 576 | 16,053 |
 
 Before the cluster, each capture contained only one old stop separated by a long idle gap. The near-frame-rate stream of tiny deliveries is consistent with the core returning cached video while no new GBA audio was generated. User-visible output was heavily stuttered and pitch/tempo warped immediately after connection.
 
-Run 1 process samples averaged 40.92% CPU on Thor and 40.29% on Odin, with p95 values of 43% and 42%. The failure was not CPU saturation.
+Run 1 process samples averaged 40.92% CPU on P0 and 40.29% on P1, with p95 values of 43% and 42%. The failure was not CPU saturation.
 
 ## Finding 3: a successful Four Swords transaction is still far too slow
 
@@ -112,8 +112,8 @@ Concurrent ICMP captures were stable:
 
 | Device | Samples | Mean | Median | p95 | Max |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Thor | 925 | 11.12 ms | 10.8 ms | 14.8 ms | 36.1 ms |
-| Odin | 927 | 11.35 ms | 10.9 ms | 15.2 ms | 40.2 ms |
+| P0 | 925 | 11.12 ms | 10.8 ms | 14.8 ms | 36.1 ms |
+| P1 | 927 | 11.35 ms | 10.9 ms | 15.2 ms | 40.2 ms |
 
 These values explain the observed barriers but do not indicate a broken Wi-Fi link. The implementation makes ordinary frame progress and every serial word depend on latency that is normal for the target network.
 

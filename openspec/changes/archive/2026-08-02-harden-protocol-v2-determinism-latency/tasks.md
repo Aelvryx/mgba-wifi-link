@@ -127,7 +127,7 @@
 
 ## 12. Exact-device latency qualification
 
-- [x] 12.1 Build, hash, install, and runtime-identify the reviewed Android ARM64 candidate at `20c5d8d111cc23cefcb6711b8eb0aafccf75c24b` (`c1a9edabc29381ba99dc5d91da01d952e1fa0f8000048c67eb00e4096fda6a18`) on Thor and Odin with both policies present.
+- [x] 12.1 Build, hash, install, and runtime-identify the reviewed Android ARM64 candidate at `20c5d8d111cc23cefcb6711b8eb0aafccf75c24b` (`c1a9edabc29381ba99dc5d91da01d952e1fa0f8000048c67eb00e4096fda6a18`) on both physical Android endpoints with both policies present.
 - [x] 12.2 Apply the explicit proportionate closeout decision: run the exact candidate's stable continuous fixture for 8,400 common frames / about 139 seconds, record all available aggregate metrics plus memory and temperature, and combine it with the already completed 45-minute commercial Four Swords session instead of duplicating a ceremonial 30-minute fixture.
 - [x] 12.3 Record the one-frame long gate as not activated: both endpoints selected Low Latency policy, but today's valid 24-sample calibration selected two frames, so no one-frame claim or 1,800-second run is applicable.
 - [x] 12.4 Retain impaired-jitter coverage in deterministic fake-transport and paired-replay tests; do not add a physical network-impairment run after the real calibration already selected the conservative two-frame outcome.

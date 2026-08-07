@@ -25,12 +25,12 @@
   },
   "devices": [
     {
-      "name": "thor",
+      "name": "p0",
       "role": "host",
       "serial": "FILL_WITH_ADB_SERIAL",
       "model": "FILL_WITH_MODEL",
       "android_version": "FILL_WITH_VERSION",
-      "expected_controller": "Ayn Odin",
+      "expected_controller": "FILL_WITH_LOGGED_PHYSICAL_CONTROLLER",
       "configuration_sha256": "FILL_WITH_SHA256",
       "core_options_sha256": "FILL_WITH_SHA256",
       "save_sha256": "FILL_WITH_SHA256",
@@ -39,16 +39,16 @@
       "installed_core_sha256_reason": "APP_PRIVATE_PATH_UNREADABLE",
       "loaded_core_identity": "FILL_WITH_EMBEDDED_VERSION",
       "loaded_core_identity_method": "RETROARCH_CORE_INFORMATION_SCREEN",
-      "loaded_core_identity_evidence": "screenshots/thor-installed-core-identity.png",
+      "loaded_core_identity_evidence": "screenshots/p0-installed-core-identity.png",
       "loaded_core_identity_evidence_sha256": "FILL_WITH_SHA256"
     },
     {
-      "name": "odin",
+      "name": "p1",
       "role": "client",
       "serial": "FILL_WITH_ADB_SERIAL",
       "model": "FILL_WITH_MODEL",
       "android_version": "FILL_WITH_VERSION",
-      "expected_controller": "Ayn Odin (Xbox Mode)",
+      "expected_controller": "FILL_WITH_LOGGED_PHYSICAL_CONTROLLER",
       "configuration_sha256": "FILL_WITH_SHA256",
       "core_options_sha256": "FILL_WITH_SHA256",
       "save_sha256": "FILL_WITH_SHA256",
@@ -57,7 +57,7 @@
       "installed_core_sha256_reason": "APP_PRIVATE_PATH_UNREADABLE",
       "loaded_core_identity": "FILL_WITH_EMBEDDED_VERSION",
       "loaded_core_identity_method": "RETROARCH_CORE_INFORMATION_SCREEN",
-      "loaded_core_identity_evidence": "screenshots/odin-installed-core-identity.png",
+      "loaded_core_identity_evidence": "screenshots/p1-installed-core-identity.png",
       "loaded_core_identity_evidence_sha256": "FILL_WITH_SHA256"
     }
   ],

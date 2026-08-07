@@ -55,11 +55,11 @@ work rather than using null drivers.
 
 The formal ADB collectors obtained 61 samples per device at nominal ten-second
 intervals. ADB collection overhead extended the observed windows to 760 seconds
-on Thor and 774 seconds on Odin, both exceeding the required ten minutes. The
+on P0 and 774 seconds on P1, both exceeding the required ten minutes. The
 core logs span 814.5 seconds and 49,080 paired frames because execution began
 before sampling and continued while evidence was copied.
 
-| Metric | AYN Thor | AYN Odin2 Portal |
+| Metric | P0 host device | P1 client device |
 | --- | ---: | ---: |
 | Paired frames | 49,080 / 49,080 | 49,080 / 49,080 |
 | Valid MULTI transfers | 51,152 | 51,152 |
@@ -76,10 +76,10 @@ before sampling and continued while evidence was copied.
 | Android thermal status | 0 in all 61 samples | 0 in all 61 samples |
 | Forced process-stop acknowledgement | 91 ms | 97 ms |
 
-The hottest Thor CPU sensor is noteworthy, but Android never raised its thermal
+The hottest P0 CPU sensor is noteworthy, but Android never raised its thermal
 status, the prime CPU policy continued to advertise and use its maximum
 frequency, memory remained flat, and neither emulation rate nor paired-core
-runtime degraded. Odin likewise reported thermal status zero throughout. The
+runtime degraded. P1 likewise reported thermal status zero throughout. The
 different non-prime policy frequencies were stable governor choices, not a
 temperature-correlated reduction.
 
@@ -109,12 +109,12 @@ recorded here so copied evidence can be checked without committing device logs:
 
 | Evidence | SHA-256 |
 | --- | --- |
-| Thor core log | `6ab33c3f12a52bec32c1967e0e0adcc9ba40e39eed0bf9484a00d64de8f9143b` |
-| Odin core log | `486c1bdc8d63d506dc4c740e9d2dfda6bded91f5cbf0d9d1ed8567eca57959d5` |
-| Thor ADB soak samples | `ee6ed397cac6614133d7495df3c4ee0cc8699ab112f135a43b23a86c03024369` |
-| Odin ADB soak samples | `1ddd674d89358c6e9e26f1b402153d990b4e7a13376664eb1610c85d710d6c89` |
-| Thor logcat | `cfe8b595fcf7cc8ee3b9c7e52a33df753cd4424ca4f2597f5a5a09cdbbb9bd26` |
-| Odin logcat | `798a4ed95183b13da21fe8ad89938fe6b30956beeea2be6ad2f24a41eb710dd8` |
+| P0 core log | `6ab33c3f12a52bec32c1967e0e0adcc9ba40e39eed0bf9484a00d64de8f9143b` |
+| P1 core log | `486c1bdc8d63d506dc4c740e9d2dfda6bded91f5cbf0d9d1ed8567eca57959d5` |
+| P0 ADB soak samples | `ee6ed397cac6614133d7495df3c4ee0cc8699ab112f135a43b23a86c03024369` |
+| P1 ADB soak samples | `1ddd674d89358c6e9e26f1b402153d990b4e7a13376664eb1610c85d710d6c89` |
+| P0 logcat | `cfe8b595fcf7cc8ee3b9c7e52a33df753cd4424ca4f2597f5a5a09cdbbb9bd26` |
+| P1 logcat | `798a4ed95183b13da21fe8ad89938fe6b30956beeea2be6ad2f24a41eb710dd8` |
 
 The direct libretro pair suite also passes in normal and ASan/UBSan builds with
 leak detection enabled. The transport-independent scheduler suite continues to

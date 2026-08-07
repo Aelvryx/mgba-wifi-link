@@ -81,8 +81,8 @@ The exact ARM64 physical-device qualification is recorded below.
 
 ### Mario Kart Multi-Pak commercial qualification
 
-A human-assisted two-device run used stock RetroArch 1.22.2 on an AYN Thor
-host and AYN Odin2 Portal client over the same Wi-Fi LAN. Both devices loaded
+A two-device playtest used stock RetroArch 1.22.2 on physical P0 host and P1
+client endpoints over the same Wi-Fi LAN. Both devices loaded
 the same effective Mario Kart: Super Circuit image (RetroArch content CRC32
 `ed316e37`) from isolated qualification paths, connected through protocol v2,
 entered Multi-Pak, selected a two-player VS race, chose separate characters,
@@ -123,20 +123,20 @@ disconnect appeared in either log.
 
 The host measured an 82 ms attachment round trip and selected a fixed
 five-frame input delay. Runtime input rendezvous was 5/13/84 ms p50/p95/max on
-Thor and 8/23/30 ms on Odin. One bounded scheduler lead was recovered for each
-logical core; the lead counters then remained stable through the race. The
-human players completed the race normally without reporting an audiovisual or
-control fault.
+P0 and 8/23/30 ms on P1. One bounded scheduler lead was recovered for each
+logical core; the lead counters then remained stable through the race.
+Playtesting completed the race normally without an audiovisual or control
+fault.
 
 Raw logs and screenshots remain outside the repository. Their verification
 hashes are:
 
 | Evidence | SHA-256 |
 | --- | --- |
-| Thor result screenshot | `51c9a8f3febc09504f692dfdb2a8df46d6663f576060f77026e54c5900f48bf6` |
-| Odin result screenshot | `571cc37bcf932fc7fbdc8582bc64c9d9fd3241fcca0e9b0398fa43b9fa8c03a7` |
-| Thor RetroArch/core log | `64ae30a83cea624cd16bfdbcb93c55de667692059ff7a84ad13888d6dadef376` |
-| Odin RetroArch/core log | `aa4deaea89320ba8eb4d4a93cd0e0136ff6da4349596f8b5dde8be1d03c36a07` |
+| P0 result screenshot | `51c9a8f3febc09504f692dfdb2a8df46d6663f576060f77026e54c5900f48bf6` |
+| P1 result screenshot | `571cc37bcf932fc7fbdc8582bc64c9d9fd3241fcca0e9b0398fa43b9fa8c03a7` |
+| P0 RetroArch/core log | `64ae30a83cea624cd16bfdbcb93c55de667692059ff7a84ad13888d6dadef376` |
+| P1 RetroArch/core log | `aa4deaea89320ba8eb4d4a93cd0e0136ff6da4349596f8b5dde8be1d03c36a07` |
 
 The analyzer command for a real-game run is:
 
@@ -151,8 +151,8 @@ python3 tools/analyze-gba-wifi-link.py \
 The ARM64 candidate built from source head
 `217c231f2b1152b9e7b8484b0245f2210ae709d0` (tree
 `a1cca0be9434d3beeac79788fbfa745845381d76`) with Android NDK r27 was installed
-through stock RetroArch 1.22.2 on the AYN Thor host and AYN Odin2 Portal
-client. The installed 8,063,296-byte core had SHA-256
+through stock RetroArch 1.22.2 on the P0 host and P1 client. The installed
+8,063,296-byte core had SHA-256
 `e045d614e5b2def408ee636c7cbffe46e94105edcb8abda65c8142879cca2989`.
 The isolated, black-screen qualification ROM had SHA-256
 `09580c39920cafa6f597f20a9019098260442242fbdbd7402e15d1217484abe3`.
@@ -180,10 +180,10 @@ word count.
 The direct frame-paced pair baseline produced 59.719 serial words per emulated
 second. The rendered Android run differed by only 0.008%, well inside the
 five-percent gate. ADB sampling caused isolated rendezvous maxima of 251 ms on
-Thor and 223 ms on Odin without causing a timeout, divergence, or sustained
+P0 and 223 ms on P1 without causing a timeout, divergence, or sustained
 frame-rate reduction.
 
-| Metric | AYN Thor | AYN Odin2 Portal |
+| Metric | P0 device | P1 device |
 | --- | ---: | ---: |
 | ADB samples / observed collector window | 61 / 1,971 s | 61 / 1,992 s |
 | Process CPU mean / p95 / max | 33.31% / 38.40% / 50.00% | 48.72% / 57.60% / 61.50% |
@@ -198,21 +198,21 @@ hashed before and after qualification and were byte-identical:
 
 | Preserved data | Before and after SHA-256 |
 | --- | --- |
-| Thor RetroArch config | `eb3a81dd57e247715c71e76ade295080c1a45a9e7830d311568b3ac1d1365c24` |
-| Odin RetroArch config | `f7b9545632423876000627d3181db095700de2d1ed941ce11ca5fdbe6b36d7f1` |
-| Thor/Odin normal mGBA options | `65fd9076a4f1cd6f4aa09ad3965bab83c00ea4b7a90c0626674737d7f1f6a468` |
-| Thor user-save manifest | `a7017a805b801f60f7bafcf97ea7e0ce52bd0a1afa6b72c4909d7d4344dadcc6` |
-| Odin user-save manifest | `65d2e3196cd7f4c36454855b8ee01805aa9643fddeabcc2c7f8db5678a6f86fb` |
+| P0 RetroArch config | `eb3a81dd57e247715c71e76ade295080c1a45a9e7830d311568b3ac1d1365c24` |
+| P1 RetroArch config | `f7b9545632423876000627d3181db095700de2d1ed941ce11ca5fdbe6b36d7f1` |
+| P0/P1 normal mGBA options | `65fd9076a4f1cd6f4aa09ad3965bab83c00ea4b7a90c0626674737d7f1f6a468` |
+| P0 user-save manifest | `a7017a805b801f60f7bafcf97ea7e0ce52bd0a1afa6b72c4909d7d4344dadcc6` |
+| P1 user-save manifest | `65d2e3196cd7f4c36454855b8ee01805aa9643fddeabcc2c7f8db5678a6f86fb` |
 
 Raw logs remain outside the repository and contain no committed ROM or save
 data. Their verification hashes are:
 
 | Evidence | SHA-256 |
 | --- | --- |
-| Thor core log | `46ddfe4bbe4ebbabdbb0252e6264e1b5d8711f98afb9a2757edb3ba4782d9bf2` |
-| Odin core log | `94d975ad9baa6a3e4d9aab501ac589f7d21311db3dc3de599265c3ec149072c8` |
-| Thor ADB samples | `f52f082685e55b27faf632ac65b2c548fba1c963176808cfb80d2eff0e4b161c` |
-| Odin ADB samples | `f2bc69474cb498ee672c6344c803aab483ace79357fc4ff85a12633015488e61` |
+| P0 core log | `46ddfe4bbe4ebbabdbb0252e6264e1b5d8711f98afb9a2757edb3ba4782d9bf2` |
+| P1 core log | `94d975ad9baa6a3e4d9aab501ac589f7d21311db3dc3de599265c3ec149072c8` |
+| P0 ADB samples | `f52f082685e55b27faf632ac65b2c548fba1c963176808cfb80d2eff0e4b161c` |
+| P1 ADB samples | `f2bc69474cb498ee672c6344c803aab483ace79357fc4ff85a12633015488e61` |
 
 The qualification fixture renders black while waiting and running, and dim
 red only on failure, avoiding a static bright OLED workload during long soaks.
@@ -236,8 +236,8 @@ A fresh two-device continuous-link smoke reached 1,800 common replicated
 frames before the deliberate peer-stop. Both endpoint logs contained the same
 sampled P0/P1 traces, 29 or more successful state checks, 895 matching fixture
 transfers per logical player, zero fixture errors/timeouts, and zero empty
-audio frames. The observed rates were 60.164 FPS on Thor and 60.315 FPS on
-Odin. Player two was then force-stopped. Player zero emitted its complete
+audio frames. The observed rates were 60.164 FPS on P0 and 60.315 FPS on
+P1. Player two was then force-stopped. Player zero emitted its complete
 teardown summary, restored verified local state at frame 1,920, invalidated
 the session as peer-detached, and continued rendering instead of hanging.
 
@@ -271,14 +271,14 @@ final gate are:
 
 | Evidence | SHA-256 |
 | --- | --- |
-| Exact-smoke Thor log | `916f081d80f46c3f37c819fe160abe6016dbd32ae749e9aebb02901af39fef3f` |
-| Exact-smoke Odin log | `f8d9da354b225e46b8a7d92d517e94f54f39a70afc2eddc332dd529eec4bc34` |
-| Exact-smoke Thor screenshot | `40e471c748a3801c79f3683c2b2b284d92db1bbd714eac6ad69688fa72b79383` |
-| Exact-smoke Odin screenshot | `d020e631ac082a280faf6a6625f2cb07332fbdc4cf846c0c602e1ae3a7a77aa3` |
-| Mario Kart abrupt-stop Thor log | `454755461c68e579407b8843c8f494be1c265ee82b32a6c48f74bf214e230d20` |
-| Mario Kart abrupt-stop Odin log | `1087ea4375637a17f8cd67917fda090a8fb000ca866aa438536f6dc2d2ac6271` |
-| Mario Kart explicit-disconnect Thor log | `181a706bd5557c2579a3af864c668043e767bb9c6a075dedabee220426cad55d` |
-| Mario Kart explicit-disconnect Odin log | `83a891bb2f1f1fad942a60c10724fb21d4e15cc5991a7e3ad98a3f8fd6b0bc18` |
+| Exact-smoke P0 log | `916f081d80f46c3f37c819fe160abe6016dbd32ae749e9aebb02901af39fef3f` |
+| Exact-smoke P1 log | `f8d9da354b225e46b8a7d92d517e94f54f39a70afc2eddc332dd529eec4bc34` |
+| Exact-smoke P0 screenshot | `40e471c748a3801c79f3683c2b2b284d92db1bbd714eac6ad69688fa72b79383` |
+| Exact-smoke P1 screenshot | `d020e631ac082a280faf6a6625f2cb07332fbdc4cf846c0c602e1ae3a7a77aa3` |
+| Mario Kart abrupt-stop P0 log | `454755461c68e579407b8843c8f494be1c265ee82b32a6c48f74bf214e230d20` |
+| Mario Kart abrupt-stop P1 log | `1087ea4375637a17f8cd67917fda090a8fb000ca866aa438536f6dc2d2ac6271` |
+| Mario Kart explicit-disconnect P0 log | `181a706bd5557c2579a3af864c668043e767bb9c6a075dedabee220426cad55d` |
+| Mario Kart explicit-disconnect P1 log | `83a891bb2f1f1fad942a60c10724fb21d4e15cc5991a7e3ad98a3f8fd6b0bc18` |
 | Explicit-disconnect menu screenshot | `cd074ba8e0a9f7b1da3a80d54c01ee6d1a716235f60b47fb240fbaf65c1ffee7` |
 
 ### Post-review exact-head qualification
@@ -313,8 +313,8 @@ terminal reason rather than hanging.
 The same installed core was then exercised with Mario Kart: Super Circuit.
 Both endpoints entered two-player Multi-Pak; cable traffic rose from zero
 during the menus to 6,550 completed MULTI transactions and 13,100 words at the
-last common sample. A human-assisted representative gameplay smoke reported
-normal controls, animation, speed, and audio. This was intentionally a short
+last common sample. A representative gameplay playtest reported normal
+controls, animation, speed, and audio. This was intentionally a short
 post-fix regression, not a replacement claim for the earlier complete
 three-lap qualification. Its strict commercial-log result was:
 
@@ -336,19 +336,19 @@ Raw logs remain outside the repository. Their verification hashes are:
 
 | Evidence | SHA-256 |
 | --- | --- |
-| Exact-head fixture Thor healthy window | `ac305b1e4d69501bfec80c8548a9fe01668e12d89a1ff37630fb7476fe6e0024` |
-| Exact-head fixture Thor teardown log | `5bd1d22dc86fd03030f3cd8d187e60c91a075f082e291ddda226ba321c2411c0` |
-| Exact-head fixture Odin log | `c0360d766193dd712816bb9bfbe795b4f569dd0d2495bb17a3d8f55068472a0a` |
-| Exact-head Mario Kart Thor healthy log | `2ba469b4d551abbacc3c152770b80757871345fce0b1c99203fc27bf6653c98f` |
-| Exact-head Mario Kart Odin healthy log | `5aa762cd86e853ef65bd5f5f2fa8def4296a7965a600ac30e4008edcc758dd80` |
+| Exact-head fixture P0 healthy window | `ac305b1e4d69501bfec80c8548a9fe01668e12d89a1ff37630fb7476fe6e0024` |
+| Exact-head fixture P0 teardown log | `5bd1d22dc86fd03030f3cd8d187e60c91a075f082e291ddda226ba321c2411c0` |
+| Exact-head fixture P1 log | `c0360d766193dd712816bb9bfbe795b4f569dd0d2495bb17a3d8f55068472a0a` |
+| Exact-head Mario Kart P0 healthy log | `2ba469b4d551abbacc3c152770b80757871345fce0b1c99203fc27bf6653c98f` |
+| Exact-head Mario Kart P1 healthy log | `5aa762cd86e853ef65bd5f5f2fa8def4296a7965a600ac30e4008edcc758dd80` |
 
 ### Four Swords topology-settled alpha.2 qualification
 
 The exact topology-settled alpha.2 runtime was retested through stock
-RetroArch 1.22.2 on the AYN Thor host and AYN Odin2 Portal client. Both peers
+RetroArch 1.22.2 on the P0 host and P1 client. Both peers
 connected before entering the Four Swords cable menu, left discovery, entered
-the same shared room, and accepted the two physical players' input. The human
-tester reported normal controls, animation, speed, and audio.
+the same shared room, and accepted the two physical players' input. Playtesting
+reported normal controls, animation, speed, and audio.
 
 The final common sample covered 27,000 synchronized frames and 110,852
 completed two-player MULTI transactions:
@@ -370,10 +370,10 @@ the repository.
 
 | Evidence | SHA-256 |
 | --- | --- |
-| Four Swords Thor log | `35188a76adc949ca894492628c6d24cb35f61f876b2ed9ae20a8a2720a28eadc` |
-| Four Swords Odin log | `caed28d74130d2be33c78fc647b97da25087d2b7fabc1db0fae50d70c1d088dd` |
-| Four Swords Thor screenshot | `53e9f758ae10856b132a1c4628ae365301efcf954f60be3183164ce126dba3b6` |
-| Four Swords Odin screenshot | `b006fa9beef9d98b9f4500907f7a73b62c4830625a82b888715f46229513c632` |
+| Four Swords P0 log | `35188a76adc949ca894492628c6d24cb35f61f876b2ed9ae20a8a2720a28eadc` |
+| Four Swords P1 log | `caed28d74130d2be33c78fc647b97da25087d2b7fabc1db0fae50d70c1d088dd` |
+| Four Swords P0 screenshot | `53e9f758ae10856b132a1c4628ae365301efcf954f60be3183164ce126dba3b6` |
+| Four Swords P1 screenshot | `b006fa9beef9d98b9f4500907f7a73b62c4830625a82b888715f46229513c632` |
 | Both pre/post isolated saves | `8897fe438b05596b4852cb5a8cfc38305e1f61b027571bb1f7f4267d23179627` |
 
 Because the baseline now passes, the conditional transition observer,
@@ -491,7 +491,7 @@ completion, ordinary no-peer completion, or reset/unload cancellation.
 ## Stock RetroArch and independent workload evidence
 
 Production qualification used unmodified RetroArch `1.22.2_GIT` (Git
-`69a4f0e`) on an AYN Thor host and AYN Odin2 Portal client over the same Wi-Fi
+`69a4f0e`) on the P0 host and P1 client over the same Wi-Fi
 LAN. The CC0 test ROM completed 16 transfers per endpoint across all four MULTI
 baud selectors with correct words, IDs, line state, and IRQ accounting.
 
@@ -684,9 +684,9 @@ The reviewed Android ARM64 candidate at
 `20c5d8d111cc23cefcb6711b8eb0aafccf75c24b` had SHA-256
 `c1a9edabc29381ba99dc5d91da01d952e1fa0f8000048c67eb00e4096fda6a18`.
 RetroArch 1.22.2 (Git `69a4f0e`) loaded the app-private installed core on the
-Thor as P0 and Odin as P1. Staged core, ROM, configuration, and option files
-were hash-checked; saves, states, and logs used run-specific paths. Raw logs
-and screenshots remain private.
+host assigned P0 and the client assigned P1. Staged core, ROM, configuration,
+and option files were hash-checked; saves, states, and logs used run-specific
+paths. Raw logs and screenshots remain private.
 
 The exact candidate produced these bounded CC0 continuous-fixture results:
 
@@ -707,7 +707,7 @@ label proved policy 2.
 The low-latency two-frame run reached 8,765 host frames before an intentional
 client stop. Teardown restored verified local state; the fixture reported
 4,378 matching transfers and no errors or timeouts. Pre-stop process PSS was
-about 161 MiB on Thor and 146 MiB on Odin; battery temperatures were 29.0 C
+about 161 MiB on P0 and 146 MiB on P1; battery temperatures were 29.0 C
 and 30.0 C. The run-owned device directories, installer copy, and CC0 ROM were
 removed afterward while leaving the installed alpha core available for ad-hoc
 testing.
@@ -723,8 +723,9 @@ for a favourable sample.
 The integrated `master` candidate at
 `1b0ee969850d9ac0c195d9391f537a004def082b` had SHA-256
 `826c5b051eba80d606c677571694890e6ff0f753600a78e164d8269cb730af3f`.
-Thor hosted a direct 5 GHz Android hotspot and GBA Wi-Fi Link P0; Odin joined
-that hotspot as P1. RetroArch 1.22.2 (Git `69a4f0e`) loaded the exact candidate,
+The P0 device hosted a direct 5 GHz Android hotspot and the GBA Wi-Fi Link
+session; P1 joined that hotspot as the client. RetroArch 1.22.2 (Git `69a4f0e`)
+loaded the exact candidate,
 the isolated run contract and physical controllers passed, and both endpoints
 selected one frame from the same 24-sample calibration vector.
 
@@ -737,13 +738,13 @@ telemetry clock failures, or empty-audio frames.
 
 | Endpoint | Wait-free frames | Waited-frame p95 | Maximum wait |
 | --- | ---: | ---: | ---: |
-| Thor / P0 | 98.1666% | 14,880 us | 31,303 us |
-| Odin / P1 | 99.6616% | 11,281 us | 22,977 us |
+| P0 host | 98.1666% | 14,880 us | 31,303 us |
+| P1 client | 99.6616% | 11,281 us | 22,977 us |
 
 The ordinary fixture analyzer passed. The one-frame publication gate requires
 at least 99% wait-free frames on each endpoint, waited-frame p95 no greater
 than 8,000 microseconds and no wait above 16,743 microseconds. Both endpoints
-exceeded the immutable maximum-tail limit, and Thor also missed the ratio and
+exceeded the immutable maximum-tail limit, and P0 also missed the ratio and
 p95 limits, so extending the run could not produce a passing exact-artifact
 result. The run was stopped proportionately rather than continuing a ceremonial
 30-minute soak after permanent gate failure.
@@ -753,9 +754,9 @@ and **Auto (Low Latency, Experimental)** as an opt-in. The direct hotspot is a
 supported ordinary LAN topology, not a promise of lower latency. Raw logs and
 screenshots remain private; their SHA-256 digests are
 `fb4bf7f7a55a57e731515ae47146ad6bfce1fc8419a8727878560319a757113a`
-for Thor and
+for P0 and
 `48b2eb93bea2d44aeb536e3e477799f002f3ab133e881f91f753a4eaa78865a8`
-for Odin.
+for P1.
 
 Physical logs also exposed that RetroArch truncates long core log records. The
 follow-up diagnostic-only correction splits calibration, wait-tail, health,

@@ -317,7 +317,7 @@ The exact final Android candidate receives a continuous-fixture qualification fi
 
 ## Open Questions
 
-- Does the clean calibration select one or two frames on the Odin/Thor pair once replica capture is removed from the measurement?
+- Does the clean calibration select one or two frames on the physical Android pair once replica capture is removed from the measurement?
 - Is the one-millisecond scheduling guard sufficient for RetroArch's Android callback cadence, or does physical evidence justify a larger versioned value?
 - Does verification waiting measurably delay input authoring every 60 frames enough to justify a separately specified ordering change later?
 - Which current libretro/core configuration values influence emulated execution beyond the initial enumerated profile and therefore need their own stable category?

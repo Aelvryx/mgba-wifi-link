@@ -8,3 +8,7 @@ This release is built from `{{repository}}` tag `{{tag}}`.
 
 See `SOURCE-AND-PROVENANCE.md` and `RELEASE-PROVENANCE.json` for the recorded
 source and build identities.
+
+This experimental alpha is published automatically from its approved annotated
+tag after the release workflow verifies the complete artifact set. A correction
+uses a newly reviewed version and tag; published assets are not replaced.

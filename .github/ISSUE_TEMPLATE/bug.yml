@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible defect in the Wi-Fi link fork
+description: Record a reproducible defect in the GBA Wi-Fi Link fork
 title: "[Bug]: "
 labels:
   - bug
@@ -7,6 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
+        This form remains available for people who independently choose to use it.
         Include only bounded, non-sensitive facts. Do not upload commercial ROMs,
         BIOS files, private saves, IP addresses, private paths, or raw controller
         histories. Do not upload, attach, or paste endpoint, core, or RetroArch

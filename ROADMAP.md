@@ -48,8 +48,8 @@ internet relay, or live-session savestates.
 v0.2.0: working public alpha
           |
           v
-v0.2.1: supportable alpha
-  diagnostics + release automation + upstream refresh + parser fuzzing
+v0.2.1: Maintainable alpha
+  release automation + upstream refresh + parser fuzzing
           |
           v
 portable and resilient operation
@@ -68,25 +68,26 @@ The arrows are dependency and confidence gates, not promises that every item
 must wait for all earlier work. Research can proceed in parallel when it is
 bounded and does not pre-authorize production behaviour.
 
-## Now: v0.2.1 supportable alpha
+## Now: v0.2.1 Maintainable alpha
 
 The next release should make the working alpha easier to distribute,
 diagnose, maintain, and update. It intentionally adds no new emulation mode.
 
 ### Committed outcomes
 
-1. [One-command sanitized diagnostic bundle (#20)](https://github.com/Aelvryx/mgba-wifi-link/issues/20)
-   captures actionable bilateral evidence without ROM, BIOS, save, address,
-   path, or input-history disclosure.
-2. [Automated release artifacts and provenance (#21)](https://github.com/Aelvryx/mgba-wifi-link/issues/21)
-   turn an approved tag into a repeatable Android bundle with verified identity
-   and checksums while retaining an explicit publication decision.
-3. [Current upstream mGBA refresh (#22)](https://github.com/Aelvryx/mgba-wifi-link/issues/22)
+1. [Automated release artifacts and provenance (#21)](https://github.com/Aelvryx/mgba-wifi-link/issues/21)
+   turn an approved annotated tag into a repeatable Android bundle with verified
+   identity and checksums, then publish it fully automatically.
+2. [Current upstream mGBA refresh (#22)](https://github.com/Aelvryx/mgba-wifi-link/issues/22)
    rebases the patch stack onto a reviewed pin and proves that the product and
    versioned compatibility contract survive.
-4. [Network-controlled decoder fuzzing (#23)](https://github.com/Aelvryx/mgba-wifi-link/issues/23)
+3. [Network-controlled decoder fuzzing (#23)](https://github.com/Aelvryx/mgba-wifi-link/issues/23)
    covers packet, profile, calibration, replica-manifest, and copied-transport
    boundaries under sanitizers.
+
+The maintainable-alpha release commitment is issues #21, #22, and #23. Issue
+#20 remains useful deferred diagnostic work. Issue #20 is not a v0.2.1 exit
+gate.
 
 [Compatibility evidence (#8)](https://github.com/Aelvryx/mgba-wifi-link/issues/8)
 continues alongside this milestone. A confirmed success or failure improves
@@ -95,11 +96,11 @@ playthroughs.
 
 ### Exit gate
 
-v0.2.1 is ready when issues #20–#23 are complete, the protected automated
-suite is green on the release candidate, the published bundle is reproducible
-and correctly identified, and any physical smoke is proportionate to actual
-runtime changes. Documentation-only or tooling-only work does not manufacture
-a need for another long commercial playtest.
+v0.2.1 is ready when issues #21, #22, and #23 are complete, the protected
+automated suite is green on the release candidate, the published bundle is
+reproducible and correctly identified, and any physical smoke is proportionate
+to actual runtime changes. Documentation-only or tooling-only work does not
+manufacture a need for another long commercial playtest.
 
 ## Next: portable and resilient operation
 
@@ -191,7 +192,6 @@ new evidence changes value, dependency, or size.
 
 | Outcome | Value | Urgency | Risk / enablement | Size | WSJF | Horizon |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| Sanitized diagnostic bundle (#20) | 5 | 5 | 8 | 5 | **3.6** | Now |
 | Automated release provenance (#21) | 5 | 5 | 8 | 5 | **3.6** | Now |
 | Upstream mGBA refresh (#22) | 3 | 5 | 8 | 5 | **3.2** | Now |
 | Decoder fuzzing (#23) | 3 | 5 | 8 | 5 | **3.2** | Now |
@@ -232,7 +232,8 @@ time-boxed continuous stream, not a finishable outcome.
 
 - The `v0.2.0 — Usable alpha` milestone is closed and records the first public
   release.
-- The `v0.2.1 — Supportable alpha` milestone contains only issues #20–#23.
+- The `v0.2.1 — Maintainable alpha` milestone contains issues #21–#23. Issue
+  #20 is deferred and does not gate that release.
 - Compatibility issue #8 remains open and unmilestoned as continuous evidence.
 - `roadmap: now`, `roadmap: next`, and `roadmap: later` describe horizons, not
   promises or calendar dates.

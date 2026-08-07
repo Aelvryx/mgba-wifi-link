@@ -73,5 +73,12 @@
     "test-libretro-netpacket-v2-replay",
     "test-gba-replicated-pair-spike",
     "test-libretro-replicated-pair-spike"
+  ],
+  "current_release_surfaces": [
+    ".github/workflows/gba-wifi-link-release.yml",
+    ".github/ISSUE_TEMPLATE",
+    "SUPPORT.md",
+    "docs/gba-wifi-link-release.md",
+    "packaging/gba-wifi-link/release/templates"
   ]
 }

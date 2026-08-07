@@ -23,7 +23,9 @@ Do not upload, attach, or paste endpoint, core, or RetroArch logs. The project
 has not yet published a sanitized diagnostic workflow; issue #20 tracks that
 separate work. Do not upload commercial ROMs, BIOS files, copyrighted extracts,
 private save data, IP addresses, or controller-input histories. A
-redistributable fixture reproduction is welcome when it can be described using
-the bounded fields above.
+redistributable fixture reproduction may be evaluated when it can be described
+using the bounded fields above.
 
-Questions and compatibility reports are welcome through the issue forms.
+Issue forms remain available for people who independently choose to use them.
+The project neither solicits nor forbids unsolicited feedback, and it does not
+promise a response or support service.

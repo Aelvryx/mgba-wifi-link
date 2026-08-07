@@ -81,6 +81,48 @@ class BoundaryPolicyTest(unittest.TestCase):
             "The current product SHALL NOT use netpacket-v2.",
         )
 
+    def test_user_facing_release_name_may_not_leak_runtime_version(self) -> None:
+        self.assert_rejected(
+            "docs/gba-wifi-link-release.md",
+            "Download the GBA Wi-Fi Link V2 Android core.",
+            "unclassified versioned token",
+        )
+
+    def test_release_workflow_keeps_exact_protocol_identity_out_of_product_name(self) -> None:
+        self.assert_rejected(
+            ".github/workflows/gba-wifi-link-release.yml",
+            "name: GBA Wi-Fi Link V2 release\n"
+            "PROTOCOL_ID: mgba-gba-link-replicated-v2\n",
+            "unclassified versioned token",
+        )
+
+    def test_guidance_rejects_obsolete_supportable_alpha(self) -> None:
+        violations = AUDIT.find_guidance_policy_violations(
+            "ROADMAP.md", "## Now: v0.2.1 Supportable alpha\n"
+        )
+        self.assertTrue(violations)
+        self.assertTrue(any("supportable alpha" in item for item in violations))
+
+    def test_guidance_rejects_issue_20_as_a_release_exit_gate(self) -> None:
+        violations = AUDIT.find_guidance_policy_violations(
+            "ROADMAP.md", "v0.2.1 is ready when issues #20–#23 are complete.\n"
+        )
+        self.assertTrue(violations)
+        self.assertTrue(any("issue #20 release gate" in item for item in violations))
+
+    def test_guidance_rejects_feedback_campaign_and_manual_publish_requirement(self) -> None:
+        text = (
+            "Please report success and failure.\n"
+            "A maintainer must click Publish to release the tag.\n"
+        )
+        violations = AUDIT.find_guidance_policy_violations("README.md", text)
+        self.assertTrue(violations)
+        self.assertTrue(any("feedback solicitation" in item for item in violations))
+        self.assertTrue(any("manual Publish" in item for item in violations))
+
+    def test_current_guidance_has_all_maintainable_alpha_contracts(self) -> None:
+        self.assertEqual(AUDIT.guidance_policy_violations(), [])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

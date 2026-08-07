@@ -102,8 +102,9 @@ rejected. Disconnect first.
 | Advance Wars | User playtest passed |
 | Other Multi-Pak games | Untested |
 
-Please report both success and failure. Good compatibility reports are useful
-even when no bug is present.
+Issue templates remain available for people who independently choose to use
+them. This project neither solicits nor forbids unsolicited feedback, and it
+does not promise a response or support service.
 
 ## Build from source
 
@@ -126,6 +127,7 @@ tests, and an Android ARM64 build.
 - [Installation, operation, and troubleshooting](docs/gba-wifi-link.md)
 - [Validation matrix](docs/gba-wifi-link-validation-matrix.md)
 - [Protocol-v2 design](docs/gba-link-protocol-v2.md)
+- [Automated release process](docs/gba-wifi-link-release.md)
 - [Pinned upstream and libretro revisions](UPSTREAM.md)
 - [Contributing](CONTRIBUTING.md)
 - [Support and issue routing](SUPPORT.md)
@@ -140,14 +142,17 @@ under `openspec/changes/archive`.
 
 The immediate engineering priorities are:
 
-1. Produce a one-command sanitized diagnostic bundle.
-2. Expand compatibility reporting without turning it into a release gate.
-3. Automate reviewed release artifacts and provenance, then fuzz the
-   network-controlled decoders.
+1. Automate immutable Android release artifacts and provenance.
+2. Refresh the reviewed upstream mGBA base.
+3. Fuzz the network-controlled decoders.
 
 Four-player Multi-Pak and Linux handheld support follow. Rollback/prediction,
 Single-Pak, and RFU are later research, not promises. See [ROADMAP.md](ROADMAP.md)
 for the decision gates and linked work.
+
+Future approved annotated version tags publish through the reviewed automated
+release workflow. The current v0.2.0 prerelease remains historical evidence;
+it is not a precedent for replacing assets under an existing tag.
 
 ## Upstream and license
 

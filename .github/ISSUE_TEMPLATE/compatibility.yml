@@ -1,9 +1,15 @@
 name: Compatibility report
-description: Record a Multi-Pak title that works or fails
+description: Record a GBA Multi-Pak title that works or fails
 title: "[Compatibility]: "
 labels:
   - compatibility
 body:
+  - type: markdown
+    attributes:
+      value: |
+        This form remains available for people who independently choose to use it.
+        Do not upload commercial ROMs, BIOS files, private saves, addresses,
+        private paths, or raw controller histories.
   - type: input
     id: build
     attributes:

@@ -8,7 +8,9 @@ attestation, draft staging, remote verification, and publication. There is no
 second approval, dispatch, or **Publish** click.
 
 This document describes future releases. It does not create a production tag or
-alter the existing `v0.2.0` prerelease.
+alter the existing `v0.2.0` prerelease. The historical v0.2.0 in-place
+documentation correction is not a precedent for future releases: every future
+alpha uses a newly approved tag and immutable automated publication.
 
 ## Before the tag
 

@@ -118,6 +118,7 @@ def load_policy(path: Path = POLICY_PATH) -> dict[str, list[str]]:
         "obsolete_product_paths",
         "obsolete_product_text",
         "obsolete_targets",
+        "current_release_surfaces",
     }
     if set(value) != required:
         fail("boundary policy fields do not match the required inventory")
@@ -132,6 +133,42 @@ def load_policy(path: Path = POLICY_PATH) -> dict[str, list[str]]:
 
 
 POLICY = load_policy()
+
+RELEASE_SURFACES = tuple(POLICY["current_release_surfaces"])
+
+GUIDANCE_FILES = (
+    "README.md",
+    "ROADMAP.md",
+    "SUPPORT.md",
+    "docs/gba-wifi-link-release.md",
+    ".github/ISSUE_TEMPLATE/bug.yml",
+    ".github/ISSUE_TEMPLATE/compatibility.yml",
+    "packaging/gba-wifi-link/release/templates/INSTALL-AND-USAGE.md.in",
+)
+
+GUIDANCE_REQUIRED = {
+    "ROADMAP.md": (
+        "## Now: v0.2.1 Maintainable alpha",
+        "issues #21, #22, and #23",
+        "Issue #20 is not a v0.2.1 exit gate.",
+    ),
+    "SUPPORT.md": (
+        "The project neither solicits nor forbids unsolicited feedback",
+        "does not promise a response or support service",
+    ),
+    "docs/gba-wifi-link-release.md": (
+        "There is no second approval, dispatch, or **Publish** click.",
+        "Pushing that annotated tag is the entire production release action.",
+        "historical v0.2.0 in-place documentation correction",
+    ),
+}
+
+GUIDANCE_FORBIDDEN = (
+    ("supportable alpha", "obsolete supportable alpha wording"),
+    ("please report", "feedback solicitation"),
+    ("reports are welcome", "feedback solicitation"),
+    ("issues #20–#23 are complete", "issue #20 release gate"),
+)
 
 
 def read(relative: str) -> str:
@@ -277,6 +314,37 @@ def find_text_policy_violations(relative: str, text: str) -> list[str]:
     return violations
 
 
+def find_guidance_policy_violations(relative: str, text: str) -> list[str]:
+    """Return public-guidance violations without depending on display prose."""
+    violations: list[str] = []
+    lowered = text.lower()
+    for phrase, description in GUIDANCE_FORBIDDEN:
+        if phrase in lowered:
+            violations.append(f"{description} at {relative}")
+    if re.search(
+        r"(?:must|required|require[sd]?).{0,32}(?:manual\s+)?publish",
+        lowered,
+    ):
+        violations.append(f"manual Publish requirement at {relative}")
+    return violations
+
+
+def guidance_policy_violations() -> list[str]:
+    """Verify the deliberately neutral public alpha/release guidance contract."""
+    violations: list[str] = []
+    for relative in GUIDANCE_FILES:
+        path = ROOT / relative
+        if not path.is_file():
+            return [f"guidance surface is missing: {relative}"]
+        violations.extend(find_guidance_policy_violations(relative, read(relative)))
+    for relative, phrases in GUIDANCE_REQUIRED.items():
+        text = re.sub(r"\s+", " ", read(relative))
+        for phrase in phrases:
+            if re.sub(r"\s+", " ", phrase) not in text:
+                violations.append(f"missing guidance contract {phrase!r} in {relative}")
+    return violations
+
+
 def current_files() -> list[Path]:
     files: set[Path] = set()
     excluded = {
@@ -284,7 +352,7 @@ def current_files() -> list[Path]:
         POLICY_PATH.resolve(),
         Path(__file__).with_name("test-audit-gba-wifi-link-boundary.py").resolve(),
     }
-    for relative in CURRENT_SURFACES:
+    for relative in CURRENT_SURFACES + RELEASE_SURFACES:
         path = ROOT / relative
         if not path.exists():
             fail(f"current surface does not exist: {relative}")
@@ -345,6 +413,9 @@ def audit_source() -> None:
         violations = find_text_policy_violations(relative, text)
         if violations:
             fail(violations[0])
+    guidance_violations = guidance_policy_violations()
+    if guidance_violations:
+        fail(guidance_violations[0])
 
 
 def command_output(command: list[str]) -> str:

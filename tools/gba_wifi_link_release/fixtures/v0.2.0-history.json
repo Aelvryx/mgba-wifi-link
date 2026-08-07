@@ -1,4 +1,157 @@
 {
+  "action_pins": {
+    "actions/attest-build-provenance": {
+      "sha": "977bb373ede98d70efdf65b84cb5f73e068dcc2a",
+      "version": "v3"
+    },
+    "actions/checkout": {
+      "sha": "d23441a48e516b6c34aea4fa41551a30e30af803",
+      "version": "v6"
+    },
+    "actions/download-artifact": {
+      "sha": "634f93cb2916e3fdff6788551b99b062d0335ce0",
+      "version": "v5"
+    },
+    "actions/upload-artifact": {
+      "sha": "ea165f8d65b6e75b540449e92b4886f43607fa02",
+      "version": "v4"
+    }
+  },
+  "ci_baseline": {
+    "android_cmake_flags": [
+      "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+      "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+      "-DCMAKE_TOOLCHAIN_FILE=\"$ANDROID_HOME/ndk/${ANDROID_NDK_VERSION}/build/cmake/android.toolchain.cmake\"",
+      "-DANDROID_ABI=arm64-v8a",
+      "-DANDROID_PLATFORM=android-21",
+      "-DBUILD_QT=OFF",
+      "-DBUILD_SDL=OFF",
+      "-DBUILD_LIBRETRO=ON",
+      "-DBUILD_TEST=OFF",
+      "-DBUILD_SUITE=OFF",
+      "-DBUILD_CINEMA=OFF",
+      "-DBUILD_HEADLESS=OFF",
+      "-DBUILD_EXAMPLE=OFF"
+    ],
+    "android_ndk_version": "27.2.12479018",
+    "arm_toolchain": {
+      "archive": "arm-gnu-toolchain-15.2.rel1-x86_64-arm-none-eabi.tar.xz",
+      "sha256": "597893282ac8c6ab1a4073977f2362990184599643b4c5ee34870a8215783a16"
+    },
+    "boundary_checks": [
+      "python3 tools/test-audit-gba-wifi-link-boundary.py",
+      "python3 tools/audit-gba-wifi-link-boundary.py --build-dir build-ci-boundary",
+      "python3 tools/audit-gba-wifi-link-boundary.py --binary-only --binary build-ci-android-arm64/mgba_libretro.so"
+    ],
+    "complete_cmake_flags": [
+      "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+      "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+      "-DBUILD_QT=OFF",
+      "-DBUILD_SDL=OFF",
+      "-DBUILD_LIBRETRO=ON",
+      "-DBUILD_TEST=ON",
+      "-DBUILD_SUITE=ON",
+      "-DBUILD_CINEMA=OFF",
+      "-DBUILD_HEADLESS=OFF",
+      "-DBUILD_EXAMPLE=OFF",
+      "-DUSE_ZLIB=OFF",
+      "-DUSE_MINIZIP=OFF",
+      "-DUSE_PNG=OFF",
+      "-DUSE_LIBZIP=OFF",
+      "-DUSE_SQLITE3=OFF",
+      "-DUSE_LZMA=OFF",
+      "-DUSE_JSON_C=OFF",
+      "-DUSE_FREETYPE=OFF",
+      "-DUSE_FFMPEG=OFF",
+      "-DUSE_ELF=OFF",
+      "-DUSE_LUA=OFF",
+      "-DENABLE_SCRIPTING=OFF",
+      "-DUSE_DISCORD_RPC=OFF"
+    ],
+    "fixture_commands": [
+      "make -C tools/gba-link-test-rom verify-fixture CROSS=/tmp/gba-link-arm-toolchain/bin/arm-none-eabi-",
+      "python3 tools/test-analyze-gba-wifi-link.py",
+      "bash -n tools/four-swords-discovery/android-qualification.sh",
+      "python3 tools/four-swords-discovery/test-qualification-helper.py"
+    ],
+    "focused_cmake_flags": [
+      "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+      "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+      "-DBUILD_QT=OFF",
+      "-DBUILD_SDL=OFF",
+      "-DBUILD_LIBRETRO=ON",
+      "-DBUILD_TEST=ON",
+      "-DBUILD_SUITE=ON",
+      "-DBUILD_CINEMA=OFF",
+      "-DBUILD_HEADLESS=OFF",
+      "-DBUILD_EXAMPLE=OFF",
+      "-DUSE_ZLIB=OFF",
+      "-DUSE_MINIZIP=OFF",
+      "-DUSE_PNG=OFF",
+      "-DUSE_LIBZIP=OFF",
+      "-DUSE_SQLITE3=OFF",
+      "-DUSE_LZMA=OFF",
+      "-DUSE_JSON_C=OFF",
+      "-DUSE_FREETYPE=OFF",
+      "-DUSE_FFMPEG=OFF",
+      "-DUSE_ELF=OFF",
+      "-DUSE_LUA=OFF",
+      "-DENABLE_SCRIPTING=OFF",
+      "-DUSE_DISCORD_RPC=OFF"
+    ],
+    "focused_targets": [
+      "test-gba-netplay-identity",
+      "test-gba-netplay-input-sync",
+      "test-gba-netplay-protocol-v2",
+      "test-gba-netplay-rtc-sync",
+      "test-gba-netplay-session-v2",
+      "test-gba-netplay-transport",
+      "test-gba-replica",
+      "test-gba-replicated-pair",
+      "test-gba-replicated-pair-scheduler",
+      "test-gba-sio",
+      "test-libretro-replicated-pair-frontend",
+      "test-libretro-gba-wifi-link",
+      "test-libretro-gba-wifi-link-replay"
+    ],
+    "focused_test_regex": "gba-netplay|gba-replica|gba-sio|libretro-gba-wifi-link|libretro-replicated-pair-frontend",
+    "gate_names": [
+      "Complete normal mGBA suite",
+      "Focused tests (normal)",
+      "Focused tests (ASan + UBSan)",
+      "Focused tests (TSan)",
+      "Fixture reproducibility",
+      "Android arm64 libretro build"
+    ],
+    "job_ids": [
+      "full-normal-suite",
+      "focused-tests",
+      "fixture",
+      "android-arm64"
+    ],
+    "job_names": {
+      "android-arm64": "Android arm64 libretro build",
+      "fixture": "Fixture reproducibility",
+      "focused-tests": "Focused tests (${{ matrix.name }})",
+      "full-normal-suite": "Complete normal mGBA suite"
+    },
+    "sanitizer_environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:halt_on_error=1",
+      "LSAN_OPTIONS": "exitcode=23",
+      "TSAN_OPTIONS": "halt_on_error=1:history_size=7",
+      "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+    },
+    "sanitizer_matrix": [
+      {"build_dir": "build-ci", "name": "normal", "sanitizers": "none"},
+      {"build_dir": "build-ci-sanitize", "name": "ASan + UBSan", "sanitizers": "address,undefined"},
+      {"build_dir": "build-ci-tsan", "name": "TSan", "sanitizers": "thread"}
+    ],
+    "triggers": {"pull_request": true, "push_branches": ["master"]},
+    "upstream_exception": {
+      "failure": "stagedCrc32",
+      "test": "util-hash"
+    }
+  },
   "archive_members": [
     {
       "name": "mgba_libretro_android.so",

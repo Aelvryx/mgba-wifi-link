@@ -1,6 +1,12 @@
 name: GBA Wi-Fi Link
 
 on:
+  workflow_call:
+    inputs:
+      source_ref:
+        description: Exact peeled source commit supplied by a reusable caller
+        required: false
+        type: string
   push:
     branches:
       - master
@@ -20,7 +26,9 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
 
       - name: Install build dependencies
         run: |
@@ -82,7 +90,9 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
 
       - name: Install build dependencies
         run: |
@@ -153,7 +163,9 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
 
       - name: Install boundary-audit build dependencies
         run: |
@@ -205,7 +217,9 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
 
       - name: Install build tools and pinned NDK
         run: |
@@ -242,3 +256,54 @@ jobs:
           python3 tools/audit-gba-wifi-link-boundary.py \
             --binary-only \
             --binary build-ci-android-arm64/mgba_libretro.so
+
+      - name: Write canonical Android build metadata
+        env:
+          SOURCE_REF: ${{ inputs.source_ref || github.sha }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          core = Path("build-ci-android-arm64/mgba_libretro.so")
+          with core.open("rb") as core_file:
+              core_sha256 = hashlib.file_digest(core_file, "sha256").hexdigest()
+          metadata = {
+              "actions": {
+                  "actions/checkout": {
+                      "sha": "d23441a48e516b6c34aea4fa41551a30e30af803",
+                      "version": "v6",
+                  },
+                  "actions/upload-artifact": {
+                      "sha": "ea165f8d65b6e75b540449e92b4886f43607fa02",
+                      "version": "v4",
+                  },
+              },
+              "android_abi": "arm64-v8a",
+              "android_api": "21",
+              "core": {
+                  "name": core.name,
+                  "sha256": core_sha256,
+                  "size": core.stat().st_size,
+              },
+              "ndk_version": "27.2.12479018",
+              "schema": 1,
+              "source_ref": os.environ["SOURCE_REF"],
+          }
+          (core.parent / "BUILD-METADATA.json").write_text(
+              json.dumps(metadata, sort_keys=True, separators=(",", ":")) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Upload inspected Android ARM64 release inputs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: gba-wifi-link-android-arm64-release-input
+          path: |
+            build-ci-android-arm64/mgba_libretro.so
+            build-ci-android-arm64/BUILD-METADATA.json
+          if-no-files-found: error
+          retention-days: 7

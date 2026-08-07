@@ -3,7 +3,12 @@
 from pathlib import Path
 import hashlib
 
-from .admission import AdmissionError, REQUIRED_GATES, validate_notes_text
+from .admission import (
+    AdmissionError,
+    REQUIRED_GATES,
+    REQUIRED_WORKFLOW,
+    validate_notes_text,
+)
 from .model import ReleaseContext, load_contract
 
 
@@ -21,6 +26,7 @@ def _validate_context(context: ReleaseContext) -> None:
         or gate.run_id <= 0
         or type(gate.job_id) is not int
         or gate.job_id <= 0
+        or gate.workflow != REQUIRED_WORKFLOW
         or gate.conclusion != "success"
         for gate in context.gates
     ):
@@ -55,7 +61,7 @@ def render_release_body(context: ReleaseContext, notes: str) -> bytes:
         "## Workflow evidence\n\n",
     ]
     facts.extend(
-        f"- `{gate.name}`: workflow run `{gate.run_id}`, job `{gate.job_id}`, "
+        f"- `{gate.name}`: workflow `{gate.workflow}`, run `{gate.run_id}`, job `{gate.job_id}`, "
         f"conclusion `{gate.conclusion}`\n"
         for gate in context.gates
     )

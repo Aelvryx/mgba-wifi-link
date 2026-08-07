@@ -18,7 +18,7 @@ CONTEXT = ReleaseContext(
     source_date_epoch=1_700_000_000,
     prerelease=True,
     gates=tuple(
-        GateResult(name, index + 100, index + 200, "success")
+        GateResult(name, "GBA Wi-Fi Link", index + 100, index + 200, "success")
         for index, name in enumerate(REQUIRED_GATES)
     ),
     notes_sha256="",
@@ -42,7 +42,7 @@ class RenderTest(unittest.TestCase):
         self.assertLess(body.index(b"Annotated tag object:"), body.index(b"Peeled commit:"))
         self.assertIn(b"## Workflow evidence\n", body)
         self.assertIn(
-            b"- `Complete normal mGBA suite`: workflow run `100`, job `200`, conclusion `success`\n",
+            b"- `Complete normal mGBA suite`: workflow `GBA Wi-Fi Link`, run `100`, job `200`, conclusion `success`\n",
             body,
         )
         self.assertIn(b"## Release assets\n", body)
@@ -56,6 +56,10 @@ class RenderTest(unittest.TestCase):
             render_release_body(CONTEXT, "TODO: write notes\n")
         with self.assertRaisesRegex(AdmissionError, "NOTES_GENERATED_FIELD"):
             render_release_body(CONTEXT, "Compatibility: custom protocol claim\n")
+        with self.assertRaisesRegex(AdmissionError, "NOTES_PRIVACY_ADDRESS"):
+            render_release_body(CONTEXT, "Contact 192.0.2.1 for setup\n")
+        with self.assertRaisesRegex(AdmissionError, "NOTES_GENERATED_FIELD"):
+            render_release_body(CONTEXT, "## Qualification\n")
 
     def test_render_rejects_notes_other_than_admitted_tracked_content(self):
         notes = "Reviewed release scope.\n"

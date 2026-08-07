@@ -8,6 +8,7 @@ from pathlib import Path
 @dataclass(frozen=True)
 class GateResult:
     name: str
+    workflow: str
     run_id: int
     job_id: int
     conclusion: str

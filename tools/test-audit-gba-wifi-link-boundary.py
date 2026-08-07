@@ -120,6 +120,14 @@ class BoundaryPolicyTest(unittest.TestCase):
         self.assertTrue(any("feedback solicitation" in item for item in violations))
         self.assertTrue(any("manual Publish" in item for item in violations))
 
+    def test_guidance_rejects_feature_form_invitation(self) -> None:
+        violations = AUDIT.find_guidance_policy_violations(
+            ".github/ISSUE_TEMPLATE/feature.yml",
+            "description: Suggest a scoped improvement to the fork\n",
+        )
+        self.assertTrue(violations)
+        self.assertTrue(any("feedback solicitation" in item for item in violations))
+
     def test_current_guidance_has_all_maintainable_alpha_contracts(self) -> None:
         self.assertEqual(AUDIT.guidance_policy_violations(), [])
 

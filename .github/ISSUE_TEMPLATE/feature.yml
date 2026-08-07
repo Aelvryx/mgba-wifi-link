@@ -1,9 +1,15 @@
-name: Feature proposal
-description: Suggest a scoped improvement to the fork
+name: Feature record
+description: Record a scoped possible improvement to GBA Wi-Fi Link
 title: "[Feature]: "
 labels:
   - enhancement
 body:
+  - type: markdown
+    attributes:
+      value: |
+        This form remains available for people who independently choose to use it.
+        Do not include commercial ROMs, BIOS files, private saves, addresses,
+        private paths, or raw controller histories.
   - type: textarea
     id: problem
     attributes:

@@ -143,6 +143,8 @@ GUIDANCE_FILES = (
     "docs/gba-wifi-link-release.md",
     ".github/ISSUE_TEMPLATE/bug.yml",
     ".github/ISSUE_TEMPLATE/compatibility.yml",
+    ".github/ISSUE_TEMPLATE/feature.yml",
+    ".github/ISSUE_TEMPLATE/config.yml",
     "packaging/gba-wifi-link/release/templates/INSTALL-AND-USAGE.md.in",
 )
 
@@ -156,6 +158,15 @@ GUIDANCE_REQUIRED = {
         "The project neither solicits nor forbids unsolicited feedback",
         "does not promise a response or support service",
     ),
+    ".github/ISSUE_TEMPLATE/bug.yml": (
+        "This form remains available for people who independently choose to use it.",
+    ),
+    ".github/ISSUE_TEMPLATE/compatibility.yml": (
+        "This form remains available for people who independently choose to use it.",
+    ),
+    ".github/ISSUE_TEMPLATE/feature.yml": (
+        "This form remains available for people who independently choose to use it.",
+    ),
     "docs/gba-wifi-link-release.md": (
         "There is no second approval, dispatch, or **Publish** click.",
         "Pushing that annotated tag is the entire production release action.",
@@ -167,6 +178,7 @@ GUIDANCE_FORBIDDEN = (
     ("supportable alpha", "obsolete supportable alpha wording"),
     ("please report", "feedback solicitation"),
     ("reports are welcome", "feedback solicitation"),
+    ("suggest a scoped improvement", "feedback solicitation"),
     ("issues #20–#23 are complete", "issue #20 release gate"),
 )
 
@@ -321,6 +333,12 @@ def find_guidance_policy_violations(relative: str, text: str) -> list[str]:
     for phrase, description in GUIDANCE_FORBIDDEN:
         if phrase in lowered:
             violations.append(f"{description} at {relative}")
+    if re.search(
+        r"\b(?:suggest|submit|share)\s+(?:a\s+)?(?:scoped\s+)?"
+        r"(?:feature|improvement|idea)",
+        lowered,
+    ):
+        violations.append(f"feedback solicitation at {relative}")
     if re.search(
         r"(?:must|required|require[sd]?).{0,32}(?:manual\s+)?publish",
         lowered,

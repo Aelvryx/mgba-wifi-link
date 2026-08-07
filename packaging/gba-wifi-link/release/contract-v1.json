@@ -1,0 +1,53 @@
+{
+  "archive_members": [
+    "BUILD-PROVENANCE.json",
+    "INSTALL-AND-USAGE.md",
+    "LICENSE",
+    "SHA256SUMS",
+    "SOURCE-AND-PROVENANCE.md",
+    "gba-link-continuous.gba",
+    "gba-link-test.gba",
+    "mgba_libretro_android.so"
+  ],
+  "archive_sha256_members": [
+    "BUILD-PROVENANCE.json",
+    "INSTALL-AND-USAGE.md",
+    "LICENSE",
+    "SOURCE-AND-PROVENANCE.md",
+    "gba-link-continuous.gba",
+    "gba-link-test.gba",
+    "mgba_libretro_android.so"
+  ],
+  "file_mode": "0644",
+  "public_assets": [
+    "mgba_libretro_android.so",
+    "gba-link-test.gba",
+    "gba-link-continuous.gba",
+    "INSTALL-AND-USAGE.md",
+    "mgba-gba-wifi-link-{tag}-android-arm64.zip",
+    "RELEASE-PROVENANCE.json",
+    "SHA256SUMS"
+  ],
+  "release_provenance_assets": [
+    "mgba_libretro_android.so",
+    "gba-link-test.gba",
+    "gba-link-continuous.gba",
+    "INSTALL-AND-USAGE.md",
+    "mgba-gba-wifi-link-{tag}-android-arm64.zip"
+  ],
+  "schema": 1,
+  "standalone_sha256_assets": [
+    "mgba_libretro_android.so",
+    "gba-link-test.gba",
+    "gba-link-continuous.gba",
+    "INSTALL-AND-USAGE.md",
+    "mgba-gba-wifi-link-{tag}-android-arm64.zip",
+    "RELEASE-PROVENANCE.json"
+  ],
+  "zip": {
+    "compression": "deflate",
+    "compression_level": 9,
+    "creator": "unix",
+    "member_order": "lexicographic"
+  }
+}

@@ -1,0 +1,10 @@
+# Install and usage
+
+Install `mgba_libretro_android.so` as a libretro core on an Android ARM64
+device. Load a compatible GBA Wi-Fi Link title with the core and use the
+standard frontend host/client flow for multiplayer.
+
+This release is built from `{{repository}}` tag `{{tag}}`.
+
+See `SOURCE-AND-PROVENANCE.md` and `RELEASE-PROVENANCE.json` for the recorded
+source and build identities.

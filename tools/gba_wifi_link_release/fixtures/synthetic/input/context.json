@@ -1,0 +1,23 @@
+{
+  "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "gates": [
+    {
+      "conclusion": "success",
+      "job_id": 102,
+      "name": "synthetic-binary-boundary",
+      "run_id": 12
+    },
+    {
+      "conclusion": "success",
+      "job_id": 101,
+      "name": "synthetic-test-suite",
+      "run_id": 11
+    }
+  ],
+  "repository": "Aelvryx/mgba-wifi-link",
+  "runner_image": "synthetic-runner-2026",
+  "source_date_epoch": 1700000000,
+  "tag": "v9.8.7",
+  "tag_object": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "toolchain": "synthetic-android-toolchain"
+}

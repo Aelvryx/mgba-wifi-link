@@ -1,0 +1,11 @@
+# Source and provenance
+
+This release was built from `{{repository}}`.
+
+- Tag: `{{tag}}`
+- Annotated tag object: `{{tag_object}}`
+- Peeled commit: `{{commit}}`
+- Source date epoch: `{{source_date_epoch}}`
+
+`BUILD-PROVENANCE.json` records the reproducible archive build. GitHub
+attestations are external to the archive and its checksum scope.

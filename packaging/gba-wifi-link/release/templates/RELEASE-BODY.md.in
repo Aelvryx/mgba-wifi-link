@@ -1,0 +1,11 @@
+# mGBA GBA Wi-Fi Link {{tag}}
+
+{{release_notes}}
+
+## Source and verification
+
+- Repository: `{{repository}}`
+- Annotated tag object: `{{tag_object}}`
+- Peeled commit: `{{commit}}`
+- Release provenance: `RELEASE-PROVENANCE.json`
+- Checksums: `SHA256SUMS`

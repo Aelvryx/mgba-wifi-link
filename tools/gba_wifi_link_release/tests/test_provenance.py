@@ -278,7 +278,10 @@ class ProvenanceTest(unittest.TestCase):
             context_path = root / "context.json"
             identities_path = root / "identities.json"
             context_path.write_text(json.dumps(_context_dict(admitted)), encoding="utf-8")
-            identities_path.write_text(json.dumps(identities), encoding="utf-8")
+            identities_path.write_text(
+                json.dumps(identities, sort_keys=True, separators=(",", ":")) + "\n",
+                encoding="utf-8",
+            )
             command = (
                 sys.executable, str(CLI), "bind-builds", "--context", str(context_path),
                 "--identities", str(identities_path),
@@ -296,6 +299,23 @@ class ProvenanceTest(unittest.TestCase):
                 [build["role"] for build in bound["build"]["actual_builds"]],
                 ["protected", "independent"],
             )
+
+            invalid_documents = (
+                json.dumps({"protected": identities["protected"]}, sort_keys=True),
+                json.dumps({**identities, "extra": {}}, sort_keys=True),
+                "{" +
+                f'"independent":{json.dumps(identities["independent"], sort_keys=True)},' +
+                f'"protected":{json.dumps(identities["protected"], sort_keys=True)},' +
+                f'"protected":{json.dumps(identities["protected"], sort_keys=True)}' +
+                "}",
+            )
+            for document in invalid_documents:
+                with self.subTest(document=document[:40]):
+                    identities_path.write_text(document + "\n", encoding="utf-8")
+                    invalid = subprocess.run(command, check=False, stdout=subprocess.PIPE,
+                                             stderr=subprocess.PIPE)
+                    self.assertEqual(invalid.returncode, 2)
+                    self.assertEqual(invalid.stderr, b"CLI_BUILD_IDENTITIES\n")
 
             identities["independent"]["compiler_sha256"] = "f" * 64  # type: ignore[index]
             identities_path.write_text(json.dumps(identities), encoding="utf-8")

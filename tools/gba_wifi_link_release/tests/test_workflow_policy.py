@@ -428,6 +428,44 @@ jobs:
             with self.subTest(mutation=mutate):
                 self.assert_release_rejected_after(mutate)
 
+    def test_release_workflow_rejects_post_verification_package_mutations(self):
+        mutations = (
+            lambda source: source.replace(
+                "          cmp --silent release-body-a.md release-body-b.md\n",
+                "          cmp --silent release-body-a.md release-body-b.md\n"
+                "          printf 'unreviewed body\\n' > release-body-a.md\n",
+                1,
+            ),
+            lambda source: source.replace(
+                "          python3 tools/gba-wifi-link-release.py verify --context context.json --output package-b/release\n",
+                "          python3 tools/gba-wifi-link-release.py verify --context context.json --output package-b/release\n"
+                "          printf 'corruption\\n' >> package-a/release/INSTALL-AND-USAGE.md\n",
+                1,
+            ),
+            lambda source: source.replace(
+                "          cp release-body-a.md publisher-input/release-body.md\n",
+                "          cp release-body-a.md publisher-input/release-body.md\n"
+                "          printf 'unreviewed body\\n' > publisher-input/release-body.md\n",
+                1,
+            ),
+            lambda source: source.replace(
+                "            xargs -0 sha256sum > publisher-input/release-tool/MANIFEST.sha256\n",
+                "            xargs -0 sha256sum > publisher-input/release-tool/MANIFEST.sha256\n"
+                "          printf 'forged manifest\\n' >> publisher-input/release-tool/MANIFEST.sha256\n",
+                1,
+            ),
+            lambda source: source.replace(
+                "      - name: Upload one immutable canonical publisher artifact\n",
+                "      - name: Substitute verified handoff\n"
+                "        run: cp release-body-b.md publisher-input/release-body.md\n\n"
+                "      - name: Upload one immutable canonical publisher artifact\n",
+                1,
+            ),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=mutate):
+                self.assert_release_rejected_after(mutate)
+
     def test_release_workflow_rejects_missing_gate_corruption_tag_or_conflict_guards(self):
         mutations = (
             lambda source: source.replace("        required = (", "        required = (\n            # missing gate", 1).replace(

@@ -29,6 +29,15 @@ _AT_FDCWD = -100
 _RENAME_NOREPLACE = 1
 
 
+def _identity_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    value: dict[str, object] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError("CLI_BUILD_IDENTITIES")
+        value[key] = item
+    return value
+
+
 def _rename_noreplace(source: Path, destination: Path) -> None:
     """Atomically install a sibling directory only when destination is absent."""
     try:
@@ -297,8 +306,11 @@ def main(argv: list[str] | None = None) -> int:
             verify_remote_tag(context, args.repository)
         elif args.command == "bind-builds":
             context = _context_from_dict(json.loads(Path(args.context).read_text(encoding="utf-8")))
-            raw = json.loads(Path(args.identities).read_text(encoding="utf-8"))
-            if not isinstance(raw, dict) or tuple(raw) != ("protected", "independent"):
+            raw = json.loads(
+                Path(args.identities).read_text(encoding="utf-8"),
+                object_pairs_hook=_identity_object,
+            )
+            if not isinstance(raw, dict) or set(raw) != {"protected", "independent"}:
                 raise ValueError("CLI_BUILD_IDENTITIES")
             identities = tuple(_actual_build_from_dict(raw[role])
                                for role in ("protected", "independent"))

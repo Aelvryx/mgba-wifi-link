@@ -373,6 +373,143 @@ def _release_required(text: str, fragment: str, category: str) -> None:
         raise WorkflowPolicyError(category)
 
 
+def _expected_package(action_pins: dict[str, str], artifact_name: str) -> str:
+    """Return the only package verification and immutable handoff shape admitted."""
+    template = r"""  package:
+    name: Build and verify deterministic release twice
+    needs: [inspect-tag, compare-builds]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out admitted packaging source
+        uses: actions/checkout@ACTION_CHECKOUT_SHA # v6
+        with:
+          clean: true
+          fetch-depth: 0
+          ref: ${{ needs.inspect-tag.outputs.commit }}
+
+      - name: Download admitted context
+        uses: actions/download-artifact@ACTION_DOWNLOAD_SHA # v5
+        with:
+          name: gba-wifi-link-release-context
+          path: admitted
+
+      - name: Download matched canonical core
+        uses: actions/download-artifact@ACTION_DOWNLOAD_SHA # v5
+        with:
+          name: gba-wifi-link-release-matched-core
+          path: matched-build
+
+      - name: Build compare and verify two clean packages
+        env:
+          EXPECTED_TAG: ${{ needs.inspect-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          python3 tools/gba-wifi-link-release.py bind-builds \
+            --context admitted/release-context.json \
+            --identities matched-build/BUILD-IDENTITIES.json \
+            > context.json
+          notes="packaging/gba-wifi-link/releases/${EXPECTED_TAG}/RELEASE-NOTES.md"
+          mkdir package-a package-b
+          python3 tools/gba-wifi-link-release.py build \
+            --context context.json --output package-a/release \
+            --core matched-build/mgba_libretro_android.so \
+            --test-fixture tools/gba-link-test-rom/fixtures/gba-link-test.gba \
+            --continuous-fixture tools/gba-link-test-rom/fixtures/gba-link-continuous.gba \
+            --licence LICENSE \
+            --install-template packaging/gba-wifi-link/release/templates/INSTALL-AND-USAGE.md.in \
+            --source-template packaging/gba-wifi-link/release/templates/SOURCE-AND-PROVENANCE.md.in \
+            --notes "$notes"
+          python3 tools/gba-wifi-link-release.py build \
+            --context context.json --output package-b/release \
+            --core matched-build/mgba_libretro_android.so \
+            --test-fixture tools/gba-link-test-rom/fixtures/gba-link-test.gba \
+            --continuous-fixture tools/gba-link-test-rom/fixtures/gba-link-continuous.gba \
+            --licence LICENSE \
+            --install-template packaging/gba-wifi-link/release/templates/INSTALL-AND-USAGE.md.in \
+            --source-template packaging/gba-wifi-link/release/templates/SOURCE-AND-PROVENANCE.md.in \
+            --notes "$notes"
+          diff --recursive --no-dereference package-a/release package-b/release
+          python3 tools/gba-wifi-link-release.py verify --context context.json --output package-a/release
+          python3 tools/gba-wifi-link-release.py verify --context context.json --output package-b/release
+          python3 tools/gba-wifi-link-release.py render-body \
+            --context context.json --notes "$notes" > release-body-a.md
+          python3 tools/gba-wifi-link-release.py render-body \
+            --context context.json --notes "$notes" > release-body-b.md
+          cmp --silent release-body-a.md release-body-b.md
+
+      - name: Assemble immutable canonical publisher input
+        env:
+          EXPECTED_TAG: ${{ needs.inspect-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          notes="packaging/gba-wifi-link/releases/${EXPECTED_TAG}/RELEASE-NOTES.md"
+          mkdir -p publisher-input/release-tool/tools/gba_wifi_link_release
+          cp -R package-a/release publisher-input/release
+          cp context.json publisher-input/release-context.json
+          cp release-body-a.md publisher-input/release-body.md
+          cp "$notes" publisher-input/release-notes.md
+          cp tools/gba-wifi-link-release.py publisher-input/release-tool/tools/gba-wifi-link-release.py
+          for module in __init__ admission cli github model packager privacy provenance publisher render text_policy verifier; do
+            cp "tools/gba_wifi_link_release/${module}.py" \
+              "publisher-input/release-tool/tools/gba_wifi_link_release/${module}.py"
+          done
+          mkdir -p publisher-input/release-tool/packaging/gba-wifi-link/release/templates
+          cp packaging/gba-wifi-link/release/contract-v1.json \
+            publisher-input/release-tool/packaging/gba-wifi-link/release/contract-v1.json
+          cp packaging/gba-wifi-link/release/templates/INSTALL-AND-USAGE.md.in \
+            publisher-input/release-tool/packaging/gba-wifi-link/release/templates/INSTALL-AND-USAGE.md.in
+          cp packaging/gba-wifi-link/release/templates/SOURCE-AND-PROVENANCE.md.in \
+            publisher-input/release-tool/packaging/gba-wifi-link/release/templates/SOURCE-AND-PROVENANCE.md.in
+          cp LICENSE publisher-input/release-tool/LICENSE
+          find publisher-input/release-tool -type f ! -name MANIFEST.sha256 -print0 | sort -z | \
+            xargs -0 sha256sum > publisher-input/release-tool/MANIFEST.sha256
+          find publisher-input -type f ! -name HANDOFF.sha256 -print0 | sort -z | \
+            xargs -0 sha256sum > publisher-input/HANDOFF.sha256
+
+      - name: Final read-only verification of immutable publisher input
+        env:
+          EXPECTED_TAG: ${{ needs.inspect-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          notes="packaging/gba-wifi-link/releases/${EXPECTED_TAG}/RELEASE-NOTES.md"
+          test "$(find publisher-input -mindepth 1 -maxdepth 1 -printf '%f\n' | sort | tr '\n' ' ')" = \
+            "HANDOFF.sha256 release release-body.md release-context.json release-notes.md release-tool "
+          diff --unified \
+            <(cut -c67- publisher-input/HANDOFF.sha256 | sort) \
+            <(find publisher-input -type f ! -name HANDOFF.sha256 | sort)
+          sha256sum --check publisher-input/HANDOFF.sha256
+          diff --unified \
+            <(cut -c67- publisher-input/release-tool/MANIFEST.sha256 | sort) \
+            <(find publisher-input/release-tool -type f ! -name MANIFEST.sha256 | sort)
+          sha256sum --check publisher-input/release-tool/MANIFEST.sha256
+          cmp --silent context.json publisher-input/release-context.json
+          cmp --silent "$notes" publisher-input/release-notes.md
+          diff --recursive --no-dereference package-a/release publisher-input/release
+          cmp --silent release-body-a.md publisher-input/release-body.md
+          python3 publisher-input/release-tool/tools/gba-wifi-link-release.py verify \
+            --context publisher-input/release-context.json \
+            --output publisher-input/release
+          cmp --silent publisher-input/release-body.md \
+            <(python3 publisher-input/release-tool/tools/gba-wifi-link-release.py render-body \
+              --context publisher-input/release-context.json \
+              --notes publisher-input/release-notes.md)
+
+      - name: Upload one immutable canonical publisher artifact
+        uses: actions/upload-artifact@ACTION_UPLOAD_SHA # v4
+        with:
+          name: CANONICAL_ARTIFACT_NAME
+          path: publisher-input
+          if-no-files-found: error
+          retention-days: 7
+
+"""
+    return (template
+            .replace("ACTION_CHECKOUT_SHA", action_pins["actions/checkout"])
+            .replace("ACTION_DOWNLOAD_SHA", action_pins["actions/download-artifact"])
+            .replace("ACTION_UPLOAD_SHA", action_pins["actions/upload-artifact"])
+            .replace("CANONICAL_ARTIFACT_NAME", artifact_name))
+
+
 def _expected_publisher(action_pins: dict[str, str], artifact_name: str) -> str:
     """Return the only privileged job shape admitted by the release policy."""
     download = action_pins["actions/download-artifact"]
@@ -396,7 +533,11 @@ def _expected_publisher(action_pins: dict[str, str], artifact_name: str) -> str:
         run: |
           set -euo pipefail
           test "$(find publisher-input -mindepth 1 -maxdepth 1 -printf '%f\\n' | sort | tr '\\n' ' ')" = \\
-            "release release-body.md release-context.json release-tool "
+            "HANDOFF.sha256 release release-body.md release-context.json release-notes.md release-tool "
+          diff --unified \\
+            <(cut -c67- publisher-input/HANDOFF.sha256 | sort) \\
+            <(find publisher-input -type f ! -name HANDOFF.sha256 | sort)
+          sha256sum --check publisher-input/HANDOFF.sha256
           diff --unified \\
             <(cut -c67- publisher-input/release-tool/MANIFEST.sha256 | sort) \\
             <(find publisher-input/release-tool -type f ! -name MANIFEST.sha256 | sort)
@@ -534,7 +675,8 @@ def validate_release_workflow_policy(repo: Path) -> None:
     artifact_name = contract.get("artifact_name")
     entries = contract.get("artifact_entries")
     if artifact_name != "gba-wifi-link-release-canonical" or entries != [
-        "release", "release-body.md", "release-context.json", "release-tool",
+        "HANDOFF.sha256", "release", "release-body.md", "release-context.json",
+        "release-notes.md", "release-tool",
     ]:
         raise WorkflowPolicyError("RELEASE_WORKFLOW_ARTIFACT")
     canonical_upload = (
@@ -650,9 +792,13 @@ def validate_release_workflow_policy(repo: Path) -> None:
     if any(fragment not in text for fragment in failure_guards):
         raise WorkflowPolicyError("RELEASE_WORKFLOW_FAILURE_GUARD")
 
+    package_start = text.find("\n  package:\n")
     publisher_start = text.find("\n  publish:\n")
-    if publisher_start < 0:
+    if package_start < 0 or publisher_start < 0 or package_start >= publisher_start:
         raise WorkflowPolicyError("RELEASE_WORKFLOW_PUBLISHER")
+    package = text[package_start + 1:publisher_start + 1]
+    if package != _expected_package(action_pins, artifact_name):
+        raise WorkflowPolicyError("RELEASE_WORKFLOW_PACKAGE_ALLOWLIST")
     publisher = text[publisher_start:]
     if publisher[1:] != _expected_publisher(action_pins, artifact_name):
         raise WorkflowPolicyError("RELEASE_WORKFLOW_PUBLISHER_ALLOWLIST")

@@ -248,6 +248,20 @@ jobs:
           bash -n tools/four-swords-discovery/android-qualification.sh
           python3 tools/four-swords-discovery/test-qualification-helper.py
 
+      - name: Validate automated release tooling
+        run: |
+          python3 -m unittest discover -s tools/gba_wifi_link_release/tests -p 'test_*.py' -v
+          release_check_dir="$(mktemp -d)"
+          trap 'rm -rf "$release_check_dir"' EXIT
+          python3 tools/gba-wifi-link-release.py build --fixture synthetic \
+            --output "$release_check_dir/first"
+          python3 tools/gba-wifi-link-release.py build --fixture synthetic \
+            --output "$release_check_dir/second"
+          diff --recursive --no-dereference "$release_check_dir/first" \
+            "$release_check_dir/second"
+          cmp "$release_check_dir/first/mgba-gba-wifi-link-v9.8.7-android-arm64.zip" \
+            "$release_check_dir/second/mgba-gba-wifi-link-v9.8.7-android-arm64.zip"
+
   android-arm64:
     name: Android arm64 libretro build
     runs-on: ubuntu-24.04

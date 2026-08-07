@@ -150,6 +150,31 @@ def _upstream_exception(text: str) -> dict[str, object]:
     }
 
 
+def _validate_release_tooling_fixture(text: str) -> None:
+    """Require the fixture job to exercise release tooling, not just import it.
+
+    The protected workflow runs this small synthetic package twice in separate
+    directories.  Keeping that check in the fixture job makes the reproducible
+    public-package contract a protected check without changing any emulator
+    build or test semantics captured by the historical CI baseline.
+    """
+    try:
+        fixture_area = text[text.index("  fixture:\n"):text.index("  android-arm64:\n")]
+    except ValueError as error:
+        raise WorkflowPolicyError("WORKFLOW_RELEASE_TOOLING") from error
+    commands = (
+        "python3 -m unittest discover -s tools/gba_wifi_link_release/tests -p 'test_*.py' -v",
+        "release_check_dir=\"$(mktemp -d)\"",
+        "python3 tools/gba-wifi-link-release.py build --fixture synthetic --output \"$release_check_dir/first\"",
+        "python3 tools/gba-wifi-link-release.py build --fixture synthetic --output \"$release_check_dir/second\"",
+        "diff --recursive --no-dereference \"$release_check_dir/first\" \"$release_check_dir/second\"",
+        "cmp \"$release_check_dir/first/mgba-gba-wifi-link-v9.8.7-android-arm64.zip\" \"$release_check_dir/second/mgba-gba-wifi-link-v9.8.7-android-arm64.zip\"",
+    )
+    compact = _compact(fixture_area)
+    for command in commands:
+        _required(compact, command)
+
+
 def normalize_workflow(repo: Path) -> dict[str, object]:
     """Extract every frozen CI behavior from the reviewed workflow source."""
     text, _ = _read(repo)
@@ -355,6 +380,7 @@ def validate_workflow_policy(repo: Path) -> None:
     if actual != history["ci_baseline"]:
         raise WorkflowPolicyError("WORKFLOW_BASELINE")
     _validate_reusable_contract(text, history)
+    _validate_release_tooling_fixture(text)
 
 
 def _read_release_workflow(repo: Path) -> tuple[str, dict[str, object]]:

@@ -63,6 +63,24 @@ class WorkflowPolicyTest(unittest.TestCase):
     def test_protected_workflow_satisfies_the_reusable_read_only_contract(self):
         validate_workflow_policy(ROOT)
 
+    def test_fixture_job_requires_release_tooling_and_two_clean_package_builds(self):
+        mutations = (
+            lambda source: source.replace(
+                "python3 -m unittest discover -s tools/gba_wifi_link_release/tests -p 'test_*.py' -v",
+                "python3 -m unittest discover -s missing-release-tests -p 'test_*.py' -v",
+                1,
+            ),
+            lambda source: source.replace(
+                "diff --recursive --no-dereference \"$release_check_dir/first\" \\\n"
+                "            \"$release_check_dir/second\"",
+                "true # skip clean-directory release comparison",
+                1,
+            ),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=mutate):
+                self.assert_rejected_after(mutate)
+
     def test_yaml_lexer_skips_block_scalars_and_preserves_github_expressions(self):
         source = """name: ${{ github.workflow }}
 jobs:

@@ -144,16 +144,16 @@
 
 ## 7. Establish immutable tag policy and current project guidance
 
-- [ ] 7.1 Define the exact GitHub ruleset JSON for canonical `v*` tags, allowing
+- [x] 7.1 Define the exact GitHub ruleset JSON for canonical `v*` tags, allowing
   deliberate creation while denying force-update and deletion with the smallest
   necessary bypass set.
-- [ ] 7.2 Add a read-only validator and mocked tests for ruleset name, repository,
+- [x] 7.2 Add a read-only validator and mocked tests for ruleset name, repository,
   target pattern, enforcement state, update/deletion restrictions, bypass actors,
   and unexpected policy drift.
-- [ ] 7.3 Update maintainer instructions so preparing reviewed notes and pushing one
+- [x] 7.3 Update maintainer instructions so preparing reviewed notes and pushing one
   annotated approved tag is the entire release action; document automatic failure,
   rerun, immutable-correction, and rollback behavior.
-- [ ] 7.4 Add version-neutral installation/provenance templates and a synthetic
+- [x] 7.4 Add version-neutral installation/provenance templates and a synthetic
   example release-notes input; keep `packaging/gba-wifi-link/v0.2.0` unchanged and
   explicitly historical.
 - [ ] 7.5 Update README and public packaging language to describe fully automated

@@ -3,8 +3,8 @@ name: GBA Wi-Fi Link
 on:
   workflow_call:
     inputs:
-      source_ref:
-        description: Exact peeled source commit supplied by a reusable caller
+      source_commit:
+        description: Exact 40-character peeled source commit supplied by a reusable caller
         required: false
         type: string
   push:
@@ -25,10 +25,23 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
+      - name: Validate exact source commit
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ inputs.source_commit || github.sha }}
+        run: |
+          [[ "$EXPECTED_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ inputs.source_ref || github.sha }}
+          ref: ${{ inputs.source_commit || github.sha }}
+
+      - name: Verify checked out source commit
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ inputs.source_commit || github.sha }}
+        run: |
+          [[ "$EXPECTED_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_COMMIT"
 
       - name: Install build dependencies
         run: |
@@ -89,10 +102,23 @@ jobs:
             sanitizers: thread
 
     steps:
+      - name: Validate exact source commit
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ inputs.source_commit || github.sha }}
+        run: |
+          [[ "$EXPECTED_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ inputs.source_ref || github.sha }}
+          ref: ${{ inputs.source_commit || github.sha }}
+
+      - name: Verify checked out source commit
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ inputs.source_commit || github.sha }}
+        run: |
+          [[ "$EXPECTED_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_COMMIT"
 
       - name: Install build dependencies
         run: |
@@ -162,10 +188,23 @@ jobs:
       ARM_TOOLCHAIN_SHA256: 597893282ac8c6ab1a4073977f2362990184599643b4c5ee34870a8215783a16
 
     steps:
+      - name: Validate exact source commit
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ inputs.source_commit || github.sha }}
+        run: |
+          [[ "$EXPECTED_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ inputs.source_ref || github.sha }}
+          ref: ${{ inputs.source_commit || github.sha }}
+
+      - name: Verify checked out source commit
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ inputs.source_commit || github.sha }}
+        run: |
+          [[ "$EXPECTED_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_COMMIT"
 
       - name: Install boundary-audit build dependencies
         run: |
@@ -216,10 +255,23 @@ jobs:
       ANDROID_NDK_VERSION: 27.2.12479018
 
     steps:
+      - name: Validate exact source commit
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ inputs.source_commit || github.sha }}
+        run: |
+          [[ "$EXPECTED_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ inputs.source_ref || github.sha }}
+          ref: ${{ inputs.source_commit || github.sha }}
+
+      - name: Verify checked out source commit
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ inputs.source_commit || github.sha }}
+        run: |
+          [[ "$EXPECTED_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_COMMIT"
 
       - name: Install build tools and pinned NDK
         run: |
@@ -259,15 +311,24 @@ jobs:
 
       - name: Write canonical Android build metadata
         env:
-          SOURCE_REF: ${{ inputs.source_ref || github.sha }}
+          EXPECTED_SOURCE_COMMIT: ${{ inputs.source_commit || github.sha }}
         run: |
           python3 - <<'PY'
           import hashlib
           import json
           import os
           from pathlib import Path
+          import subprocess
 
           core = Path("build-ci-android-arm64/mgba_libretro.so")
+          source_commit = subprocess.run(
+              ("git", "rev-parse", "HEAD"),
+              check=True,
+              stdout=subprocess.PIPE,
+              text=True,
+          ).stdout.strip()
+          if source_commit != os.environ["EXPECTED_SOURCE_COMMIT"]:
+              raise SystemExit("source commit mismatch")
           with core.open("rb") as core_file:
               core_sha256 = hashlib.file_digest(core_file, "sha256").hexdigest()
           metadata = {
@@ -290,7 +351,7 @@ jobs:
               },
               "ndk_version": "27.2.12479018",
               "schema": 1,
-              "source_ref": os.environ["SOURCE_REF"],
+              "source_commit": source_commit,
           }
           (core.parent / "BUILD-METADATA.json").write_text(
               json.dumps(metadata, sort_keys=True, separators=(",", ":")) + "\n",

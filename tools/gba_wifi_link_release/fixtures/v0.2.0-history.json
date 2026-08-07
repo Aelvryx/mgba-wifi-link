@@ -148,8 +148,13 @@
     ],
     "triggers": {"pull_request": true, "push_branches": ["master"]},
     "upstream_exception": {
-      "failure": "stagedCrc32",
-      "test": "util-hash"
+      "excluded_test_regex": "^util-hash$",
+      "failure_marker": "stagedCrc32",
+      "failure_summary": "0% tests passed, 1 tests failed out of 1",
+      "pinned_command": "ctest --test-dir build-ci-complete --output-on-failure --tests-regex '^util-hash$' 2>&1",
+      "pinned_test_regex": "^util-hash$",
+      "requires_nonzero_status": true,
+      "shell": "bash"
     }
   },
   "archive_members": [

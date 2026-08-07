@@ -14,6 +14,7 @@ _WORKFLOW = Path(".github/workflows/gba-wifi-link-ci.yml")
 _HISTORY = Path("tools/gba_wifi_link_release/fixtures/v0.2.0-history.json")
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 _USES = re.compile(r"^\s*uses:\s*([^\s#]+)(?:\s+#.*)?\s*$", re.MULTILINE)
+_SOURCE_COMMIT = "${{ inputs.source_commit || github.sha }}"
 
 
 class WorkflowPolicyError(ValueError):
@@ -52,6 +53,46 @@ def _cmake_flags(block: str) -> list[str]:
 def _required(text: str, fragment: str) -> None:
     if fragment not in text:
         raise WorkflowPolicyError("WORKFLOW_BASELINE")
+
+
+def _upstream_exception(text: str) -> dict[str, object]:
+    """Extract the exclusion and the separately asserted upstream failure."""
+    excluded = _step(text, "Run all tests except pinned upstream failure")
+    exclusion = re.search(r"--exclude-regex '([^']+)'", excluded)
+    try:
+        pinned = _step(text, "Confirm pinned upstream util-hash baseline")
+    except WorkflowPolicyError as error:
+        raise WorkflowPolicyError("WORKFLOW_UPSTREAM_EXCEPTION") from error
+    compact = _compact(pinned)
+    command = re.search(r'output="\$\(([^)]*)\)"', compact)
+    marker = re.search(r"grep --fixed-strings '([^']+)' <<<\"\$output\"", compact)
+    summary = re.findall(r"grep --fixed-strings '([^']+)'", compact)
+    pinned_regex = (
+        re.search(r"--tests-regex '([^']+)'", command.group(1))
+        if command is not None else None
+    )
+    if (
+        exclusion is None
+        or command is None
+        or marker is None
+        or len(summary) != 2
+        or pinned_regex is None
+        or "shell: bash" not in pinned
+        or "set +e" not in pinned
+        or "status=$?" not in pinned
+        or "set -e" not in pinned
+        or 'test "$status" -ne 0' not in pinned
+    ):
+        raise WorkflowPolicyError("WORKFLOW_UPSTREAM_EXCEPTION")
+    return {
+        "excluded_test_regex": exclusion.group(1),
+        "failure_marker": marker.group(1),
+        "failure_summary": summary[1],
+        "pinned_command": command.group(1),
+        "pinned_test_regex": pinned_regex.group(1),
+        "requires_nonzero_status": True,
+        "shell": "bash",
+    }
 
 
 def normalize_workflow(repo: Path) -> dict[str, object]:
@@ -147,7 +188,7 @@ def normalize_workflow(repo: Path) -> dict[str, object]:
         "sanitizer_environment": sanitizer_environment,
         "sanitizer_matrix": sanitizer_matrix,
         "triggers": {"pull_request": True, "push_branches": ["master"]},
-        "upstream_exception": {"failure": "stagedCrc32", "test": "util-hash"},
+        "upstream_exception": _upstream_exception(text),
     }
 
 
@@ -155,16 +196,19 @@ def _validate_reusable_contract(text: str, history: dict[str, object]) -> None:
     workflow_call = (
         "  workflow_call:\n"
         "    inputs:\n"
-        "      source_ref:\n"
-        "        description: Exact peeled source commit supplied by a reusable caller\n"
+        "      source_commit:\n"
+        "        description: Exact 40-character peeled source commit supplied by a reusable caller\n"
         "        required: false\n"
         "        type: string"
     )
-    if workflow_call not in text:
+    start = text.find("  workflow_call:\n")
+    end = text.find("\n  push:\n", start)
+    if start < 0 or end < 0 or text[start:end] != workflow_call:
         raise WorkflowPolicyError("WORKFLOW_CALL")
     if re.search(r"^      (?:command|build_flags|runner|publish)[A-Za-z_-]*:", text, re.MULTILINE):
         raise WorkflowPolicyError("WORKFLOW_CALL")
-    if "permissions:\n  contents: read" not in text or re.search(
+    permissions = re.search(r"^permissions:\n((?:  [^\n]+\n)+)", text, re.MULTILINE)
+    if permissions is None or permissions.group(1) != "  contents: read\n" or re.search(
         r"^    permissions:", text, re.MULTILINE,
     ):
         raise WorkflowPolicyError("WORKFLOW_PERMISSION")
@@ -184,8 +228,27 @@ def _validate_reusable_contract(text: str, history: dict[str, object]) -> None:
         raise WorkflowPolicyError("WORKFLOW_ACTION_PIN")
     if text.count(expected["actions/checkout"]) != 4:
         raise WorkflowPolicyError("WORKFLOW_ACTION_PIN")
-    if f"ref: ${{{{ inputs.source_ref || github.sha }}}}" not in text:
-        raise WorkflowPolicyError("WORKFLOW_SOURCE_REF")
+    checkout_and_proof = (
+        "      - name: Validate exact source commit\n"
+        "        env:\n"
+        f"          EXPECTED_SOURCE_COMMIT: {_SOURCE_COMMIT}\n"
+        "        run: |\n"
+        "          [[ \"$EXPECTED_SOURCE_COMMIT\" =~ ^[0-9a-f]{40}$ ]]\n"
+        "\n"
+        "      - name: Check out source\n"
+        f"        uses: {expected['actions/checkout']} # v6\n"
+        "        with:\n"
+        f"          ref: {_SOURCE_COMMIT}\n"
+        "\n"
+        "      - name: Verify checked out source commit\n"
+        "        env:\n"
+        f"          EXPECTED_SOURCE_COMMIT: {_SOURCE_COMMIT}\n"
+        "        run: |\n"
+        "          [[ \"$EXPECTED_SOURCE_COMMIT\" =~ ^[0-9a-f]{40}$ ]]\n"
+        "          test \"$(git rev-parse HEAD)\" = \"$EXPECTED_SOURCE_COMMIT\"\n"
+    )
+    if text.count(checkout_and_proof) != 4:
+        raise WorkflowPolicyError("WORKFLOW_SOURCE_COMMIT")
 
     artifact = (
         "      - name: Upload inspected Android ARM64 release inputs\n"
@@ -205,6 +268,15 @@ def _validate_reusable_contract(text: str, history: dict[str, object]) -> None:
     upload = text.find("- name: Upload inspected Android ARM64 release inputs")
     if boundary < 0 or metadata < boundary or upload < metadata:
         raise WorkflowPolicyError("WORKFLOW_ARTIFACT")
+    metadata_step = _step(text, "Write canonical Android build metadata")
+    if (
+        f"EXPECTED_SOURCE_COMMIT: {_SOURCE_COMMIT}" not in metadata_step
+        or 'source_commit = subprocess.run(' not in metadata_step
+        or '("git", "rev-parse", "HEAD")' not in metadata_step
+        or 'source_commit != os.environ["EXPECTED_SOURCE_COMMIT"]' not in metadata_step
+        or '"source_commit": source_commit' not in metadata_step
+    ):
+        raise WorkflowPolicyError("WORKFLOW_SOURCE_COMMIT")
 
 
 def validate_workflow_policy(repo: Path) -> None:

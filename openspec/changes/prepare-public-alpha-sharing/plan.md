@@ -705,8 +705,8 @@ Git, GitHub CLI, OpenSpec, existing protected GitHub Actions.
 **Interfaces:**
 - Consumes: corrected verified public assets, recorded proportionate onboarding
   policy, and reviewed PR.
-- Produces: authoritative distribution capability, archived change, protected
-  master merge, and an honest public share boundary.
+- Produces: an implementation-complete readiness record and a clean handoff to
+  the schema-controlled verification, retrospective, archive, and merge cycle.
 
 - [ ] **Step 1: Check every completed task against evidence**
 
@@ -729,28 +729,24 @@ Git, GitHub CLI, OpenSpec, existing protected GitHub Actions.
   Expected: strict validation, boundary audit, production-tree proof, and all
   protected checks pass. No commercial replay is added.
 
-- [ ] **Step 3: Sync the new capability**
+- [ ] **Step 3: Confirm the sharing boundary and hand off**
 
-  Invoke `$openspec-sync-specs` for `prepare-public-alpha-sharing` and verify
-  `openspec/specs/public-alpha-distribution/spec.md` contains every approved
-  requirement and scenario.
+  Confirm the readiness record authorizes linking the repository or `v0.2.0`
+  release as an experimental Android ARM64 two-player Multi-Pak alpha while
+  retaining the trusted-LAN, same-ROM, unsupported-feature, privacy, and
+  upstream-independence wording. Do not begin a broad troubleshooting-report
+  campaign until issue #20 supplies the separately reviewed sanitized
+  diagnostic workflow.
 
-- [ ] **Step 4: Archive the completed change**
+- [ ] **Step 4: Commit the implementation-complete handoff**
 
-  Invoke `$openspec-archive-change` for `prepare-public-alpha-sharing`, rerun
-  strict OpenSpec validation, commit the synced/archive result, and push it to
-  the existing PR.
+  Mark coarse tasks 7.1 through 7.4 complete, commit the readiness/task state,
+  and push to the existing draft PR. The schema then owns, in order:
 
-- [ ] **Step 5: Complete review and merge through protected master**
+  1. `openspec-verify-change`;
+  2. the retrospective artifact;
+  3. capability sync and archive;
+  4. final protected checks;
+  5. PR readiness and protected merge.
 
-  Mark the PR ready only after the final checks pass, merge through the required
-  protected path, and verify `origin/master` contains the authoritative spec,
-  tracked packaging inputs, and readiness evidence.
-
-- [ ] **Step 6: Share with the approved audience**
-
-  Link the repository or v0.2.0 release as an experimental Android ARM64
-  two-player Multi-Pak alpha. Retain the trusted-LAN, same-ROM, unsupported
-  feature, privacy, and upstream-independence wording. Do not begin a broad
-  troubleshooting-report campaign until issue #20 supplies the separately
-  reviewed sanitized diagnostic workflow.
+  The PR remains draft until that complete sequence finishes.

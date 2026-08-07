@@ -114,3 +114,25 @@ redistributable fixture ROMs, corrected documentation, the MPL-2.0 licence,
 and checksums.  Do not share commercial ROMs, BIOS files, copyrighted extracts,
 private save data, endpoint logs, addresses, controller-input histories, or
 private qualification evidence.
+
+## Implementation-complete handoff
+
+On 2026-08-07, a clean authenticated download of every public v0.2.0 asset
+passed the standalone manifest, and the extracted bundle passed its internal
+manifest. The release remains an experimental Android ARM64 alpha for exactly
+two players using GBA Multi-Pak over a trusted local LAN or direct Android
+hotspot with the same effective ROM bytes on both devices. The published guide
+retains the unsupported-feature, privacy, and independent-fork limitations.
+
+The separate cold-reader rehearsal is waived under the proportionate
+onboarding policy above; limited alpha users supply the real documentation
+signal through the normal issue path. Linking the repository or prerelease to
+friends, enthusiasts, and technically comfortable testers is therefore open.
+This is not a broad troubleshooting campaign: active solicitation of reports
+from a broad unfamiliar audience remains gated on the sanitized diagnostic
+workflow tracked in issue #20.
+
+This record hands the implemented change to the schema-controlled verification,
+retrospective, capability-sync/archive, final-check, PR-readiness, and protected
+merge sequence. No additional device soak or commercial-game run is required
+for this documentation-only correction.

@@ -95,15 +95,16 @@
 
 ## 7. Close the public-alpha readiness change
 
-- [ ] 7.1 Update the readiness record with the clean remote verification and
+- [x] 7.1 Update the readiness record with the clean remote verification and
   proportionate onboarding-policy decision, and state that limited
   experimental-alpha sharing is open while broad report solicitation still
   depends on issue #20.
-- [ ] 7.2 Confirm the final release wording retains Android ARM64, exactly two
+- [x] 7.2 Confirm the final release wording retains Android ARM64, exactly two
   players, Multi-Pak, trusted local network, same effective ROM, unsupported
   features, privacy, and independent-fork limitations.
-- [ ] 7.3 Complete final review and protected checks on the immutable repository
-  head without manufacturing another device soak or commercial-game run.
-- [ ] 7.4 Sync the `public-alpha-distribution` capability, archive the OpenSpec
-  change, merge through protected `master`, and share the repository/release
-  link only after the corrected public downloads still verify.
+- [x] 7.3 Complete implementation review and protected checks without
+  manufacturing another device soak or commercial-game run; rerun the required
+  checks after the later verification/archive commits.
+- [x] 7.4 Hand the fully implemented change to the schema-controlled sequence:
+  verification, retrospective, capability sync/archive, final protected checks,
+  PR readiness, protected merge, and limited sharing.

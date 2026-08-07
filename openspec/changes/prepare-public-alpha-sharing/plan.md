@@ -454,7 +454,7 @@ Git, GitHub CLI, OpenSpec, existing protected GitHub Actions.
   Run:
 
   ```bash
-  python3 tools/audit-gba-wifi-link-boundary.py --source-root .
+  python3 tools/audit-gba-wifi-link-boundary.py
   if rg -n -i \
     'Thor|Odin|AYN|adb-[[:alnum:]]|192\.168\.|10\.[0-9]+\.[0-9]+\.[0-9]+|/sdcard/Android/data/|/var/home/' \
     packaging/gba-wifi-link/v0.2.0 docs/public-alpha-readiness.md; then
@@ -739,7 +739,7 @@ Git, GitHub CLI, OpenSpec, existing protected GitHub Actions.
 
   ```bash
   openspec validate prepare-public-alpha-sharing --strict
-  python3 tools/audit-gba-wifi-link-boundary.py --source-root .
+  python3 tools/audit-gba-wifi-link-boundary.py
   git diff --exit-code master...HEAD -- src include CMakeLists.txt
   gh pr checks --repo Aelvryx/mgba-wifi-link --watch
   ```

@@ -294,3 +294,33 @@ class AdmissionTest(unittest.TestCase):
                 commit = git(repo, "rev-parse", "v9.8.7^{commit}")
                 with self.assertRaisesRegex(AdmissionError, reason):
                     admit_release(repo, "v9.8.7", evidence(repo, commit))
+
+    def test_notes_line_classifier_rejects_short_generated_and_private_bypasses(self):
+        for notes in (
+            "The release improves connection reliability and documents setup clearly.\n",
+            "Read the reviewed guide at https://github.com/Aelvryx/mgba-wifi-link/releases.\n",
+        ):
+            with self.subTest(allowed=notes):
+                repo = make_repo(notes=notes)
+                self.addCleanupRepo(repo)
+                commit = git(repo, "rev-parse", "v9.8.7^{commit}")
+                self.assertIsNotNone(admit_release(repo, "v9.8.7", evidence(repo, commit)))
+
+        rejected = (
+            ("## Build\n", "NOTES_GENERATED_FIELD"),
+            ("## Workflow\n", "NOTES_GENERATED_FIELD"),
+            ("## Provenance\n", "NOTES_GENERATED_FIELD"),
+            ("## Artifacts\n", "NOTES_GENERATED_FIELD"),
+            ("ROM: Pokémon Emerald\n", "NOTES_PRIVACY_ROM_BIOS"),
+            ("Save file attached\n", "NOTES_PRIVACY_SAVE"),
+            ("RetroArch log attached\n", "NOTES_PRIVACY_LOG"),
+            ("Phone serial 123\n", "NOTES_PRIVACY_DEVICE"),
+            ("access token abc\n", "NOTES_PRIVACY_SECRET"),
+        )
+        for notes, reason in rejected:
+            with self.subTest(reason=reason):
+                repo = make_repo(notes=notes)
+                self.addCleanupRepo(repo)
+                commit = git(repo, "rev-parse", "v9.8.7^{commit}")
+                with self.assertRaisesRegex(AdmissionError, f"^{reason}$"):
+                    admit_release(repo, "v9.8.7", evidence(repo, commit))

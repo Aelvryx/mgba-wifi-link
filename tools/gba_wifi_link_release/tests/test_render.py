@@ -94,3 +94,28 @@ class RenderTest(unittest.TestCase):
             with self.subTest(reason=reason):
                 with self.assertRaisesRegex(AdmissionError, reason):
                     render_release_body(self.admitted_context(notes), notes)
+
+    def test_render_line_classifier_rejects_short_generated_and_private_bypasses(self):
+        for notes in (
+            "The release improves connection reliability and documents setup clearly.\n",
+            "Read the reviewed guide at https://github.com/Aelvryx/mgba-wifi-link/releases.\n",
+        ):
+            with self.subTest(allowed=notes):
+                self.assertIn(
+                    notes.encode("utf-8"),
+                    render_release_body(self.admitted_context(notes), notes),
+                )
+        for notes, reason in (
+            ("## Build\n", "NOTES_GENERATED_FIELD"),
+            ("## Workflow\n", "NOTES_GENERATED_FIELD"),
+            ("## Provenance\n", "NOTES_GENERATED_FIELD"),
+            ("## Artifacts\n", "NOTES_GENERATED_FIELD"),
+            ("ROM: Pokémon Emerald\n", "NOTES_PRIVACY_ROM_BIOS"),
+            ("Save file attached\n", "NOTES_PRIVACY_SAVE"),
+            ("RetroArch log attached\n", "NOTES_PRIVACY_LOG"),
+            ("Phone serial 123\n", "NOTES_PRIVACY_DEVICE"),
+            ("access token abc\n", "NOTES_PRIVACY_SECRET"),
+        ):
+            with self.subTest(reason=reason):
+                with self.assertRaisesRegex(AdmissionError, f"^{reason}$"):
+                    render_release_body(self.admitted_context(notes), notes)

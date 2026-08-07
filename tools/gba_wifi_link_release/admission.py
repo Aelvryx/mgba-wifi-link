@@ -23,16 +23,22 @@ REQUIRED_GATES = (
 )
 _PLACEHOLDER_RE = re.compile(r"\b(?:TBD|TODO)\b|<[^>\n]+>")
 _VERSION_RE = re.compile(r"\bv(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\b")
-_GENERATED_FIELD_RE = re.compile(
-    r"(?im)^\s*(?:repository|tag|annotated tag object|peeled commit|"
-    r"source(?: identity)?|build(?: identity)?|source date epoch|version|"
-    r"workflow(?: run)?|artifacts?|assets?|checksums?|"
-    r"release provenance|provenance|compatibility|qualification)\s*:"
-)
-_GENERATED_HEADING_RE = re.compile(
-    r"(?im)^\s*#+\s*(?:compatibility|qualification|source(?: and (?:verification|provenance))?|"
-    r"build provenance|workflow evidence|checksums?|release provenance|release assets?)\s*$"
-)
+_GENERATED_FIELD_NAMES = frozenset({
+    "repository", "tag", "annotated tag object", "peeled commit",
+    "source", "source identity", "build", "build identity", "source date epoch",
+    "version", "workflow", "workflow run", "artifact", "artifacts", "asset",
+    "assets", "checksum", "checksums", "release provenance", "provenance",
+    "compatibility", "qualification",
+})
+_GENERATED_HEADING_NAMES = frozenset({
+    "compatibility", "qualification", "source", "source and verification",
+    "source and provenance", "build", "build provenance", "workflow",
+    "workflow evidence", "checksum", "checksums", "provenance",
+    "release provenance", "artifact", "artifacts", "asset", "assets",
+    "release asset", "release assets",
+})
+_MARKDOWN_HEADING_RE = re.compile(r"^\s*#+\s+(.+?)\s*#*\s*$")
+_FIELD_LABEL_RE = re.compile(r"^\s*([A-Za-z][A-Za-z -]*?)\s*:")
 _PUBLIC_URL_RE = re.compile(r"https?://[^\s`]+")
 _PRIVATE_PATH_RE = re.compile(r"(?<![A-Za-z0-9])(?:~[\\/]|/(?:[^\s`]+)|[A-Za-z]:[\\/][^\s`]*)")
 _TRAVERSAL_PATH_RE = re.compile(r"(?<![A-Za-z0-9])\.\.[\\/]")
@@ -41,13 +47,13 @@ _IPV4_RE = re.compile(
     r"(?:\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}(?![0-9])"
 )
 _IPV6_RE = re.compile(r"(?<![A-Za-z0-9])(?:[0-9A-Fa-f]{1,4}:){2,}[0-9A-Fa-f:]*")
-_ROM_BIOS_RE = re.compile(r"(?i)\b(?:rom|bios)\b[^\n]*(?:sha(?:-?256)?|hash|crc|dump|identity)")
-_SAVE_RE = re.compile(r"(?i)\b(?:save[ -]?(?:file|state)|\.sav)\b[^\n]*(?:identity|sha(?:-?256)?|hash|dump|private|data)")
+_ROM_BIOS_RE = re.compile(r"(?i)(?:^\s*(?:rom|bios)\s*:|\b(?:rom|bios)\b[^\n]*(?:sha(?:-?256)?|hash|crc|dump|identity))")
+_SAVE_RE = re.compile(r"(?i)\b(?:save[ -]?(?:file|state)|\.sav)\b[^\n]*(?:attached|identity|sha(?:-?256)?|hash|dump|private|data)")
 _INPUT_RE = re.compile(r"(?i)\b(?:raw input|input recording|input history)\b")
-_LOG_RE = re.compile(r"(?i)\b(?:endpoint|frontend) log\b")
-_DEVICE_RE = re.compile(r"(?i)\bdevice (?:serial|nickname|id|name)\b")
+_LOG_RE = re.compile(r"(?i)\b(?:endpoint|frontend|retroarch) log\b")
+_DEVICE_RE = re.compile(r"(?i)\b(?:device|phone) (?:serial|nickname|id|name)\b")
 _COMMERCIAL_RE = re.compile(r"(?i)\bcommercial (?:game|title|evidence)\b")
-_SECRET_RE = re.compile(r"(?i)\b(?:api[_ -]?key|token|secret|password)\s*[:=]")
+_SECRET_RE = re.compile(r"(?i)\b(?:access )?(?:api[_ -]?key|token|secret|password)(?:\s*[:=]|\s+\S+)")
 _GITHUB_REMOTE_RE = re.compile(
     r"^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([^/]+/[^/]+?)(?:\.git)?/?$"
 )
@@ -190,19 +196,19 @@ def _validate_gates(evidence: Mapping[str, object], commit: str) -> tuple[GateRe
     return tuple(by_name[name] for name in REQUIRED_GATES)
 
 
-def validate_notes_text(notes: str, tag: str, context_values: tuple[str, ...]) -> None:
-    """Reject unresolved or generated metadata embedded in reviewed prose."""
-    if not notes or "\r" in notes:
-        raise AdmissionError("NOTES_FORMAT")
-    if _PLACEHOLDER_RE.search(notes):
-        raise AdmissionError("NOTES_PLACEHOLDER")
-    if _GENERATED_FIELD_RE.search(notes) or _GENERATED_HEADING_RE.search(notes):
-        raise AdmissionError("NOTES_GENERATED_FIELD")
-    notes_without_public_urls = _PUBLIC_URL_RE.sub("", notes)
-    if _PRIVATE_PATH_RE.search(notes_without_public_urls) or _TRAVERSAL_PATH_RE.search(notes_without_public_urls):
-        raise AdmissionError("NOTES_PRIVACY_PATH")
-    if _IPV4_RE.search(notes) or _IPV6_RE.search(notes):
-        raise AdmissionError("NOTES_PRIVACY_ADDRESS")
+def _notes_line_category(line: str) -> str | None:
+    """Classify a single reviewed-prose line without exposing its contents."""
+    heading = _MARKDOWN_HEADING_RE.fullmatch(line)
+    if heading and heading.group(1).casefold() in _GENERATED_HEADING_NAMES:
+        return "NOTES_GENERATED_FIELD"
+    label = _FIELD_LABEL_RE.match(line)
+    if label and label.group(1).casefold() in _GENERATED_FIELD_NAMES:
+        return "NOTES_GENERATED_FIELD"
+    public_url_free = _PUBLIC_URL_RE.sub("", line)
+    if _PRIVATE_PATH_RE.search(public_url_free) or _TRAVERSAL_PATH_RE.search(public_url_free):
+        return "NOTES_PRIVACY_PATH"
+    if _IPV4_RE.search(line) or _IPV6_RE.search(line):
+        return "NOTES_PRIVACY_ADDRESS"
     for pattern, reason in (
         (_ROM_BIOS_RE, "NOTES_PRIVACY_ROM_BIOS"),
         (_SAVE_RE, "NOTES_PRIVACY_SAVE"),
@@ -212,8 +218,21 @@ def validate_notes_text(notes: str, tag: str, context_values: tuple[str, ...]) -
         (_COMMERCIAL_RE, "NOTES_PRIVACY_COMMERCIAL"),
         (_SECRET_RE, "NOTES_PRIVACY_SECRET"),
     ):
-        if pattern.search(notes):
-            raise AdmissionError(reason)
+        if pattern.search(line):
+            return reason
+    return None
+
+
+def validate_notes_text(notes: str, tag: str, context_values: tuple[str, ...]) -> None:
+    """Reject unresolved or generated metadata embedded in reviewed prose."""
+    if not notes or "\r" in notes:
+        raise AdmissionError("NOTES_FORMAT")
+    if _PLACEHOLDER_RE.search(notes):
+        raise AdmissionError("NOTES_PLACEHOLDER")
+    for line in notes.splitlines():
+        category = _notes_line_category(line)
+        if category:
+            raise AdmissionError(category)
     if any(version != tag for version in _VERSION_RE.findall(notes)):
         raise AdmissionError("NOTES_VERSION")
     if any(value and value in notes for value in context_values):

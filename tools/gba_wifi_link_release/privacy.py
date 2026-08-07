@@ -13,6 +13,7 @@ from .model import ReleaseContract
 _MAX_TEXT_BYTES = 1_048_576
 _PRIVATE_PATH_RE = re.compile(r"(?<![A-Za-z0-9])(?:~[\\/]|/(?:[^\s`]+)|[A-Za-z]:[\\/][^\s`]*)")
 _TRAVERSAL_PATH_RE = re.compile(r"(?<![A-Za-z0-9])\.\.[\\/]")
+_PUBLIC_URL_RE = re.compile(r"https?://[^\s`]+")
 _IPV4_RE = re.compile(r"(?<![0-9])(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(?:\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}(?![0-9])")
 _IPV6_RE = re.compile(r"(?<![A-Za-z0-9])(?:[0-9A-Fa-f]{1,4}:){2,}[0-9A-Fa-f:]*")
 _MAC_RE = re.compile(r"(?<![0-9A-Fa-f])(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}(?![0-9A-Fa-f])")
@@ -31,7 +32,8 @@ class PrivacyError(ValueError):
 
 
 def _text_category(text: str) -> str | None:
-    if _PRIVATE_PATH_RE.search(text) or _TRAVERSAL_PATH_RE.search(text):
+    path_text = _PUBLIC_URL_RE.sub("", text)
+    if _PRIVATE_PATH_RE.search(path_text) or _TRAVERSAL_PATH_RE.search(path_text):
         return "PRIVACY_PATH"
     if _IPV4_RE.search(text) or _IPV6_RE.search(text) or _MAC_RE.search(text):
         return "PRIVACY_ADDRESS"

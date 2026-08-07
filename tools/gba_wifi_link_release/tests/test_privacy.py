@@ -61,6 +61,27 @@ class PrivacyTest(unittest.TestCase):
         with self.public_tree() as temporary:
             validate_public_tree(Path(temporary), CONTRACT)
 
+    def test_public_https_url_is_not_misclassified_as_a_private_path(self):
+        with self.public_tree() as temporary:
+            root = Path(temporary)
+            (root / "INSTALL-AND-USAGE.md").write_text(
+                "Read https://github.com/Aelvryx/mgba-wifi-link/releases.\n",
+                encoding="utf-8",
+            )
+            payloads = tuple(
+                ReleaseAsset(name, len((root / name).read_bytes()),
+                             hashlib.sha256((root / name).read_bytes()).hexdigest())
+                for name in (
+                    "mgba_libretro_android.so",
+                    "gba-link-test.gba",
+                    "gba-link-continuous.gba",
+                    "INSTALL-AND-USAGE.md",
+                    "mgba-gba-wifi-link-v9.8.7-android-arm64.zip",
+                )
+            )
+            (root / "RELEASE-PROVENANCE.json").write_bytes(release_provenance(CONTEXT, payloads))
+            validate_public_tree(root, CONTRACT)
+
     def test_private_text_canaries_return_only_stable_categories(self):
         cases = (
             ("PRIVACY_ROM_BIOS", "ROM identity: SYNTHETIC_ROM_BIOS_CANARY"),

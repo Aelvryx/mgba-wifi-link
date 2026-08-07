@@ -87,25 +87,25 @@
 
 ## 5. Implement the transactional publisher behind a mockable boundary
 
-- [ ] 5.1 Define a narrow publisher interface for inspecting releases, creating and
+- [x] 5.1 Define a narrow publisher interface for inspecting releases, creating and
   deleting private drafts, uploading assets, reading remote metadata/assets,
   publishing, and verifying attestations; keep package construction outside it.
-- [ ] 5.2 Add a fake GitHub CLI/API fixture that records commands and simulates exact
+- [x] 5.2 Add a fake GitHub CLI/API fixture that records commands and simulates exact
   responses without network access or repository mutation.
-- [ ] 5.3 Add failing publisher tests for the successful sequence: local verify,
+- [x] 5.3 Add failing publisher tests for the successful sequence: local verify,
   no-conflict check, private draft, seven uploads, remote read-back, attestation,
   automatic publish, and final public verification.
-- [ ] 5.4 Add failing tests for draft creation, individual upload, count, size, hash,
+- [x] 5.4 Add failing tests for draft creation, individual upload, count, size, hash,
   body, tag, target, classification, attestation, and pre-publish read-back failures.
-- [ ] 5.5 Add tests that every safe pre-publication failure removes only the
+- [x] 5.5 Add tests that every safe pre-publication failure removes only the
   publisher-owned private draft and never deletes or edits public state.
-- [ ] 5.6 Add tests for an ambiguous publish response followed by exact public
+- [x] 5.6 Add tests for an ambiguous publish response followed by exact public
   read-back success and by conflicting public read-back failure.
-- [ ] 5.7 Add tests for a byte-identical published-release rerun that performs no
+- [x] 5.7 Add tests for a byte-identical published-release rerun that performs no
   mutation, and for every conflicting existing draft/public-release condition.
-- [ ] 5.8 Implement the minimum publisher orchestration needed to pass the fake
+- [x] 5.8 Implement the minimum publisher orchestration needed to pass the fake
   boundary tests, with stable exit reasons and no implicit asset replacement.
-- [ ] 5.9 Add a policy test proving the publisher input is the verified workflow
+- [x] 5.9 Add a policy test proving the publisher input is the verified workflow
   artifact and that the privileged path cannot check out source, compile, render,
   download undeclared inputs, or substitute files.
 

@@ -15,6 +15,10 @@ _HISTORY = Path("tools/gba_wifi_link_release/fixtures/v0.2.0-history.json")
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 _USES = re.compile(r"^\s*uses:\s*([^\s#]+)(?:\s+#.*)?\s*$", re.MULTILINE)
 _SOURCE_COMMIT = "${{ inputs.source_commit || github.sha }}"
+_PERMISSIONS_KEY = re.compile(
+    r"(?:^|[,{])[^\S\r\n]*(?:permissions|['\"]permissions['\"])[^\S\r\n]*:",
+    re.MULTILINE,
+)
 
 
 class WorkflowPolicyError(ValueError):
@@ -207,9 +211,12 @@ def _validate_reusable_contract(text: str, history: dict[str, object]) -> None:
         raise WorkflowPolicyError("WORKFLOW_CALL")
     if re.search(r"^      (?:command|build_flags|runner|publish)[A-Za-z_-]*:", text, re.MULTILINE):
         raise WorkflowPolicyError("WORKFLOW_CALL")
-    permissions = re.search(r"^permissions:\n((?:  [^\n]+\n)+)", text, re.MULTILINE)
-    if permissions is None or permissions.group(1) != "  contents: read\n" or re.search(
-        r"^    permissions:", text, re.MULTILINE,
+    permission_keys = list(_PERMISSIONS_KEY.finditer(text))
+    canonical_permissions = "permissions:\n  contents: read\n\nconcurrency:"
+    if (
+        len(permission_keys) != 1
+        or permission_keys[0].group(0) != "permissions:"
+        or not text[permission_keys[0].start():].startswith(canonical_permissions)
     ):
         raise WorkflowPolicyError("WORKFLOW_PERMISSION")
 

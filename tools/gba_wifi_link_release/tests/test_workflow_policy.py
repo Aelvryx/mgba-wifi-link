@@ -129,6 +129,29 @@ class WorkflowPolicyTest(unittest.TestCase):
             with self.subTest(mutation=mutate):
                 self.assert_rejected_after(mutate)
 
+    def test_rejects_every_noncanonical_permissions_key_spelling(self):
+        job = "  full-normal-suite:\n    name: Complete normal mGBA suite\n"
+        mutations = (
+            lambda source: source.replace(
+                job, job + "    permissions :\n      contents: read\n      id-token: write\n", 1,
+            ),
+            lambda source: source.replace(
+                job, job + "    'permissions':\n      contents: read\n      id-token: write\n", 1,
+            ),
+            lambda source: source.replace(
+                job, job + "\tpermissions:\n\t  contents: read\n\t  id-token: write\n", 1,
+            ),
+            lambda source: source.replace(
+                job, job + "    \"permissions\" : {contents: read, id-token: write}\n", 1,
+            ),
+            lambda source: source.replace(
+                job, job + "    ignored: { permissions: {id-token: write} }\n", 1,
+            ),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=mutate):
+                self.assert_rejected_after(mutate)
+
     def test_rejects_drift_in_the_extracted_pinned_upstream_exception(self):
         pinned_step = (
             "\n      - name: Confirm pinned upstream util-hash baseline\n"

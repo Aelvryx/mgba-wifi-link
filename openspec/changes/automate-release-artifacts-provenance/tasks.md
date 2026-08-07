@@ -175,31 +175,31 @@
 
 ## 8. Run local, sanitizer, and protected validation
 
-- [ ] 8.1 Run tag-admission, metadata, packager, privacy, provenance, publisher,
+- [x] 8.1 Run tag-admission, metadata, packager, privacy, provenance, publisher,
   workflow-policy, tag-ruleset, and boundary unit/golden tests locally.
-- [ ] 8.2 Run deterministic packaging twice in separate clean temporary directories
+- [x] 8.2 Run deterministic packaging twice in separate clean temporary directories
   and compare every synthetic release byte, manifest, archive member, and rendered
   identity.
-- [ ] 8.3 Run Python/shell syntax checks and applicable linters for every new tool,
+- [x] 8.3 Run Python/shell syntax checks and applicable linters for every new tool,
   workflow, template, policy fixture, and test.
-- [ ] 8.4 Run strict OpenSpec validation and verify the delta requirements, scenarios,
+- [x] 8.4 Run strict OpenSpec validation and verify the delta requirements, scenarios,
   task ledger, and implementation plan remain coherent with the implemented
   fully-automated boundary.
-- [ ] 8.5 Run the focused normal, ASan/UBSan with leak detection, and TSan suites.
-- [ ] 8.6 Run the complete applicable mGBA suite and separately confirm any unchanged
+- [x] 8.5 Run the focused normal, ASan/UBSan with leak detection, and TSan suites.
+- [x] 8.6 Run the complete applicable mGBA suite and separately confirm any unchanged
   pinned upstream exception.
-- [ ] 8.7 Rebuild the redistributable fixtures byte-identically and run structured
+- [x] 8.7 Rebuild the redistributable fixtures byte-identically and run structured
   analyzers, qualification-helper tests, and the permanent product-boundary audit.
 - [ ] 8.8 Build the Android ARM64 core twice from the exact review head and prove
   byte identity, ELF/embedded identities, toolchain provenance, and package
   reproducibility.
-- [ ] 8.9 Confirm through source and normalized diffs that no GBA runtime, protocol,
+- [x] 8.9 Confirm through source and normalized diffs that no GBA runtime, protocol,
   input, RTC, persistence, scheduling, audio, video, or teardown behavior changed;
   require physical replay only if that proof fails.
-- [ ] 8.10 Create one reviewable implementation commit, push it, and open the single
+- [x] 8.10 Create one reviewable implementation commit, push it, and open the single
   working draft PR required for protected CI and external rehearsal; keep that PR
   draft through verification, retrospective, and archive.
-- [ ] 8.11 Require all protected jobs to pass on the exact draft-PR head and record
+- [x] 8.11 Require all protected jobs to pass on the exact draft-PR head and record
   their run/job identities for independent review.
 
 ## 9. Rehearse the complete remote transaction safely

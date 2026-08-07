@@ -6,26 +6,13 @@ import os
 from pathlib import Path
 import re
 import stat
-from urllib.parse import unquote, urlsplit
 
-from .model import ReleaseContract
+from .model import REQUIRED_BUILD_CONFIGURATION, ReleaseContract
 from .provenance import canonical_json
+from .text_policy import classify_private_text
 
 
 _MAX_TEXT_BYTES = 1_048_576
-_PRIVATE_PATH_RE = re.compile(r"(?<![A-Za-z0-9])(?:~[\\/]|/(?:[^\s`]+)|[A-Za-z]:[\\/][^\s`]*)")
-_TRAVERSAL_PATH_RE = re.compile(r"(?<![A-Za-z0-9])\.\.[\\/]")
-_PUBLIC_URL_RE = re.compile(r"https?://[^\s`]+")
-_IPV4_RE = re.compile(r"(?<![0-9])(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(?:\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}(?![0-9])")
-_IPV6_RE = re.compile(r"(?<![A-Za-z0-9])(?:[0-9A-Fa-f]{1,4}:){2,}[0-9A-Fa-f:]*")
-_MAC_RE = re.compile(r"(?<![0-9A-Fa-f])(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}(?![0-9A-Fa-f])")
-_ROM_BIOS_RE = re.compile(r"(?i)\b(?:rom|bios)(?:\s+(?:identity|hash|sha(?:-?256)?|crc(?:32)?|dump)|\s*:)")
-_SAVE_RE = re.compile(r"(?i)\b(?:save[ -]?(?:file|state)|\.sav)\b|\bsave\s+(?:identity|hash|sha(?:-?256)?|crc(?:32)?|dump|data)\b")
-_INPUT_RE = re.compile(r"(?i)\b(?:raw input|input recording|input history)\b")
-_LOG_RE = re.compile(r"(?i)\b(?:endpoint|frontend|retroarch) log\b")
-_DEVICE_RE = re.compile(r"(?i)\b(?:device|phone) (?:serial|nickname|id|name)\b")
-_COMMERCIAL_RE = re.compile(r"(?i)\bcommercial (?:game|title|evidence)\b")
-_SECRET_RE = re.compile(r"(?i)\b(?:access )?(?:api[_ -]?key|token|secret|password)(?:\s*[:=]|\s+\S+)")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
 _TAG_RE = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
@@ -38,28 +25,8 @@ class PrivacyError(ValueError):
 
 
 def _text_category(text: str) -> str | None:
-    for url in _PUBLIC_URL_RE.findall(text):
-        parts = urlsplit(url)
-        query_and_fragment = unquote(parts.query) + "\n" + unquote(parts.fragment)
-        if _PRIVATE_PATH_RE.search(query_and_fragment) or _TRAVERSAL_PATH_RE.search(query_and_fragment):
-            return "PRIVACY_PATH"
-    path_text = _PUBLIC_URL_RE.sub("", text)
-    if _PRIVATE_PATH_RE.search(path_text) or _TRAVERSAL_PATH_RE.search(path_text):
-        return "PRIVACY_PATH"
-    if _IPV4_RE.search(text) or _IPV6_RE.search(text) or _MAC_RE.search(text):
-        return "PRIVACY_ADDRESS"
-    for expression, category in (
-        (_ROM_BIOS_RE, "PRIVACY_ROM_BIOS"),
-        (_SAVE_RE, "PRIVACY_SAVE"),
-        (_INPUT_RE, "PRIVACY_INPUT"),
-        (_LOG_RE, "PRIVACY_LOG"),
-        (_DEVICE_RE, "PRIVACY_DEVICE"),
-        (_COMMERCIAL_RE, "PRIVACY_COMMERCIAL"),
-        (_SECRET_RE, "PRIVACY_SECRET"),
-    ):
-        if expression.search(text):
-            return category
-    return None
+    category = classify_private_text(text)
+    return f"PRIVACY_{category}" if category else None
 
 
 def _resolve_public_names(root: Path, contract: ReleaseContract) -> tuple[str, ...]:
@@ -118,8 +85,7 @@ def _validate_release_provenance(path: Path, root: Path, expected_names: tuple[s
                    for toolchain in build["pinned_toolchains"])
         or not isinstance(build["configuration"], dict)
         or not build["configuration"]
-        or any(not isinstance(key, str) or not key or not isinstance(item, str) or not item
-               for key, item in build["configuration"].items())
+        or tuple(build["configuration"].items()) != REQUIRED_BUILD_CONFIGURATION
     ):
         raise PrivacyError("PRIVACY_FIELD")
     source = value.get("source")

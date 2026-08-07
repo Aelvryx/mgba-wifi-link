@@ -140,12 +140,36 @@ class PrivacyTest(unittest.TestCase):
         for canary in (
             "https://github.com/Aelvryx/mgba-wifi-link?path=%2Fprivate%2FSYNTHETIC_URL_QUERY_CANARY",
             "https://github.com/Aelvryx/mgba-wifi-link#path=%2Fprivate%2FSYNTHETIC_URL_FRAGMENT_CANARY",
+            "https://github.com/Aelvryx/mgba-wifi-link?path=%252Fprivate%252FSYNTHETIC_URL_DOUBLE_QUERY_CANARY",
+            "https://github.com/Aelvryx/mgba-wifi-link#path=%252Fprivate%252FSYNTHETIC_URL_DOUBLE_FRAGMENT_CANARY",
         ):
             with self.subTest(canary=canary):
                 with self.public_tree() as temporary:
                     root = Path(temporary)
                     (root / "INSTALL-AND-USAGE.md").write_text(canary + "\n", encoding="utf-8")
                     self.assert_category_only("PRIVACY_PATH", root, canary)
+
+    def test_release_provenance_rejects_noncanonical_build_evidence(self):
+        cases = (
+            ("pinned_actions", ["actions/checkout@v4"], "PRIVACY_FIELD"),
+            (
+                "pinned_actions",
+                [
+                    "actions/checkout@0123456789abcdef0123456789abcdef01234567",
+                    "actions/checkout@0123456789abcdef0123456789abcdef01234567",
+                ],
+                "PRIVACY_FIELD",
+            ),
+            ("configuration", {"unexpected": "value"}, "PRIVACY_FIELD"),
+        )
+        for field, value, category in cases:
+            with self.subTest(field=field):
+                with self.public_tree() as temporary:
+                    root = Path(temporary)
+                    document = json.loads((root / "RELEASE-PROVENANCE.json").read_bytes())
+                    document["build"][field] = value
+                    (root / "RELEASE-PROVENANCE.json").write_bytes(canonical_json(document))
+                    self.assert_category_only(category, root, "SYNTHETIC_BUILD_EVIDENCE")
 
     def test_symlink_and_undeclared_file_are_rejected_without_disclosing_names(self):
         symlink_canary = "SYNTHETIC_SYMLINK_CANARY"

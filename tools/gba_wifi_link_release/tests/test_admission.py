@@ -259,6 +259,42 @@ class AdmissionTest(unittest.TestCase):
         with self.assertRaisesRegex(AdmissionError, "SOURCE_DATE_EPOCH"):
             admit_release(repo, "v9.8.7", invalid)
 
+    def test_build_evidence_rejects_unpinned_duplicate_unordered_and_unknown_configuration(self):
+        repo = make_repo()
+        self.addCleanupRepo(repo)
+        commit = git(repo, "rev-parse", "v9.8.7^{commit}")
+        invalid_evidence = []
+        unpinned = evidence(repo, commit)
+        unpinned["build"]["pinned_actions"] = ["actions/checkout@v4"]  # type: ignore[index]
+        invalid_evidence.append(unpinned)
+        duplicate = evidence(repo, commit)
+        duplicate["build"]["pinned_actions"] *= 2  # type: ignore[index]
+        invalid_evidence.append(duplicate)
+        unordered = evidence(repo, commit)
+        unordered["build"]["configuration"] = {  # type: ignore[index]
+            "android_api": "21", "android_abi": "arm64-v8a",
+        }
+        invalid_evidence.append(unordered)
+        unknown = evidence(repo, commit)
+        unknown["build"]["configuration"] = {"unexpected": "value"}  # type: ignore[index]
+        invalid_evidence.append(unknown)
+        for invalid in invalid_evidence:
+            with self.subTest(invalid=invalid["build"]):
+                with self.assertRaisesRegex(AdmissionError, "^BUILD_EVIDENCE$"):
+                    admit_release(repo, "v9.8.7", invalid)
+
+    def test_notes_reject_private_paths_in_encoded_public_urls(self):
+        for notes in (
+            "Read https://github.com/Aelvryx/mgba-wifi-link?path=%2Fprivate%2FSYNTHETIC_SINGLE_NOTE_PATH\n",
+            "Read https://github.com/Aelvryx/mgba-wifi-link#path=%252Fprivate%252FSYNTHETIC_DOUBLE_NOTE_PATH\n",
+        ):
+            with self.subTest(notes=notes):
+                repo = make_repo(notes=notes)
+                self.addCleanupRepo(repo)
+                commit = git(repo, "rev-parse", "v9.8.7^{commit}")
+                with self.assertRaisesRegex(AdmissionError, "^NOTES_PRIVACY_PATH$"):
+                    admit_release(repo, "v9.8.7", evidence(repo, commit))
+
     def test_private_path_address_and_prohibited_claim_notes_are_rejected(self):
         for notes, reason in (
             ("Read /home/reviewer/private-notes.md\n", "NOTES_PRIVACY_PATH"),

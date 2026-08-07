@@ -119,3 +119,12 @@ class RenderTest(unittest.TestCase):
             with self.subTest(reason=reason):
                 with self.assertRaisesRegex(AdmissionError, f"^{reason}$"):
                     render_release_body(self.admitted_context(notes), notes)
+
+    def test_render_rejects_private_paths_in_single_and_double_encoded_public_urls(self):
+        for notes in (
+            "Read https://github.com/Aelvryx/mgba-wifi-link?path=%2Fprivate%2FSYNTHETIC_RENDER_SINGLE\n",
+            "Read https://github.com/Aelvryx/mgba-wifi-link#path=%252Fprivate%252FSYNTHETIC_RENDER_DOUBLE\n",
+        ):
+            with self.subTest(notes=notes):
+                with self.assertRaisesRegex(AdmissionError, "^NOTES_PRIVACY_PATH$"):
+                    render_release_body(self.admitted_context(notes), notes)

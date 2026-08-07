@@ -6,7 +6,8 @@ from pathlib import Path
 import re
 import subprocess
 
-from .model import BuildEvidence, GateResult, ReleaseContext
+from .model import BuildEvidence, GateResult, REQUIRED_BUILD_CONFIGURATION, ReleaseContext
+from .text_policy import classify_private_text
 
 
 TAG_RE = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
@@ -39,21 +40,6 @@ _GENERATED_HEADING_NAMES = frozenset({
 })
 _MARKDOWN_HEADING_RE = re.compile(r"^\s*#+\s+(.+?)\s*#*\s*$")
 _FIELD_LABEL_RE = re.compile(r"^\s*([A-Za-z][A-Za-z -]*?)\s*:")
-_PUBLIC_URL_RE = re.compile(r"https?://[^\s`]+")
-_PRIVATE_PATH_RE = re.compile(r"(?<![A-Za-z0-9])(?:~[\\/]|/(?:[^\s`]+)|[A-Za-z]:[\\/][^\s`]*)")
-_TRAVERSAL_PATH_RE = re.compile(r"(?<![A-Za-z0-9])\.\.[\\/]")
-_IPV4_RE = re.compile(
-    r"(?<![0-9])(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})"
-    r"(?:\.(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}(?![0-9])"
-)
-_IPV6_RE = re.compile(r"(?<![A-Za-z0-9])(?:[0-9A-Fa-f]{1,4}:){2,}[0-9A-Fa-f:]*")
-_ROM_BIOS_RE = re.compile(r"(?i)(?:^\s*(?:rom|bios)\s*:|\b(?:rom|bios)\b[^\n]*(?:sha(?:-?256)?|hash|crc|dump|identity))")
-_SAVE_RE = re.compile(r"(?i)\b(?:save[ -]?(?:file|state)|\.sav)\b[^\n]*(?:attached|identity|sha(?:-?256)?|hash|dump|private|data)")
-_INPUT_RE = re.compile(r"(?i)\b(?:raw input|input recording|input history)\b")
-_LOG_RE = re.compile(r"(?i)\b(?:endpoint|frontend|retroarch) log\b")
-_DEVICE_RE = re.compile(r"(?i)\b(?:device|phone) (?:serial|nickname|id|name)\b")
-_COMMERCIAL_RE = re.compile(r"(?i)\bcommercial (?:game|title|evidence)\b")
-_SECRET_RE = re.compile(r"(?i)\b(?:access )?(?:api[_ -]?key|token|secret|password)(?:\s*[:=]|\s+\S+)")
 _GITHUB_REMOTE_RE = re.compile(
     r"^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([^/]+/[^/]+?)(?:\.git)?/?$"
 )
@@ -224,12 +210,10 @@ def _validate_build(evidence: Mapping[str, object]) -> BuildEvidence:
         or tuple(toolchains) != tuple(sorted(toolchains))
         or len(set(toolchains)) != len(toolchains)
         or not isinstance(configuration, Mapping)
-        or not configuration
-        or any(not isinstance(key, str) or not key or not isinstance(value, str) or not value
-               for key, value in configuration.items())
+        or tuple(configuration.items()) != REQUIRED_BUILD_CONFIGURATION
     ):
         raise AdmissionError("BUILD_EVIDENCE")
-    return BuildEvidence(runner_image, tuple(actions), tuple(toolchains), tuple(sorted(configuration.items())))
+    return BuildEvidence(runner_image, tuple(actions), tuple(toolchains), REQUIRED_BUILD_CONFIGURATION)
 
 
 def _notes_line_category(line: str) -> str | None:
@@ -240,23 +224,8 @@ def _notes_line_category(line: str) -> str | None:
     label = _FIELD_LABEL_RE.match(line)
     if label and label.group(1).casefold() in _GENERATED_FIELD_NAMES:
         return "NOTES_GENERATED_FIELD"
-    public_url_free = _PUBLIC_URL_RE.sub("", line)
-    if _PRIVATE_PATH_RE.search(public_url_free) or _TRAVERSAL_PATH_RE.search(public_url_free):
-        return "NOTES_PRIVACY_PATH"
-    if _IPV4_RE.search(line) or _IPV6_RE.search(line):
-        return "NOTES_PRIVACY_ADDRESS"
-    for pattern, reason in (
-        (_ROM_BIOS_RE, "NOTES_PRIVACY_ROM_BIOS"),
-        (_SAVE_RE, "NOTES_PRIVACY_SAVE"),
-        (_INPUT_RE, "NOTES_PRIVACY_INPUT"),
-        (_LOG_RE, "NOTES_PRIVACY_LOG"),
-        (_DEVICE_RE, "NOTES_PRIVACY_DEVICE"),
-        (_COMMERCIAL_RE, "NOTES_PRIVACY_COMMERCIAL"),
-        (_SECRET_RE, "NOTES_PRIVACY_SECRET"),
-    ):
-        if pattern.search(line):
-            return reason
-    return None
+    private_category = classify_private_text(line)
+    return f"NOTES_PRIVACY_{private_category}" if private_category else None
 
 
 def validate_notes_text(notes: str, tag: str, context_values: tuple[str, ...]) -> None:

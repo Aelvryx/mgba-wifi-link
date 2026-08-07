@@ -5,7 +5,8 @@ from pathlib import Path
 import re
 
 from .admission import REQUIRED_GATES, REQUIRED_WORKFLOW
-from .model import BuildEvidence, GateResult, ReleaseAsset, ReleaseContext, load_contract
+from .model import (BuildEvidence, GateResult, REQUIRED_BUILD_CONFIGURATION,
+                    ReleaseAsset, ReleaseContext, load_contract)
 
 
 _CONTRACT = (
@@ -99,11 +100,7 @@ def _build(build: BuildEvidence | None) -> dict[str, object]:
         or len(set(build.pinned_toolchains)) != len(build.pinned_toolchains)
         or not all(isinstance(toolchain, str) and _TOOLCHAIN_PIN_RE.fullmatch(toolchain)
                    for toolchain in build.pinned_toolchains)
-        or not build.configuration
-        or tuple(key for key, _ in build.configuration) != tuple(sorted(key for key, _ in build.configuration))
-        or len({key for key, _ in build.configuration}) != len(build.configuration)
-        or any(not isinstance(key, str) or not key or not isinstance(value, str) or not value
-               for key, value in build.configuration)
+        or build.configuration != REQUIRED_BUILD_CONFIGURATION
     ):
         raise ProvenanceError("PROVENANCE_BUILD")
     return {

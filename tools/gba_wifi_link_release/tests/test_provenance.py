@@ -143,6 +143,23 @@ class ProvenanceTest(unittest.TestCase):
         with self.assertRaisesRegex(ProvenanceError, "^PROVENANCE_BUILD$"):
             build_provenance(replace(CONTEXT, build=None), BUILD_SIBLINGS)  # type: ignore[arg-type]
 
+    def test_provenance_rejects_unpinned_duplicate_unordered_and_unknown_build_evidence(self):
+        invalid_builds = (
+            replace(BUILD_EVIDENCE, pinned_actions=("actions/checkout@v4",)),
+            replace(BUILD_EVIDENCE, pinned_actions=(
+                "actions/checkout@0123456789abcdef0123456789abcdef01234567",
+                "actions/checkout@0123456789abcdef0123456789abcdef01234567",
+            )),
+            replace(BUILD_EVIDENCE, configuration=(
+                ("android_api", "21"), ("android_abi", "arm64-v8a"),
+            )),
+            replace(BUILD_EVIDENCE, configuration=(("unexpected", "value"),)),
+        )
+        for build in invalid_builds:
+            with self.subTest(build=build):
+                with self.assertRaisesRegex(ProvenanceError, "^PROVENANCE_BUILD$"):
+                    build_provenance(replace(CONTEXT, build=build), BUILD_SIBLINGS)
+
     def test_provenance_rejects_cycles_and_wrong_declared_membership(self):
         self.assertRaisesRegex(
             ProvenanceError,

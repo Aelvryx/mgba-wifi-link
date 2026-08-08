@@ -1,23 +1,20 @@
 name: superpowers-bridge
-version: 1
+version: 2
 description: >
   Spec-driven workflow integrated with Superpowers skills.
   Requirements: Superpowers plugin installed, providing skills:
   brainstorming, writing-plans, using-git-worktrees,
-  subagent-driven-development, finishing-a-development-branch.
-  Requires a subagent-capable platform (Claude Code, Codex, etc.) —
-  this schema does not support runtimes without subagent support,
-  because the alternative executor (executing-plans) loses TDD and
-  code-review transitive activation, defeating Superpowers' value.
-  If your platform lacks subagent support, use spec-driven instead.
+  executing-plans, test-driven-development,
+  verification-before-completion, finishing-a-development-branch.
   Each artifact / apply step verifies its required skills before
   invoking and surfaces a clear error if any are missing.
   brainstorm → proposal → specs → tasks → plan → verify → retrospective.
   design is required (reorganizes raw brainstorm output into structured
   Context / Goals / Decisions / Risks / Migration; referenced by tasks
   and plan for implementation guidance).
-  Apply phase uses git worktrees + subagent-driven-development
-  (brings TDD and code-review transitively).
+  Apply phase uses git worktrees + inline executing-plans. The primary
+  agent retains implementation context; subagents and independent review
+  are opt-in rather than an automatic per-task loop.
 
 artifacts:
   - id: brainstorm
@@ -351,7 +348,7 @@ artifacts:
          §0) **Evidence** — quantitative front-matter populated
              from `git log <base>..HEAD`, `tasks.md`, and
              verify.md: commit count, diff size (lines/files),
-             tasks-done ratio, active hours, subagent dispatch
+             tasks-done ratio, active hours, opt-in delegation/review
              count, new external dependencies, post-merge bugs,
              OpenSpec validate state at archive, test coverage
              signal, and a one-line commit chain.
@@ -470,16 +467,15 @@ apply:
        proceeding:
 
        - superpowers:using-git-worktrees
-       - superpowers:subagent-driven-development
-         (transitively: superpowers:test-driven-development,
-                        superpowers:requesting-code-review)
+       - superpowers:executing-plans
+       - superpowers:test-driven-development
+       - superpowers:verification-before-completion
        - superpowers:finishing-a-development-branch
 
        If any required skill is missing, STOP and inform the user —
        do NOT proceed and do NOT silently fall back to manual
-       implementation. The user can install the Superpowers plugin,
-       or explicitly opt into the manual fallback path described at
-       the end of this instruction.
+       implementation. The user can install the missing Superpowers
+       skill or use the built-in `spec-driven` schema for that change.
 
        Additionally, confirm the project's expected CLI tools are
        on PATH. The exact list depends on the project — read
@@ -493,36 +489,31 @@ apply:
        **superpowers:using-git-worktrees** to create an isolated
        git worktree for this change.
 
-    2. **Executor — subagent-driven-development**:
+    2. **Executor — inline executing-plans**:
 
        Use the Skill tool to invoke
-       **superpowers:subagent-driven-development** to execute
-       the plan.md micro-tasks with fresh subagents per task.
+       **superpowers:executing-plans**. The primary agent executes
+       plan.md directly in the current implementation context; it does
+       not dispatch implementation or review subagents by default.
 
        Tell the executor:
        - Read plan.md in this change directory for micro-tasks
        - Update tasks.md checkboxes as coarse tasks complete
        - Work within the created worktree
+       - Use **superpowers:test-driven-development** directly for
+         behavior-changing implementation, proportionate to the risk
+       - Use **superpowers:verification-before-completion** before
+         claiming a task, batch, or change is complete
+       - Stop and return to the user or planning artifacts when a
+         finding would add a material requirement outside the approved
+         specification
 
-       IMPORTANT — transitive skill activation:
-       subagent-driven-development internally enforces the
-       following skills, so you do NOT need to invoke them
-       manually:
-       - **superpowers:test-driven-development** — every task
-         follows RED-GREEN-REFACTOR. Implementation code written
-         before a failing test is deleted.
-       - **superpowers:requesting-code-review** — after each
-         task, a code-reviewer subagent is dispatched to catch
-         spec compliance and code quality issues. A final review
-         runs for the entire implementation before apply
-         concludes.
-
-       This schema does NOT support `superpowers:executing-plans`
-       as a fallback for non-subagent platforms. Per its SKILL.md,
-       executing-plans does not transitively activate TDD or
-       code-review — defeating the rigor that Superpowers brings.
-       If your platform lacks subagent support, use the built-in
-       `spec-driven` schema instead of this one.
+       Subagents and `superpowers:requesting-code-review` are not part
+       of the default apply loop. Use them only when the user explicitly
+       requests delegation/review or the approved plan names a bounded,
+       genuinely independent high-risk review. A review finding is not
+       permission to expand scope: reconcile it with the approved spec
+       and the project's stated threat model before implementation.
 
        **Working draft PR policy (personal-project workflow)**:
 

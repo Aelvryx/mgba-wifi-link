@@ -102,16 +102,16 @@
 
 ## 8. Verify and land
 
-- [ ] 8.1 Run all release admission, package, privacy, provenance, publisher,
+- [x] 8.1 Run all release admission, package, privacy, provenance, publisher,
   rerun, workflow-policy, and boundary tests locally.
-- [ ] 8.2 Build the synthetic release twice in clean directories and compare every
+- [x] 8.2 Build the synthetic release twice in clean directories and compare every
   byte; verify both archive and standalone scopes.
-- [ ] 8.3 Run Python/shell/YAML/JSON syntax checks and strict OpenSpec validation.
+- [x] 8.3 Run Python/shell/YAML/JSON syntax checks and strict OpenSpec validation.
 - [ ] 8.4 Run focused normal, ASan/UBSan, TSan, complete suite, fixture/analyzer/
   helper checks, and Android ARM64 build on the exact draft-PR head.
 - [x] 8.5 Confirm no GBA runtime, protocol, input, RTC, persistence, scheduling,
   audio, video, or teardown behavior changed; no physical replay is required.
-- [ ] 8.6 Perform one inline self-review against the approved trusted-maintainer
+- [x] 8.6 Perform one inline self-review against the approved trusted-maintainer
   threat model; findings outside that model require user/spec approval.
 - [ ] 8.7 Produce `verify.md`, write the retrospective including this scope
   correction, sync/archive the specs, and push the final commits to PR #31.

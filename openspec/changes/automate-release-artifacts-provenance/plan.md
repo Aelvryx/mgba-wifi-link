@@ -80,11 +80,11 @@ Android NDK, existing mGBA test and boundary tooling.
   support promise.
 - [x] Update boundary-policy expectations and negative documentation tests.
 - [x] After the implementation is locally green, update issue #21/milestone once.
-- [ ] Commit documentation and tracking changes.
+- [x] Commit documentation and tracking changes.
 
 ## Task 6: Run complete local verification
 
-- [ ] Run:
+- [x] Run:
 
   ```bash
   python3 -m unittest discover -s tools/gba_wifi_link_release/tests -p 'test_*.py' -v
@@ -94,13 +94,13 @@ Android NDK, existing mGBA test and boundary tooling.
   git diff --check
   ```
 
-- [ ] Build the synthetic release twice in distinct clean temporary directories,
+- [x] Build the synthetic release twice in distinct clean temporary directories,
   compare recursively and byte-compare the archive, then verify both sets.
-- [ ] Run Python compile checks, shell syntax checks, and JSON/YAML duplicate-safe
+- [x] Run Python compile checks, shell syntax checks, and JSON/YAML duplicate-safe
   parsing for changed release surfaces.
-- [ ] Compare `origin/master...HEAD` and prove no runtime source under `include/`,
+- [x] Compare `origin/master...HEAD` and prove no runtime source under `include/`,
   `src/gba/`, or product execution paths changed.
-- [ ] Record exact local evidence in the task ledger.
+- [x] Record exact local evidence in the task ledger.
 
 ## Task 7: Run protected validation on PR #31
 

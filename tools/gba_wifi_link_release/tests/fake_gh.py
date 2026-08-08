@@ -45,6 +45,17 @@ def main() -> None:
         sys.stdout.write('{"id":1,"id":2}')
         return
 
+    # ``gh api`` does not accept the repository-selection and output-file
+    # options accepted by other gh command families.  Keep this fake
+    # deliberately parser-faithful so an adapter cannot accidentally test a
+    # command line that the installed CLI would reject.
+    if arguments[:1] == ["api"] and any(
+        option in arguments for option in ("--repo", "--output")
+    ):
+        _save(state)
+        print("unknown flag for gh api", file=sys.stderr)
+        raise SystemExit(2)
+
     release = state.get("release")
     if not arguments or arguments[0] != "api":
         if arguments[:2] == ["attestation", "verify"]:
@@ -166,8 +177,8 @@ def main() -> None:
         files = state["files"]
         assert isinstance(files, dict)
         data = base64.b64decode(files[asset["name"]])
-        Path(_option(arguments, "--output")).write_bytes(data)
         _save(state)
+        sys.stdout.buffer.write(data)
         return
 
     if "/releases/" in endpoint and method == "PATCH":

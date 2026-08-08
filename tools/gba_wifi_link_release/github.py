@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import stat
 import subprocess
 import tempfile
 from typing import Mapping, Protocol
@@ -248,22 +249,83 @@ class GhClient:
         if env is not None:
             self.env.update(env)
 
-    def _run(self, *args: str) -> bytes:
+    def _run_bytes(self, *args: str) -> bytes:
+        """Run one bounded JSON-producing gh command without shell parsing."""
         try:
-            return subprocess.run(
-                [self.gh, *args, "--repo", self.repository], check=True,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=self.env,
-            ).stdout
+            with tempfile.TemporaryFile() as result:
+                subprocess.run(
+                    [self.gh, *args], check=True, stdout=result,
+                    stderr=subprocess.PIPE, env=self.env,
+                )
+                size = result.tell()
+                if size > MAX_JSON_BYTES:
+                    raise GitHubError("GITHUB_JSON_SIZE")
+                result.seek(0)
+                return result.read()
         except (OSError, subprocess.CalledProcessError) as error:
             if isinstance(error, subprocess.CalledProcessError):
                 raise _CommandError(error.stderr or b"") from error
             raise GitHubError("GITHUB_COMMAND") from error
 
+    def _run_api(self, *args: str) -> bytes:
+        """Run a REST operation whose endpoint already binds the repository."""
+        return self._run_bytes("api", *args)
+
+    def _run_release(self, *args: str) -> bytes:
+        """Run a release-family operation with its supported repository option."""
+        return self._run_bytes("release", *args, "--repo", self.repository)
+
+    def _run_attestation(self, *args: str) -> bytes:
+        """Run an attestation-family operation with its supported repository option."""
+        return self._run_bytes("attestation", *args, "--repo", self.repository)
+
+    def _stream_api_download(self, *args: str, destination: Path) -> None:
+        """Stream a binary API response to an exclusive no-follow regular file."""
+        if destination.exists() or destination.is_symlink():
+            raise GitHubError("GITHUB_DOWNLOAD")
+        if not hasattr(os, "O_NOFOLLOW"):
+            raise GitHubError("GITHUB_DOWNLOAD")
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+        descriptor: int | None = None
+        created = False
+        completed = False
+        try:
+            descriptor = os.open(destination, flags, 0o600)
+            created = True
+            mode = os.fstat(descriptor).st_mode
+            if not stat.S_ISREG(mode):
+                raise GitHubError("GITHUB_DOWNLOAD")
+            with os.fdopen(descriptor, "wb", closefd=True) as output:
+                descriptor = None
+                subprocess.run(
+                    [self.gh, "api", *args], check=True, stdout=output,
+                    stderr=subprocess.PIPE, env=self.env,
+                )
+                os.fchmod(output.fileno(), 0o644)
+            completed = True
+        except GitHubError:
+            raise
+        except (OSError, subprocess.CalledProcessError) as error:
+            if isinstance(error, subprocess.CalledProcessError):
+                raise _CommandError(error.stderr or b"") from error
+            raise GitHubError("GITHUB_COMMAND") from error
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+            # A failed transfer is never a reusable partial download.
+            if created and not completed:
+                try:
+                    destination.unlink()
+                except OSError:
+                    pass
+
     def get_release(self, tag: str) -> RemoteRelease | None:
         if not isinstance(tag, str) or not tag:
             raise GitHubError("GITHUB_TAG")
         try:
-            data = self._run("api", f"repos/{self.repository}/releases/tags/{quote(tag, safe='')}")
+            data = self._run_api(
+                f"repos/{self.repository}/releases/tags/{quote(tag, safe='')}"
+            )
         except _CommandError as error:
             if b"404" in error.stderr:
                 return None
@@ -287,24 +349,27 @@ class GhClient:
         with tempfile.NamedTemporaryFile(prefix="gba-wifi-link-release-", suffix=".json") as source:
             source.write(payload)
             source.flush()
-            response = self._run("api", "--method", "POST",
-                                 f"repos/{self.repository}/releases", "--input", source.name)
+            response = self._run_api("--method", "POST",
+                                     f"repos/{self.repository}/releases", "--input", source.name)
         return _remote_release(_json(response))
 
     def upload(self, release_id: int, path: Path) -> RemoteAsset:
         if type(release_id) is not int or release_id <= 0 or not path.is_file():
             raise GitHubError("GITHUB_UPLOAD")
-        response = self._run(
-            "api", "--hostname", "uploads.github.com", "--method", "POST",
+        response = self._run_api(
+            "--hostname", "uploads.github.com", "--method", "POST",
             f"repos/{self.repository}/releases/{release_id}/assets?name={quote(path.name, safe='')}",
             "--input", str(path),
         )
         return _remote_asset(_json(response))
 
     def download_assets(self, release_id: int, output: Path) -> None:
-        if type(release_id) is not int or release_id <= 0 or not output.is_dir():
+        if (
+            type(release_id) is not int or release_id <= 0
+            or not output.is_dir() or output.is_symlink()
+        ):
             raise GitHubError("GITHUB_DOWNLOAD")
-        listing = _json(self._run("api", f"repos/{self.repository}/releases/{release_id}/assets"))
+        listing = _json(self._run_api(f"repos/{self.repository}/releases/{release_id}/assets"))
         if not isinstance(listing, list) or len(listing) > MAX_ASSETS:
             raise GitHubError("GITHUB_ASSET")
         assets = tuple(_remote_asset(item) for item in listing)
@@ -314,10 +379,21 @@ class GhClient:
             destination = output / asset.name
             if destination.exists() or destination.is_symlink():
                 raise GitHubError("GITHUB_DOWNLOAD")
-            self._run(
-                "api", f"repos/{self.repository}/releases/assets/{asset.id}",
-                "--header", "Accept: application/octet-stream", "--output", str(destination),
-            )
+            try:
+                self._stream_api_download(
+                    f"repos/{self.repository}/releases/assets/{asset.id}",
+                    "--header", "Accept: application/octet-stream", destination=destination,
+                )
+                with destination.open("rb") as downloaded:
+                    digest = hashlib.file_digest(downloaded, "sha256").hexdigest()
+                if destination.stat().st_size != asset.size or digest != asset.sha256:
+                    raise GitHubError("GITHUB_DOWNLOAD")
+            except (GitHubError, OSError):
+                try:
+                    destination.unlink()
+                except OSError:
+                    pass
+                raise
 
     def verify_attestations(self, subjects: tuple[AttestationSubject, ...]) -> None:
         """Verify existing provenance attestations for exact immutable subjects."""
@@ -333,8 +409,8 @@ class GhClient:
         for subject in subjects:
             _subject_digest(subject)
             try:
-                evidence = _json(self._run(
-                    "attestation", "verify", str(subject.path), "--predicate-type",
+                evidence = _json(self._run_attestation(
+                    "verify", str(subject.path), "--predicate-type",
                     SLSA_PROVENANCE_V1, "--signer-workflow", CANONICAL_SIGNER_WORKFLOW,
                     "--source-digest", self.source_digest, "--format", "json", "--limit", "2",
                 ))
@@ -346,10 +422,10 @@ class GhClient:
     def publish(self, release_id: int) -> None:
         if type(release_id) is not int or release_id <= 0:
             raise GitHubError("GITHUB_RELEASE")
-        self._run("api", "--method", "PATCH",
+        self._run_api("--method", "PATCH",
                   f"repos/{self.repository}/releases/{release_id}", "--field", "draft=false")
 
     def delete_draft(self, release_id: int) -> None:
         if type(release_id) is not int or release_id <= 0:
             raise GitHubError("GITHUB_RELEASE")
-        self._run("api", "--method", "DELETE", f"repos/{self.repository}/releases/{release_id}")
+        self._run_api("--method", "DELETE", f"repos/{self.repository}/releases/{release_id}")

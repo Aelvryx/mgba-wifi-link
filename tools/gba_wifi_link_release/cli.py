@@ -276,6 +276,11 @@ def _parser() -> argparse.ArgumentParser:
     publish.add_argument("--repository", required=True)
     publish.add_argument("--gh-bin")
     publish.add_argument("--test-mode", action="store_true", help=argparse.SUPPRESS)
+    smoke = commands.add_parser("github-smoke")
+    smoke.add_argument("--repository", required=True)
+    smoke.add_argument("--tag", required=True)
+    smoke.add_argument("--gh-bin")
+    smoke.add_argument("--test-mode", action="store_true", help=argparse.SUPPRESS)
     verify_tag = commands.add_parser("verify-tag")
     verify_tag.add_argument("--context", required=True)
     verify_tag.add_argument("--repository", required=True)
@@ -328,7 +333,19 @@ def main(argv: list[str] | None = None) -> int:
                 audit_token=os.environ.get(RULESET_AUDIT_TOKEN_ENV),
             )
             sys.stdout.write("tag policy verified\n")
-        else:
+        elif args.command == "github-smoke":
+            if args.repository != CANONICAL_REPOSITORY:
+                raise ValueError("CLI_REPOSITORY")
+            if args.gh_bin and not args.test_mode:
+                raise ValueError("CLI_GH_BIN")
+            release = GhClient(args.repository, gh=args.gh_bin or "gh").get_release(args.tag)
+            if release is None:
+                raise ValueError("CLI_GITHUB_SMOKE")
+            sys.stdout.write(json.dumps({
+                "draft": release.draft, "id": release.id,
+                "prerelease": release.prerelease, "tag": release.tag,
+            }, sort_keys=True, separators=(",", ":")) + "\n")
+        elif args.command == "publish":
             if args.repository != CANONICAL_REPOSITORY:
                 raise ValueError("CLI_REPOSITORY")
             if args.gh_bin and not args.test_mode:

@@ -1,6 +1,7 @@
 """Transactional release-publication behavior at a fake GitHub boundary."""
 
 from dataclasses import replace
+import base64
 from contextlib import redirect_stderr, redirect_stdout
 import hashlib
 from io import StringIO
@@ -411,12 +412,115 @@ class PublisherTest(unittest.TestCase):
                 __import__("os").environ.update(old)
             state = json.loads(state_path.read_text(encoding="utf-8"))
             self.assertFalse(state["release"]["draft"])
+            api_calls = [call for call in state["calls"] if call[:1] == ["api"]]
+            self.assertTrue(api_calls)
+            self.assertTrue(all(
+                "--repo" not in call and "--output" not in call
+                for call in api_calls
+            ))
+            self.assertTrue(all(any(
+                argument.startswith("repos/Aelvryx/mgba-wifi-link/")
+                for argument in call
+            ) for call in api_calls))
+            attestation_calls = [call for call in state["calls"]
+                                 if call[:2] == ["attestation", "verify"]]
             self.assertTrue(all(call[-2:] == ["--repo", "Aelvryx/mgba-wifi-link"]
-                                for call in state["calls"]))
+                                for call in attestation_calls))
             self.assertTrue(any(
                 "/releases/1/assets?name=mgba_libretro_android.so" in argument
                 for call in state["calls"] for argument in call
             ))
+
+    def test_cli_github_smoke_uses_one_read_only_release_get(self):
+        from tools.gba_wifi_link_release.cli import main
+
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "gh-state.json"
+            state_path.write_text(json.dumps({
+                "calls": [],
+                "release": {
+                    "assets": [], "body": "Synthetic public release.\n", "draft": False,
+                    "id": 7, "prerelease": True, "tag_name": "v0.2.0",
+                    "target_commitish": "a" * 40,
+                },
+            }), encoding="utf-8")
+            old = __import__("os").environ.copy()
+            __import__("os").environ["GBA_WIFI_LINK_FAKE_GH_STATE"] = str(state_path)
+            try:
+                output = StringIO()
+                with redirect_stdout(output):
+                    self.assertEqual(main([
+                        "github-smoke", "--repository", "Aelvryx/mgba-wifi-link",
+                        "--tag", "v0.2.0", "--test-mode", "--gh-bin", str(FAKE_GH),
+                    ]), 0)
+            finally:
+                __import__("os").environ.clear()
+                __import__("os").environ.update(old)
+            self.assertEqual(output.getvalue(),
+                             '{"draft":false,"id":7,"prerelease":true,"tag":"v0.2.0"}\n')
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(state["calls"], [[
+                "api", "repos/Aelvryx/mgba-wifi-link/releases/tags/v0.2.0",
+            ]])
+
+    def test_gh_client_delete_uses_parser_faithful_rest_arguments(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_path = Path(directory) / "gh-state.json"
+            state_path.write_text(json.dumps({
+                "calls": [],
+                "release": {
+                    "assets": [], "body": "Synthetic private draft.\n", "draft": True,
+                    "id": 7, "prerelease": True, "tag_name": "v9.8.7",
+                    "target_commitish": "a" * 40,
+                },
+            }), encoding="utf-8")
+            client = GhClient(
+                "Aelvryx/mgba-wifi-link", gh=str(FAKE_GH),
+                env={"GBA_WIFI_LINK_FAKE_GH_STATE": str(state_path)},
+            )
+
+            client.delete_draft(7)
+
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(state["calls"], [[
+                "api", "--method", "DELETE", "repos/Aelvryx/mgba-wifi-link/releases/7",
+            ]])
+
+    def test_gh_client_rejects_and_removes_a_mismatched_streamed_asset(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            expected = b"expected asset\n"
+            state_path = root / "gh-state.json"
+            state_path.write_text(json.dumps({
+                "calls": [],
+                "files": {"asset.bin": base64.b64encode(b"substituted asset\n").decode("ascii")},
+                "release": {
+                    "assets": [{
+                        "digest": "sha256:" + hashlib.sha256(expected).hexdigest(),
+                        "id": 10, "name": "asset.bin", "size": len(expected),
+                    }],
+                    "body": "Synthetic private draft.\n", "draft": True, "id": 7,
+                    "prerelease": True, "tag_name": "v9.8.7",
+                    "target_commitish": "a" * 40,
+                },
+            }), encoding="utf-8")
+            client = GhClient(
+                "Aelvryx/mgba-wifi-link", gh=str(FAKE_GH),
+                env={"GBA_WIFI_LINK_FAKE_GH_STATE": str(state_path)},
+            )
+            output = root / "download"
+            output.mkdir()
+
+            with self.assertRaisesRegex(GitHubError, "^GITHUB_DOWNLOAD$"):
+                client.download_assets(7, output)
+
+            self.assertEqual(tuple(output.iterdir()), ())
+            calls = json.loads(state_path.read_text(encoding="utf-8"))["calls"]
+            self.assertEqual(calls, [
+                ["api", "repos/Aelvryx/mgba-wifi-link/releases/7/assets"],
+                ["api", "repos/Aelvryx/mgba-wifi-link/releases/assets/10",
+                 "--header", "Accept: application/octet-stream"],
+            ])
 
     def test_gh_client_rejects_duplicate_json_keys(self):
         with tempfile.TemporaryDirectory() as directory:

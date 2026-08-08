@@ -4,12 +4,12 @@
 
 [![Schema Structure](https://github.com/JiangWay/openspec-schemas/actions/workflows/validate-schemas.yml/badge.svg?branch=main)](https://github.com/JiangWay/openspec-schemas/actions/workflows/validate-schemas.yml)
 [![Upstream Drift](https://img.shields.io/github/issues-search/JiangWay/openspec-schemas?query=is%3Aopen%20label%3Aupstream-version-check&label=Upstream%20Drift&color=yellow)](https://github.com/JiangWay/openspec-schemas/issues?q=is%3Aopen+label%3Aupstream-version-check)
-[![OpenSpec baseline](https://img.shields.io/badge/OpenSpec_baseline-1.4.1-0277bd)](#compatibility)
-[![Superpowers baseline](https://img.shields.io/badge/Superpowers_baseline-v5.1.0-0277bd)](#compatibility)
+[![OpenSpec baseline](https://img.shields.io/badge/OpenSpec_baseline-1.8.0-0277bd)](#compatibility)
+[![Superpowers baseline](https://img.shields.io/badge/Superpowers_baseline-v6.2.0-0277bd)](#compatibility)
 
 > Bridges [OpenSpec](https://github.com/Fission-AI/OpenSpec)'s artifact governance (the **what**) with [obra/superpowers](https://github.com/obra/superpowers) execution skills (the **how**) into a single workflow. Adds an evidence-first `retrospective` artifact filling a gap Superpowers does not natively cover.
 >
-> The integration lives entirely at the prompt layer — no Superpowers source modified, no OpenSpec CLI changes. Schema version: v1.
+> The integration lives entirely at the prompt layer — no Superpowers source modified, no OpenSpec CLI changes. Schema version: v2.
 
 ---
 
@@ -112,9 +112,9 @@ rm -rf /tmp/oss-upgrade
 
 > The bridge directory is monolithic — you take the whole new version or stay on the old one. There is no per-file opt-in. CLAUDE.md is the only project-root file the upgrade ever touches, and never without your ack.
 
-> In-flight changes (any phase: brainstorm / design / specs / ...) remain valid because the schema graph (`requires:` edges, PRECHECKs, artifact dependencies) hasn't changed in v1.x. Existing `verify.md` / `retrospective.md` from before the upgrade are still readable; if you re-run `/opsx:verify` or `/opsx:continue → retrospective` on them, the new template structure applies on overwrite.
+> **v1 → v2 migration:** In-flight artifacts remain valid because the artifact graph and `requires:` edges are unchanged. The apply executor changes immediately from per-task subagents to inline `executing-plans`; no artifact rewrite is required. Existing `verify.md` / `retrospective.md` files remain readable, and regenerated retrospectives use the v2 skill table.
 
-> If a future upgrade modifies the schema graph structurally (artifact add/remove, `requires:` edge changes, PRECHECK changes), the README will gain a version field and a migration guide. v1 → v1.x prose-only changes are safe and do not need migration.
+> Future structural changes (artifact add/remove, `requires:` edge changes, or apply-contract changes) require another schema-major migration note.
 
 ---
 
@@ -210,7 +210,7 @@ Differences from `spec-driven`:
 | Entry | proposal (manual) | **brainstorm** (invokes brainstorming skill) |
 | Plan layer | tasks (coarse) | tasks + **plan** (TDD micro-steps) |
 | apply requires | tasks | **plan** |
-| apply method | standard task-by-task | **worktree + subagent-driven-development** (with TDD + code-review transitive) |
+| apply method | standard task-by-task | **worktree + inline executing-plans** (with direct, proportionate TDD and verification) |
 | Post-apply | (none) | **verify** + **retrospective** artifacts |
 | New artifacts | — | brainstorm, plan, verify, retrospective |
 
@@ -244,7 +244,7 @@ flowchart TD
         direction TB
         A0["<b>0. Pre-flight skill check</b>"]
         A1["<b>1. Workspace</b><br/><i>using-git-worktrees</i>"]
-        A2["<b>2. Executor</b><br/><i>subagent-driven-development</i><br/>↳ TDD + code-review (transitive)"]
+        A2["<b>2. Executor</b><br/><i>executing-plans</i><br/>↳ inline primary-agent execution"]
         A3["<b>3. Verification</b><br/><i>openspec-verify-change</i> → verify.md"]
         A4["<b>4. Retrospective</b> → retrospective.md<br/>(before ready/merge; hot context)"]
         A5["<b>5. Archive</b><br/><i>openspec archive -y</i><br/>(sync delta + move folder)"]
@@ -279,7 +279,7 @@ PLANNING ━━━━━━━━━━━━━━━━━━━━━━━�
 APPLY ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   0. Pre-flight skill check
   1. superpowers:using-git-worktrees
-  2. superpowers:subagent-driven-development (+ TDD + code-review transitive)
+  2. superpowers:executing-plans (+ direct TDD and verification where applicable)
   3. openspec-verify-change → verify.md ◄┐
                               │           │ blocking → fix
                               ▼           │
@@ -301,14 +301,14 @@ APPLY ━━━━━━━━━━━━━━━━━━━━━━━━�
 | 1 | `superpowers:brainstorming` | `brainstorm` artifact instruction | Direct (with PRECHECK) |
 | 2 | `superpowers:writing-plans` | `plan` artifact instruction | Direct (with PRECHECK) |
 | 3 | `superpowers:using-git-worktrees` | apply step 1 | Direct |
-| 4 | `superpowers:subagent-driven-development` | apply step 2 | Direct |
-| 5 | `superpowers:test-driven-development` | (activated inside #4) | **Transitive** |
-| 6 | `superpowers:requesting-code-review` | (activated inside #4) | **Transitive** |
+| 4 | `superpowers:executing-plans` | apply step 2 | Direct |
+| 5 | `superpowers:test-driven-development` | behavior-changing implementation | Direct when applicable |
+| 6 | `superpowers:verification-before-completion` | task/batch/change completion | Direct |
 | 7 | `superpowers:finishing-a-development-branch` | apply step 4 | Direct |
 
 Plus one OpenSpec built-in: `openspec-verify-change` (apply step 3, produces `verify.md`).
 
-> **No `executing-plans` fallback.** This schema is opinionated: it requires a subagent-capable platform (Claude Code, Codex, etc.). The alternative executor `superpowers:executing-plans` does not transitively activate TDD or code-review (verified against its [SKILL.md](https://github.com/obra/superpowers/blob/main/skills/executing-plans/SKILL.md)) — falling back would silently degrade Superpowers' core value. If your platform lacks subagent support, use the built-in `spec-driven` schema instead.
+> **Inline by default.** `superpowers:executing-plans` keeps implementation in the primary agent's context. Subagents and independent review are opt-in: use them only when the user asks or the approved plan identifies a bounded high-risk review.
 
 ### Output redirection
 
@@ -326,7 +326,7 @@ Implemented purely via context injection at invocation time, not by modifying sk
 ### Quick flow (recommended)
 ```bash
 /opsx:ff my-feature    # one-shot: scaffold + brainstorm + proposal + design + specs + tasks + plan
-/opsx:apply            # worktree + subagent-driven-development (with TDD + code-review)
+/opsx:apply            # worktree + inline executing-plans
 /opsx:verify           # produces verify.md (7 checks)
 /opsx:continue         # → retrospective (produces retrospective.md, §0 + 6 sections)
 /opsx:archive          # archive
@@ -341,7 +341,7 @@ Implemented purely via context injection at invocation time, not by modifying sk
 /opsx:continue         # → specs
 /opsx:continue         # → tasks
 /opsx:continue         # → plan
-/opsx:apply            # → implementation + worktree + subagent-driven-development
+/opsx:apply            # → implementation + worktree + inline executing-plans
 /opsx:verify           # → verify.md (post-apply, runs the 7 checks)
 /opsx:continue         # → retrospective.md (post-verify, evidence-first §0 + 6 sections)
 /opsx:archive
@@ -366,10 +366,12 @@ Implemented purely via context injection at invocation time, not by modifying sk
 Confirms these skills are installed before proceeding:
 
 - `superpowers:using-git-worktrees`
-- `superpowers:subagent-driven-development` (transitive: `test-driven-development`, `requesting-code-review`)
+- `superpowers:executing-plans`
+- `superpowers:test-driven-development` (when applicable)
+- `superpowers:verification-before-completion`
 - `superpowers:finishing-a-development-branch`
 
-Missing skill → STOP with explicit error. No silent fallback, no manual mode within this schema. The user should either install Superpowers or switch to the built-in `spec-driven` schema for that change.
+Missing skill → STOP with explicit error. The user should either install Superpowers or switch to the built-in `spec-driven` schema for that change.
 
 > The v0 version of this schema once placed an "auto-commit change artifacts to current branch" step here. It was removed after the [PR #970 review](https://github.com/Fission-AI/OpenSpec/pull/970): handling untracked change directories is the worktree skill's responsibility, not the schema's.
 
@@ -377,16 +379,15 @@ Missing skill → STOP with explicit error. No silent fallback, no manual mode w
 
 Creates `.worktrees/<change-name>/`, switches to a new branch, runs setup, confirms a clean test baseline.
 
-#### 2. Executor — `superpowers:subagent-driven-development`
+#### 2. Executor — `superpowers:executing-plans`
 
-Main agent reads `plan.md`, dispatches a fresh subagent per micro-task. Each subagent transitively activates:
+The primary agent reads `plan.md` and executes it inline in small batches while retaining the implementation context.
 
-- **TDD** (`superpowers:test-driven-development`): write failing test → watch it fail → minimal code → pass; production code without prior test gets deleted
-- **Per-task code review** (`superpowers:requesting-code-review`): spec-compliance review + code-quality review; critical issues block forward motion
+- **TDD** (`superpowers:test-driven-development`) is invoked directly for behavior-changing code, proportionate to risk.
+- **Verification** (`superpowers:verification-before-completion`) is invoked before claiming a task, batch, or change complete.
+- **Review/delegation** is opt-in. A finding that would add a material requirement returns to the user or planning artifacts rather than silently expanding scope.
 
-Coarse `tasks.md` checkboxes tick as tasks complete. After all tasks, a final code review covers the whole implementation.
-
-This schema does NOT support `superpowers:executing-plans` as a fallback. See the "Six design touches" section below for rationale.
+Coarse `tasks.md` checkboxes tick as tasks complete. The primary agent pauses only at the plan's checkpoints, on a real blocker, or when the user interrupts.
 
 #### 3. Verification — `openspec-verify-change`
 
@@ -441,13 +442,13 @@ Each artifact / apply step that invokes a Superpowers skill runs a PRECHECK at t
 
 Integration lives entirely in `instruction:` fields (pure prompts). If Superpowers upgrades a skill's behavior, the schema doesn't change. We only touch `schema.yaml` if a skill is renamed or removed.
 
-### 3. Transitive dependencies made explicit
+### 3. Direct execution dependencies made explicit
 
-TDD and code-review are normally hidden inside `subagent-driven-development`'s SKILL.md. Our schema's apply step 2a instruction lists these two transitive activations explicitly, so a reader can see "what actually happens during apply" at a glance.
+The apply instruction names inline execution, proportionate TDD, and completion verification directly. Review is not an automatic implementation loop and cannot create requirements outside the approved specification.
 
-### 4. Opinionated: subagent platforms only, no manual fallback
+### 4. Opinionated: inline primary-agent execution
 
-This schema requires a subagent-capable platform (Claude Code, Codex, etc.). The alternative executor `superpowers:executing-plans` does NOT transitively activate TDD or code-review (verified against its [SKILL.md](https://github.com/obra/superpowers/blob/main/skills/executing-plans/SKILL.md) — its body has no mention of either, and its Integration section omits both `test-driven-development` and `requesting-code-review`). Falling back to it would silently lose what Superpowers brings to this integration. We prefer to fail loud at Step 0 and direct users to the built-in `spec-driven` schema instead.
+This schema deliberately uses `superpowers:executing-plans` so one agent retains product context and judgment across the implementation. Subagents remain available for explicitly requested delegation or a bounded high-risk review named by the approved plan; they are never the default task executor.
 
 ### 5. Evidence-based PRECHECK for verify and retrospective (Layer 2 capability detection)
 
@@ -470,21 +471,22 @@ This bundle carries **two version identifiers** that should not be confused:
 
 | Identifier | Where | Meaning | Example |
 |---|---|---|---|
-| Schema major | `schema.yaml: version: 1` | Contract of the schema graph (artifacts, `requires:` edges, PRECHECK shape). Breaking changes bump this. | `1` |
-| Bundle release | `VERSION` file + git tag | SemVer release of this bundle, scoped to a schema major. | `1.0.1` (project-local patch of `v1.0.0`) |
+| Schema major | `schema.yaml: version: 2` | Contract of the schema graph and apply executor. Breaking changes bump this. | `2` |
+| Bundle release | `VERSION` file + git tag | SemVer release of this project-local bundle, scoped to a schema major. | `2.0.0` |
 
-A bundle release `1.x.y` is a published cut of schema major `v1`. A future schema major `v2` will restart bundle releases at `2.0.0`. Adopters who pin to `v1.x.y` are guaranteed schema-graph compatibility within the v1 major.
+A bundle release `2.x.y` belongs to schema major `v2`. The v2 migration replaces mandatory per-task subagents with inline primary-agent execution while retaining the artifact graph.
 
-> The compatibility matrix below uses `v1` (schema major) as the row key, because compatibility with OpenSpec / Superpowers is governed by the schema contract, not by patch-level edits inside this bundle.
+> The compatibility matrix uses the schema major as its row key because compatibility is governed by the schema contract, not patch-level bundle edits.
 
 ## Compatibility
 
 Baseline versions this schema was authored against. This is a **historical snapshot, not an end-to-end compatibility guarantee** — CI cannot run the full prompt-layer workflow in headless mode, so behavioral compatibility relies on human review when drift fires.
 
-Current bundle release: **`1.0.1`** (project-local patch of `v1.0.0`; see [VERSION](./VERSION)).
+Current bundle release: **`2.0.0`** (project-local; see [VERSION](./VERSION)).
 
 | superpowers-bridge | OpenSpec CLI | Superpowers plugin | Baseline as of |
 |---|---|---|---|
+| v2 | `1.8.0` | `v6.2.0` | 2026-08-08 |
 | v1 | `1.4.1` | `v5.1.0` | 2026-06-10 |
 
 ### How this is checked
@@ -521,7 +523,7 @@ Brainstorming is multi-turn interactive dialogue requiring user participation. M
 `tasks.md` is a coarse checkbox ("Add PdfServiceTest"); `plan.md` is micro-steps ("scaffold test → write downloadPdf test → run → commit"). They serve different purposes:
 
 - `tasks.md` → tracks overall progress (apply phase's `tracks` field parses these checkboxes)
-- `plan.md` → guides subagents step by step (the executor's input)
+- `plan.md` → guides the primary agent step by step (the executor's input)
 
 Apply requires `plan` (not `tasks`) because the executor needs micro-steps; `tracks: tasks.md` ensures progress is still surfaced via the coarse checkboxes.
 
@@ -530,7 +532,7 @@ Apply requires `plan` (not `tasks`) because the executor needs micro-steps; `tra
 If a Superpowers skill is unavailable:
 
 - **`brainstorm` / `plan` artifacts** — the user may explicitly opt in to writing the artifact manually (PRECHECK STOPs and informs the user; manual override requires deliberate user action, not silent degradation)
-- **`apply` phase** — no manual fallback within this schema. PRECHECK STOPs at Step 0 if any required skill is missing. The recommended path is to switch to the built-in `spec-driven` schema for that change. Rationale: see Design touch #4 above — `executing-plans` does not transitively activate TDD or code-review, and a degraded apply phase would defeat the schema's purpose.
+- **`apply` phase** — PRECHECK STOPs at Step 0 if a required inline-execution skill is missing. The recommended path is to install the skill or switch to the built-in `spec-driven` schema for that change.
 
 ---
 

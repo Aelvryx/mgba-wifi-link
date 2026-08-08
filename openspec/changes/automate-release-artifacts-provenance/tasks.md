@@ -117,10 +117,10 @@
 - [x] 5.10 Replace the generic GitHub subprocess builder with command-specific
   `gh api`, `gh release`, and `gh attestation` invocations; add faithful parser
   fixtures and a read-only live GET smoke that reject unsupported flags.
-- [ ] 5.11 Add an early existing-public-release verifier that downloads the
+- [x] 5.11 Add an early existing-public-release verifier that downloads the
   original seven assets and validates inventory, manifests, provenance, body,
   tag/target/classification, and exact attestations without rebuilding.
-- [ ] 5.12 Add a two-attempt regression with different workflow/run/job IDs proving
+- [x] 5.12 Add a two-attempt regression with different workflow/run/job IDs proving
   an exact published first attempt makes the second attempt read-only success,
   while any retained-evidence conflict fails without mutation.
 

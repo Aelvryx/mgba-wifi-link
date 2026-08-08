@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from enum import Enum
 import hashlib
 from io import BytesIO
-import json
 from pathlib import Path
 import tempfile
 from typing import NoReturn
@@ -23,8 +22,12 @@ from .model import (
     GateResult,
     ReleaseAsset,
     ReleaseContext,
+    load_contract,
 )
-from .provenance import canonical_json
+from .resource_limits import (CONTRACT_PATH, ResourceLimitError,
+                              bounded_canonical_json, preflight_zip_container,
+                              preflight_zip_infos, public_asset_max_bytes,
+                              read_bounded_regular, validate_public_asset_sizes)
 from .render import render_release_body
 from .verifier import verify_release
 
@@ -53,12 +56,9 @@ def _fail(error: Exception | None = None) -> NoReturn:
 
 def _canonical_document(data: bytes, required: set[str]) -> dict[str, object]:
     try:
-        value = json.loads(data.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        return bounded_canonical_json(data, required=required)
+    except ResourceLimitError as error:
         _fail(error)
-    if not isinstance(value, dict) or set(value) != required or canonical_json(value) != data:
-        _fail()
-    return value
 
 
 def _asset(value: object) -> ReleaseAsset:
@@ -146,17 +146,29 @@ def _gates(value: object) -> tuple[GateResult, ...]:
 
 
 def _retained_context(directory: Path) -> ReleaseContext:
+    contract = load_contract(CONTRACT_PATH)
+    try:
+        release_bytes = read_bounded_regular(
+            directory / "RELEASE-PROVENANCE.json",
+            public_asset_max_bytes("RELEASE-PROVENANCE.json", contract),
+        )
+    except ResourceLimitError as error:
+        _fail(error)
     release_document = _canonical_document(
-        (directory / "RELEASE-PROVENANCE.json").read_bytes(),
-        {"build", "payloads", "schema", "source"},
+        release_bytes, {"build", "payloads", "schema", "source"},
     )
     archive_names = tuple(path for path in directory.iterdir() if path.name.endswith(".zip"))
     if len(archive_names) != 1:
         _fail()
     try:
-        with zipfile.ZipFile(BytesIO(archive_names[0].read_bytes())) as archive:
+        archive_bytes = read_bounded_regular(
+            archive_names[0], public_asset_max_bytes(archive_names[0].name, contract)
+        )
+        preflight_zip_container(archive_bytes, contract)
+        with zipfile.ZipFile(BytesIO(archive_bytes)) as archive:
+            preflight_zip_infos(archive.infolist(), contract)
             build_bytes = archive.read("BUILD-PROVENANCE.json")
-    except (OSError, KeyError, zipfile.BadZipFile) as error:
+    except (OSError, KeyError, ResourceLimitError, zipfile.BadZipFile) as error:
         _fail(error)
     build_document = _canonical_document(
         build_bytes, {"build", "gates", "schema", "siblings", "source"},
@@ -230,6 +242,12 @@ def verify_existing_public_release(
             or remote.prerelease != expected_context.prerelease
         ):
             _fail()
+        try:
+            validate_public_asset_sizes(
+                ((asset.name, asset.size) for asset in remote.assets)
+            )
+        except ResourceLimitError as error:
+            _fail(error)
         if not isinstance(notes, bytes):
             _fail()
         with tempfile.TemporaryDirectory(prefix="gba-wifi-link-existing-release-") as temporary:

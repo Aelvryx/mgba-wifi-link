@@ -9,6 +9,9 @@ from .packager import (CONTRACT_PATH, PackageError, _asset, _render_template,
                        _sums, canonical_license, zip_timestamp)
 from .privacy import PrivacyError, validate_public_tree
 from .provenance import build_provenance, release_provenance
+from .resource_limits import (ResourceLimitError, preflight_zip_container,
+                              preflight_zip_infos, public_asset_max_bytes,
+                              read_bounded_regular, validate_public_asset_sizes)
 from .text_policy import classify_private_text
 
 
@@ -20,14 +23,19 @@ def _fail(category: str) -> None:
     raise VerificationError(category)
 
 
-def _read_regular(path: Path) -> bytes:
+def _read_regular(path: Path, maximum: int) -> bytes:
     try:
         status = path.lstat()
         if not stat.S_ISREG(status.st_mode) or stat.S_ISLNK(status.st_mode):
             _fail("VERIFY_TYPE")
         if stat.S_IMODE(status.st_mode) != 0o644:
             _fail("VERIFY_MODE")
-        return path.read_bytes()
+        if status.st_size > maximum:
+            _fail("VERIFY_RESOURCE")
+        try:
+            return read_bounded_regular(path, maximum)
+        except ResourceLimitError as error:
+            raise VerificationError("VERIFY_RESOURCE") from error
     except VerificationError:
         raise
     except OSError as error:
@@ -51,6 +59,10 @@ def _check_archive(data: bytes, context: ReleaseContext, public: dict[str, bytes
         raise VerificationError("VERIFY_ARCHIVE") from error
     try:
         from io import BytesIO
+        try:
+            preflight_zip_container(data, contract)
+        except ResourceLimitError as error:
+            raise VerificationError("VERIFY_RESOURCE") from error
         with zipfile.ZipFile(BytesIO(data)) as archive:
             if archive.comment != b"":
                 _fail("VERIFY_ARCHIVE")
@@ -58,6 +70,10 @@ def _check_archive(data: bytes, context: ReleaseContext, public: dict[str, bytes
             names = tuple(entry.filename for entry in entries)
             if names != contract.archive_members or len(set(names)) != len(names):
                 _fail("VERIFY_ARCHIVE")
+            try:
+                preflight_zip_infos(entries, contract)
+            except ResourceLimitError as error:
+                raise VerificationError("VERIFY_RESOURCE") from error
             raw: dict[str, bytes] = {}
             for entry in entries:
                 if (
@@ -108,7 +124,16 @@ def verify_release(output_dir: Path, context: ReleaseContext) -> ReleaseSet:
         expected_names = _names(context)
         if observed != tuple(sorted(expected_names)):
             _fail("VERIFY_FILE_SET")
-        public = {name: _read_regular(output_dir / name) for name in expected_names}
+        try:
+            sizes = tuple((name, (output_dir / name).lstat().st_size)
+                          for name in expected_names)
+            validate_public_asset_sizes(sizes, contract)
+        except ResourceLimitError as error:
+            raise VerificationError("VERIFY_RESOURCE") from error
+        public = {
+            name: _read_regular(output_dir / name, public_asset_max_bytes(name, contract))
+            for name in expected_names
+        }
         expected_install = _render_template(
             (Path(__file__).resolve().parents[2] / "packaging/gba-wifi-link/release/templates/INSTALL-AND-USAGE.md.in").read_bytes(), context)
         if public["INSTALL-AND-USAGE.md"] != expected_install:

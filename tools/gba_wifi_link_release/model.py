@@ -97,6 +97,16 @@ class ReleaseContract:
     release_provenance_assets: tuple[str, ...]
     standalone_sha256_assets: tuple[str, ...]
     public_text_assets: tuple[str, ...]
+    public_asset_max_bytes: tuple[tuple[str, int], ...]
+    public_aggregate_max_bytes: int
+    archive_member_max_bytes: tuple[tuple[str, int], ...]
+    archive_central_directory_max_bytes: int
+    archive_compressed_aggregate_max_bytes: int
+    archive_uncompressed_aggregate_max_bytes: int
+    archive_max_compression_ratio: int
+    json_max_bytes: int
+    json_max_depth: int
+    json_max_nodes: int
     file_mode: str
     license_sha256: str
     zip_compression: str
@@ -112,6 +122,37 @@ def load_contract(path: Path) -> ReleaseContract:
     configuration = tuple(data["build_configuration"].items())
     if configuration != REQUIRED_BUILD_CONFIGURATION:
         raise ValueError("CONTRACT_BUILD_CONFIGURATION")
+    resource_limits = data["resource_limits"]
+    if (
+        not isinstance(resource_limits, dict)
+        or set(resource_limits) != {
+            "archive_central_directory_max_bytes",
+            "archive_compressed_aggregate_max_bytes", "archive_max_compression_ratio",
+            "archive_member_max_bytes", "archive_uncompressed_aggregate_max_bytes",
+            "json_max_bytes", "json_max_depth", "json_max_nodes",
+            "public_aggregate_max_bytes", "public_asset_max_bytes",
+        }
+        or not all(type(value) is int and value > 0 for key, value in resource_limits.items()
+                   if not key.endswith("_max_bytes"))
+        or not isinstance(resource_limits["public_asset_max_bytes"], dict)
+        or not isinstance(resource_limits["archive_member_max_bytes"], dict)
+        or any(type(value) is not int or value <= 0
+               for value in resource_limits["public_asset_max_bytes"].values())
+        or any(type(value) is not int or value <= 0
+               for value in resource_limits["archive_member_max_bytes"].values())
+        or set(resource_limits["public_asset_max_bytes"]) != set(data["public_assets"])
+        or set(resource_limits["archive_member_max_bytes"]) != set(data["archive_members"])
+    ):
+        raise ValueError("CONTRACT_RESOURCE_LIMITS")
+    scalar_limits = (
+        "public_aggregate_max_bytes", "archive_central_directory_max_bytes",
+        "archive_compressed_aggregate_max_bytes",
+        "archive_uncompressed_aggregate_max_bytes", "archive_max_compression_ratio",
+        "json_max_bytes", "json_max_depth", "json_max_nodes",
+    )
+    if any(type(resource_limits[name]) is not int or resource_limits[name] <= 0
+           for name in scalar_limits):
+        raise ValueError("CONTRACT_RESOURCE_LIMITS")
     return ReleaseContract(
         schema=data["schema"],
         public_assets=tuple(data["public_assets"]),
@@ -122,6 +163,16 @@ def load_contract(path: Path) -> ReleaseContract:
         release_provenance_assets=tuple(data["release_provenance_assets"]),
         standalone_sha256_assets=tuple(data["standalone_sha256_assets"]),
         public_text_assets=tuple(data["public_text_assets"]),
+        public_asset_max_bytes=tuple(resource_limits["public_asset_max_bytes"].items()),
+        public_aggregate_max_bytes=resource_limits["public_aggregate_max_bytes"],
+        archive_member_max_bytes=tuple(resource_limits["archive_member_max_bytes"].items()),
+        archive_central_directory_max_bytes=resource_limits["archive_central_directory_max_bytes"],
+        archive_compressed_aggregate_max_bytes=resource_limits["archive_compressed_aggregate_max_bytes"],
+        archive_uncompressed_aggregate_max_bytes=resource_limits["archive_uncompressed_aggregate_max_bytes"],
+        archive_max_compression_ratio=resource_limits["archive_max_compression_ratio"],
+        json_max_bytes=resource_limits["json_max_bytes"],
+        json_max_depth=resource_limits["json_max_depth"],
+        json_max_nodes=resource_limits["json_max_nodes"],
         file_mode=data["file_mode"],
         license_sha256=data["license_sha256"],
         zip_compression=data["zip"]["compression"],

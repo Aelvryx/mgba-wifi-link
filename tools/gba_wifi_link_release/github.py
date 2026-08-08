@@ -12,6 +12,8 @@ from typing import Mapping, Protocol
 from urllib.parse import quote
 
 from .model import ReleaseContext
+from .resource_limits import (ResourceLimitError, public_asset_max_bytes,
+                              validate_public_asset_sizes)
 
 
 MAX_JSON_BYTES = 1 << 20
@@ -281,7 +283,8 @@ class GhClient:
         """Run an attestation-family operation with its supported repository option."""
         return self._run_bytes("attestation", *args, "--repo", self.repository)
 
-    def _stream_api_download(self, *args: str, destination: Path) -> None:
+    def _stream_api_download(self, *args: str, destination: Path,
+                             maximum_bytes: int) -> None:
         """Stream a binary API response to an exclusive no-follow regular file."""
         if destination.exists() or destination.is_symlink():
             raise GitHubError("GITHUB_DOWNLOAD")
@@ -289,6 +292,7 @@ class GhClient:
             raise GitHubError("GITHUB_DOWNLOAD")
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
         descriptor: int | None = None
+        process: subprocess.Popen[bytes] | None = None
         created = False
         completed = False
         try:
@@ -297,13 +301,33 @@ class GhClient:
             mode = os.fstat(descriptor).st_mode
             if not stat.S_ISREG(mode):
                 raise GitHubError("GITHUB_DOWNLOAD")
-            with os.fdopen(descriptor, "wb", closefd=True) as output:
-                descriptor = None
-                subprocess.run(
-                    [self.gh, "api", *args], check=True, stdout=output,
-                    stderr=subprocess.PIPE, env=self.env,
+            with tempfile.TemporaryFile() as errors:
+                process = subprocess.Popen(
+                    [self.gh, "api", *args], stdout=subprocess.PIPE,
+                    stderr=errors, env=self.env,
                 )
-                os.fchmod(output.fileno(), 0o644)
+                if process.stdout is None:
+                    raise GitHubError("GITHUB_DOWNLOAD")
+                total = 0
+                while chunk := process.stdout.read(1 << 16):
+                    total += len(chunk)
+                    if total > maximum_bytes:
+                        process.kill()
+                        process.wait()
+                        raise GitHubError("GITHUB_DOWNLOAD")
+                    remaining = memoryview(chunk)
+                    while remaining:
+                        written = os.write(descriptor, remaining)
+                        if written <= 0:
+                            raise OSError("download write")
+                        remaining = remaining[written:]
+                returncode = process.wait()
+                if returncode != 0:
+                    errors.seek(0)
+                    raise _CommandError(errors.read(MAX_JSON_BYTES + 1)[:MAX_JSON_BYTES])
+                os.fchmod(descriptor, 0o644)
+                os.close(descriptor)
+                descriptor = None
             completed = True
         except GitHubError:
             raise
@@ -312,6 +336,11 @@ class GhClient:
                 raise _CommandError(error.stderr or b"") from error
             raise GitHubError("GITHUB_COMMAND") from error
         finally:
+            if process is not None and process.poll() is None:
+                process.kill()
+                process.wait()
+            if process is not None and process.stdout is not None:
+                process.stdout.close()
             if descriptor is not None:
                 os.close(descriptor)
             # A failed transfer is never a reusable partial download.
@@ -377,6 +406,12 @@ class GhClient:
         assets = tuple(_remote_asset(item) for item in listing)
         if len({asset.name for asset in assets}) != len(assets):
             raise GitHubError("GITHUB_ASSET")
+        try:
+            validate_public_asset_sizes(
+                ((asset.name, asset.size) for asset in assets)
+            )
+        except ResourceLimitError as error:
+            raise GitHubError("GITHUB_DOWNLOAD") from error
         for asset in assets:
             destination = output / asset.name
             if destination.exists() or destination.is_symlink():
@@ -385,6 +420,7 @@ class GhClient:
                 self._stream_api_download(
                     f"repos/{self.repository}/releases/assets/{asset.id}",
                     "--header", "Accept: application/octet-stream", destination=destination,
+                    maximum_bytes=min(public_asset_max_bytes(asset.name), asset.size),
                 )
                 with destination.open("rb") as downloaded:
                     digest = hashlib.file_digest(downloaded, "sha256").hexdigest()

@@ -180,6 +180,10 @@ def main() -> None:
         data = base64.b64decode(files[asset["name"]])
         _save(state)
         sys.stdout.buffer.write(data)
+        sys.stdout.buffer.flush()
+        marker = state.get("stream_complete_marker")
+        if isinstance(marker, str):
+            Path(marker).write_text("complete\n", encoding="utf-8")
         return
 
     if "/releases/" in endpoint and method == "PATCH":

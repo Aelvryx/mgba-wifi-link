@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from tools.gba_wifi_link_release.existing_release import (
     ExistingReleaseError,
@@ -189,6 +190,24 @@ class ExistingReleaseTest(unittest.TestCase):
                     self.assertFalse(any(call[0] in {"create", "upload", "publish", "delete"}
                                          for call in client.calls))
 
+    def test_oversized_remote_asset_metadata_fails_before_download(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            context, output = self.make_attempt(root)
+            body = render_release_body(context, NOTES.decode("utf-8"))
+            remote, files = self.remote_for(context, output, body)
+            oversized = replace(
+                remote,
+                assets=(replace(remote.assets[0], size=67_108_865), *remote.assets[1:]),
+            )
+            client = ReadOnlyClient(oversized, files)
+
+            with self.assertRaisesRegex(ExistingReleaseError,
+                                        "^EXISTING_RELEASE_CONFLICT$"):
+                verify_existing_public_release(client, context, NOTES)
+
+            self.assertEqual(client.calls, [("get", context.tag)])
+
     def test_malformed_or_missing_downloaded_evidence_fails_without_attestation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -199,6 +218,21 @@ class ExistingReleaseTest(unittest.TestCase):
                 "missing": {key: value for key, value in files.items()
                             if key != "RELEASE-PROVENANCE.json"},
                 "malformed": {**files, "RELEASE-PROVENANCE.json": b"{}\n"},
+                "duplicate-json": {
+                    **files,
+                    "RELEASE-PROVENANCE.json": b'{"build":{},"build":{},"payloads":[],"schema":1,"source":{}}\n',
+                },
+                "deep-json": {
+                    **files,
+                    "RELEASE-PROVENANCE.json": (
+                        b'{"build":' + b"[" * 21 + b"0" + b"]" * 21
+                        + b',"payloads":[],"schema":1,"source":{}}\n'
+                    ),
+                },
+                "oversized-json": {
+                    **files,
+                    "RELEASE-PROVENANCE.json": b" " * 1_048_577,
+                },
                 "checksum": {**files, "gba-link-test.gba": b"corrupt"},
             }
             for name, downloaded in cases.items():
@@ -207,6 +241,21 @@ class ExistingReleaseTest(unittest.TestCase):
                     with self.assertRaisesRegex(ExistingReleaseError, "^EXISTING_RELEASE_CONFLICT$"):
                         verify_existing_public_release(client, context, NOTES)
                     self.assertFalse(any(call[0] == "verify-attestations" for call in client.calls))
+
+    def test_oversized_retained_json_is_rejected_before_path_read(self):
+        from tools.gba_wifi_link_release.existing_release import _retained_context
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            provenance = root / "RELEASE-PROVENANCE.json"
+            provenance.touch()
+            with provenance.open("r+b") as output:
+                output.truncate(1_048_577)
+            with patch.object(Path, "read_bytes",
+                              side_effect=AssertionError("oversized path read")):
+                with self.assertRaisesRegex(ExistingReleaseError,
+                                            "^EXISTING_RELEASE_CONFLICT$"):
+                    _retained_context(root)
 
     def test_coherent_release_for_a_different_source_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:

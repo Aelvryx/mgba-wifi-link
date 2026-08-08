@@ -2,8 +2,10 @@
 
 from pathlib import Path
 import shutil
+import struct
 import tempfile
 import unittest
+from unittest.mock import patch
 import warnings
 import zipfile
 
@@ -120,3 +122,81 @@ class VerifierTest(unittest.TestCase):
             provenance = root / "RELEASE-PROVENANCE.json"
             provenance.write_bytes(provenance.read_bytes().replace(b'"payloads"', b'"payloads":"SHA256SUMS","x"'))
         self.assert_rejected(provenance_cycle)
+
+    @staticmethod
+    def rewrite_central_sizes(root: Path, sizes: dict[str, tuple[int, int]]) -> None:
+        path = root / "mgba-gba-wifi-link-v9.8.7-android-arm64.zip"
+        data = bytearray(path.read_bytes())
+        cursor = 0
+        while True:
+            cursor = data.find(b"PK\x01\x02", cursor)
+            if cursor < 0:
+                break
+            name_length, extra_length, comment_length = struct.unpack_from("<HHH", data, cursor + 28)
+            name = bytes(data[cursor + 46:cursor + 46 + name_length]).decode("utf-8")
+            if name in sizes:
+                compressed, uncompressed = sizes[name]
+                struct.pack_into("<II", data, cursor + 20, compressed, uncompressed)
+            cursor += 46 + name_length + extra_length + comment_length
+        path.write_bytes(data)
+
+    def assert_archive_resource_rejected_before_read(
+        self, sizes: dict[str, tuple[int, int]],
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            release = self.build(Path(directory))
+            self.rewrite_central_sizes(release, sizes)
+            with patch.object(zipfile.ZipFile, "read",
+                              side_effect=AssertionError("archive member read before preflight")):
+                with self.assertRaisesRegex(VerificationError, "^VERIFY_RESOURCE$"):
+                    verify_release(release, package_tests.context())
+
+    def test_verifier_preflights_member_size_ratio_and_aggregate_before_read(self):
+        self.assert_archive_resource_rejected_before_read({
+            "BUILD-PROVENANCE.json": (1_048_577, 4_069),
+        })
+        self.assert_archive_resource_rejected_before_read({
+            "BUILD-PROVENANCE.json": (1_167, 1_048_577),
+        })
+        self.assert_archive_resource_rejected_before_read({
+            "BUILD-PROVENANCE.json": (1, 101),
+        })
+        compressed_aggregate = {
+            "mgba_libretro_android.so": (67_108_864, 67_108_864),
+            "gba-link-test.gba": (1_048_576, 1_048_576),
+            "gba-link-continuous.gba": (1_048_576, 1_048_576),
+            "INSTALL-AND-USAGE.md": (1_048_576, 1_048_576),
+            "SOURCE-AND-PROVENANCE.md": (1_048_576, 1_048_576),
+        }
+        self.assert_archive_resource_rejected_before_read(compressed_aggregate)
+        uncompressed_aggregate = {
+            "mgba_libretro_android.so": (671_089, 67_108_864),
+            "gba-link-test.gba": (10_486, 1_048_576),
+            "gba-link-continuous.gba": (10_486, 1_048_576),
+            "INSTALL-AND-USAGE.md": (10_486, 1_048_576),
+            "SOURCE-AND-PROVENANCE.md": (10_486, 1_048_576),
+        }
+        self.assert_archive_resource_rejected_before_read(uncompressed_aggregate)
+
+    def test_verifier_rejects_oversized_public_file_before_reading_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            release = self.build(Path(directory))
+            core = release / "mgba_libretro_android.so"
+            with core.open("r+b") as output:
+                output.truncate(67_108_865)
+            with self.assertRaisesRegex(VerificationError, "^VERIFY_RESOURCE$"):
+                verify_release(release, package_tests.context())
+
+    def test_verifier_rejects_excessive_zip_entry_count_before_opening_archive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            release = self.build(Path(directory))
+            archive = release / "mgba-gba-wifi-link-v9.8.7-android-arm64.zip"
+            data = bytearray(archive.read_bytes())
+            eocd = data.rfind(b"PK\x05\x06")
+            self.assertGreaterEqual(eocd, 0)
+            struct.pack_into("<HH", data, eocd + 8, 65_535, 65_535)
+            archive.write_bytes(data)
+            with patch.object(zipfile, "ZipFile",
+                              side_effect=AssertionError("archive opened before count preflight")):
+                with self.assertRaisesRegex(VerificationError, "^VERIFY_RESOURCE$"):
+                    verify_release(release, package_tests.context())

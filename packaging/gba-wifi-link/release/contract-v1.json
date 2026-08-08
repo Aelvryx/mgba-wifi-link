@@ -46,6 +46,35 @@
     "RELEASE-PROVENANCE.json",
     "SHA256SUMS"
   ],
+  "resource_limits": {
+    "archive_central_directory_max_bytes": 65536,
+    "archive_compressed_aggregate_max_bytes": 71303168,
+    "archive_max_compression_ratio": 100,
+    "archive_member_max_bytes": {
+      "BUILD-PROVENANCE.json": 1048576,
+      "INSTALL-AND-USAGE.md": 1048576,
+      "LICENSE": 1048576,
+      "SHA256SUMS": 65536,
+      "SOURCE-AND-PROVENANCE.md": 1048576,
+      "gba-link-continuous.gba": 1048576,
+      "gba-link-test.gba": 1048576,
+      "mgba_libretro_android.so": 67108864
+    },
+    "archive_uncompressed_aggregate_max_bytes": 71303168,
+    "json_max_bytes": 1048576,
+    "json_max_depth": 20,
+    "json_max_nodes": 4096,
+    "public_aggregate_max_bytes": 134217728,
+    "public_asset_max_bytes": {
+      "INSTALL-AND-USAGE.md": 1048576,
+      "RELEASE-PROVENANCE.json": 1048576,
+      "SHA256SUMS": 65536,
+      "gba-link-continuous.gba": 1048576,
+      "gba-link-test.gba": 1048576,
+      "mgba-gba-wifi-link-{tag}-android-arm64.zip": 83886080,
+      "mgba_libretro_android.so": 67108864
+    }
+  },
   "release_workflow": {
     "action_pins": {
       "actions/attest-build-provenance": "977bb373ede98d70efdf65b84cb5f73e068dcc2a",

@@ -16,7 +16,7 @@
 - **Diff size**: <+X / -Y lines across N files>
 - **Tasks done**: <x>/<y> (`grep -cE '^\s*- \[x\]' tasks.md` → x;regex 容許 sub-task 縮排)
 - **Active hours**: <estimate>
-- **Subagent dispatches**: <count or "n/a">
+- **Opt-in delegation/review agents**: <count or "none">
 - **New external dependencies**: <list, with license + version, or "none">
 - **Bugs encountered post-merge**: <count, one-line each, or "none">
 - **OpenSpec validate state at archive**: <pass / fail / not-run>
@@ -55,13 +55,13 @@ Commit chain (時序):
 | superpowers:brainstorming                        |      |
 | superpowers:writing-plans                        |      |
 | superpowers:using-git-worktrees                  |      |
-| superpowers:subagent-driven-development          |      |
-| (transitive) superpowers:test-driven-development |      |
-| (transitive) superpowers:requesting-code-review  |      |
+| superpowers:executing-plans                      |      |
+| superpowers:test-driven-development              |      |
+| superpowers:verification-before-completion       |      |
 | superpowers:finishing-a-development-branch       |      |
 
-> **Default expectation**: 全部 ✓。每個 skill 都是 schema 設計的一部分,
-> 跳過屬於異常情境。任一項 ✗ 都必須在下方
+> **Default expectation**: 適用的 skill 為 ✓。文件或設定-only work 可合理
+> 跳過 TDD；任一項 ✗ 都必須在下方
 > `### Deliberately Skipped Skills` subsection 提出原因與預防方案。
 
 ### Deliberately Skipped Skills

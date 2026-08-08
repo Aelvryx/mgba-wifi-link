@@ -38,24 +38,28 @@ issue.
 
 ## Approaches considered
 
-### Selected: one tag-triggered, fail-closed release workflow
+### Selected: untrusted tag intake plus a protected release controller
 
-An annotated `v*` tag triggers a release workflow. Unprivileged jobs validate
-the tag and source, run or bind the required protected evidence, build twice in
-clean jobs, compare the resulting core and package payloads, and produce a
-canonical release set. A final least-privilege publication job stages that exact
-set privately, verifies the remote draft, and publishes it automatically.
+An annotated `v*` tag triggers a read-only intake workflow. Completion of that
+intake wakes a separate `workflow_run` controller whose definition and release
+authority come from protected default-branch code, not from the tag being
+validated. The controller independently resolves and admits the tag, then runs
+protected evidence, two clean builds, deterministic packaging, attestation and
+transactional publication. Candidate source is checked out only after admission
+and is treated as build/data input; trusted release tooling comes from the
+controller checkout.
 
-This keeps the trust boundary understandable: the tag is the release command,
-build jobs cannot publish, and the publication job cannot invent or rebuild
-assets.
+This keeps the trust boundary enforceable: the tag is still the sole human
+release command, but tag-controlled YAML cannot grant itself publication
+authority or replace its own ancestry check.
 
-### Rejected: chain publication from a separate completed CI workflow
+### Rejected: a privileged workflow sourced from the candidate tag
 
-Separating build and publication workflows can reduce permission scope, but it
-adds cross-workflow artifact trust, run-selection, and event-correlation
-complexity. The same separation can be achieved inside one workflow with job
-permissions and immutable artifact identities.
+Job-level permissions inside one tag-sourced workflow do not establish a trust
+boundary because GitHub evaluates that workflow from the tag's commit. An
+off-history tag can replace the admission and publisher jobs together. The
+protected controller accepts the extra event-correlation work because default-
+branch ownership is required for real privilege separation.
 
 ### Rejected: publish from a version-file change on `master`
 
@@ -88,9 +92,12 @@ An explicit annotated release tag is a clearer and safer maintainer action.
   `contents: write` publication job create a private draft, upload exactly that
   set, download or query it back, verify names/sizes/hashes/body metadata, and
   publish automatically.
-- Use per-tag concurrency and never overwrite an existing tag or release. A rerun
-  after successful publication verifies the existing release and exits without
-  mutation only when it is byte-identical; otherwise it fails.
+- Use per-tag concurrency and never overwrite an existing tag or release. Before
+  rebuilding, a rerun after successful publication downloads and validates the
+  original public bytes, provenance, body, tag and attestations. It exits without
+  mutation only when that retained first-run evidence is complete and coherent;
+  volatile new run/job IDs are never used to regenerate a supposedly identical
+  release.
 - Treat `v0.x` releases as prereleases until a separately reviewed policy changes
   that classification.
 - Do not require new physical gameplay merely for release-tooling changes. Runtime
@@ -110,9 +117,13 @@ An explicit annotated release tag is a clearer and safer maintainer action.
   boundary, and Android-build gates.
 - Prove the privileged publication job consumes only the previously verified
   canonical artifacts and has no build step.
-- Perform one end-to-end rehearsal against a disposable non-public tag/repository
-  or equivalent isolated release target, then delete the rehearsal release and
-  tag. The first real release remains fully automatic from its approved tag.
+- Perform one end-to-end rehearsal against an explicitly named disposable public
+  repository containing synthetic/re-distributable material only. Generate a
+  narrowly transformed rehearsal tree whose repository and signer identities are
+  fixed to that one target, prove the production tree remains hard-coded to the
+  canonical repository, record the public transparency-log consequence, then
+  delete the rehearsal release, tag and repository. The first real release
+  remains fully automatic from its approved tag.
 
 ## Scope boundary
 

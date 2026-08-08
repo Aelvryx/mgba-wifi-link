@@ -23,6 +23,8 @@ this change does not depend on a public diagnostic intake workflow.
 
 - Turn one new approved annotated semantic-version tag into a complete published
   Android ARM64 prerelease without manual packaging or upload steps.
+- Ensure every release credential and privileged mutation is controlled by
+  protected default-branch workflow code that the candidate tag cannot replace.
 - Fail before public visibility when source, validation, build, reproducibility,
   privacy, packaging, provenance, or remote asset verification is uncertain.
 - Produce byte-identical executable and archive payloads from identical tagged
@@ -30,7 +32,8 @@ this change does not depend on a public diagnostic intake workflow.
 - Keep build jobs unprivileged and confine release/attestation permissions to one
   final job that consumes already-verified artifacts.
 - Make retries idempotent without permitting tag movement, asset replacement, or
-  mutation of an existing conflicting release.
+  mutation of an existing conflicting release, even though a rerun receives new
+  workflow and job identities.
 - Preserve the v0.2.0 historical record and existing proportionate runtime
   qualification rules.
 
@@ -49,27 +52,33 @@ this change does not depend on a public diagnostic intake workflow.
 
 ## Decisions
 
-### D1: An annotated tag is the release command
+### D1: An annotated tag is the release command, not the trust root
 
-- **Choice:** Trigger on a new annotated tag matching the canonical semantic
-  version form `vMAJOR.MINOR.PATCH` (with a separately bounded prerelease suffix
-  only when the release policy defines one). The peeled commit must be reachable
-  from protected `master`, carry successful exact-commit protected checks, agree
-  with all tracked version inputs, and have no pre-existing conflicting tag or
-  release. `v0.x` publishes as a GitHub prerelease.
+- **Choice:** A new annotated tag matching the canonical semantic version form
+  `vMAJOR.MINOR.PATCH` triggers a read-only intake workflow. A separate
+  `workflow_run` controller, evaluated from protected default-branch code,
+  independently reads the intake run and remote tag, peels the tag, proves the
+  commit is reachable from protected `master`, and validates version/release
+  inputs before executing candidate source or granting any release permission.
+  The intake has no secret, attestation, release, environment, or write authority.
+  `v0.x` publishes as a GitHub prerelease.
 - **Reason:** A deliberate tag is an explicit maintainer action without adding a
   second manual publication gate.
-- **Alternatives considered:** Publishing on a version-file merge makes ordinary
-  merges dangerous. A second manual dispatch or Publish click contradicts the
-  selected full-automation boundary.
+- **Alternatives considered:** A privileged tag-sourced workflow is rejected
+  because the tag can replace its own ancestry check and publisher. Publishing
+  on a version-file merge makes ordinary merges dangerous. A second manual
+  dispatch or Publish click contradicts the selected full-automation boundary.
 
-### D2: The protected suite is reusable release evidence
+### D2: The protected controller separates trusted tooling from candidate source
 
-- **Choice:** Refactor the protected workflow only as needed so the tag workflow
-  runs the same normal, ASan/UBSan, TSan, complete-suite, fixture/tooling, and
-  Android/binary-boundary gates against the peeled tag commit. The release
-  provenance records the workflow/run/job identities and conclusions. No release
-  job may substitute an older branch run merely because it tested the same tree.
+- **Choice:** The controller uses a protected-control checkout for release tools,
+  workflow policy, contracts and orchestration, and a separate admitted-source
+  checkout for runtime building plus reviewed release-note/template data. It
+  invokes the same normal, ASan/UBSan, TSan, complete-suite, fixture/tooling, and
+  Android/binary-boundary gates against the peeled tag commit. Provenance records
+  both released-source identity and protected controller workflow/commit, plus
+  exact first-run job identities. Candidate source is never executed before its
+  protected-history admission succeeds.
 - **Reason:** Release evidence must be attached unambiguously to the tagged source,
   while test definitions should have one owner.
 - **Alternatives considered:** Polling arbitrary prior check runs creates a race
@@ -133,7 +142,9 @@ this change does not depend on a public diagnostic intake workflow.
   deterministic epoch, and names/sizes/SHA-256 values for all project assets. A
   rendered human-readable notice and release body derive from the same model.
   GitHub build-provenance attestations cover at least the admitted core and archive
-  without changing their bytes.
+  without changing their bytes. The model distinguishes the released source
+  commit from the protected controller commit/workflow that owned release
+  authority.
 - **Reason:** Humans, tools, and GitHub verification should share one source of
   truth, while signed environment-specific data stays outside the reproducible
   payload.
@@ -152,15 +163,17 @@ this change does not depend on a public diagnostic intake workflow.
 - **Alternatives considered:** A deny-list alone cannot provide a durable release
   privacy boundary.
 
-### D7: Publication uses a private transactional stage but no human pause
+### D7: Publication authority belongs only to the protected controller
 
-- **Choice:** All workflow jobs default to read-only permissions. After every
-  validation succeeds, a final job with only the required `contents`,
-  `attestations`, and `id-token` write permissions downloads the canonical
-  workflow artifact and runs `verify` before any API mutation. It creates a draft
-  release, uploads exactly the seven assets, queries or downloads them back, verifies
-  their names, counts, sizes, hashes, body identity, tag, and prerelease flag, then
-  publishes automatically in the same job.
+- **Choice:** The tag intake is always read-only. The default-branch controller's
+  validation/build/package jobs also default to read-only permissions. After
+  every validation succeeds, one controller-owned final job with only the
+  required `contents`, `attestations`, and `id-token` write permissions downloads
+  the sealed canonical handoff and runs `verify` before any API mutation. It does
+  not check out or execute candidate source, render, rebuild, or accept undeclared
+  input. It creates a draft release, uploads exactly the seven assets, queries or
+  downloads them back, verifies names, count, sizes, hashes, body, tag, target and
+  prerelease flag, then publishes automatically.
 
   Before publication, any failure removes the draft and leaves the workflow
   artifact/log evidence. If the publish response is uncertain, the job reads the
@@ -172,20 +185,24 @@ this change does not depend on a public diagnostic intake workflow.
 - **Alternatives considered:** Uploading directly to a public release exposes
   partial state. A persistent draft awaiting review is not fully automated.
 
-### D8: Tags and releases are immutable and reruns are idempotent
+### D8: Existing-release verification precedes volatile rebuilding
 
 - **Choice:** Add a repository ruleset for `v*` tags that prevents update and
-  deletion after creation. Use per-tag workflow concurrency without cancellation.
-  A first run owns creation. A rerun after a successful release performs a
-  read-only exact verification and succeeds only when the remote release matches
-  the canonical locally rebuilt set; otherwise it fails. An unpublished orphan
-  draft created by the same tag/run may be safely replaced only after its identity
-  is verified.
+  deletion after creation. Use per-tag controller concurrency without
+  cancellation. Before protected tests or builds, the controller checks whether a
+  public release already exists. If it does, a trusted verifier downloads the
+  original seven assets and validates their exclusive inventories, checksums,
+  package/provenance schemas, source/tag/controller identities, body,
+  classification and exact attestations. A complete coherent release is
+  read-only success; any conflict fails. It is never regenerated with the rerun's
+  new workflow/job IDs. Only an absent release proceeds to creation. An
+  unpublished orphan draft may be cleaned only after exact ownership checks.
 - **Reason:** Reproducibility is meaningful only while source tags and published
   bytes remain stable.
 - **Alternatives considered:** Force-replacing assets reproduces the v0.2.0
-  correction ceremony and invalidates prior downloads. Cancel-in-progress can
-  interrupt the publishing transaction.
+  correction ceremony and invalidates prior downloads. Rebuilding then comparing
+  cannot be idempotent because Actions assigns new run/job IDs. Cancel-in-progress
+  can interrupt the publishing transaction.
 
 ### D9: Release notes are tracked input, not generated claims
 
@@ -210,12 +227,47 @@ this change does not depend on a public diagnostic intake workflow.
 - **Alternatives considered:** Always requiring device playtests makes tooling
   releases ceremonial; never requiring them ignores runtime risk.
 
+### D11: GitHub CLI/API invocation is command-specific and parser-tested
+
+- **Choice:** The real adapter constructs separate argument arrays for `gh api`,
+  `gh release`, and `gh attestation`. REST endpoints include the canonical
+  repository path and never receive unsupported `--repo` or `--output` flags.
+  Binary asset downloads stream into an already-opened no-follow destination.
+  Tests use a faithful parser shim and a read-only live GET smoke so the fake
+  cannot accept options rejected by the installed CLI.
+- **Reason:** A mock that invents CLI syntax can make the entire transaction look
+  tested while every real REST call fails.
+- **Alternatives considered:** Shell interpolation and broad catch/retry logic are
+  rejected because they obscure the exact mutation boundary.
+
+### D12: Rehearsal uses a synthetic-only public disposable identity
+
+- **Choice:** Before production settings are applied, generate a temporary
+  rehearsal tree for one exact repository name matching
+  `Aelvryx/mgba-wifi-link-release-rehearsal-<decimal-run-id>`. A reviewed tool
+  performs only an allow-listed set of canonical repository/signer/notes/policy
+  substitutions and proves the production tree still rejects noncanonical
+  repositories. The disposable repository is public because GitHub attestations
+  for a private personal-account repository are unavailable. It contains only
+  synthetic/re-distributable material, explicitly initializes protected
+  `master`, runs the same intake/controller flow, and is deleted only after an
+  exact target/read-back and delete-capability preflight. The evidence records
+  that public attestation transparency entries may remain after repository
+  deletion.
+- **Reason:** The rehearsal must exercise real Actions, attestations and releases
+  without introducing a general production repository override or touching a
+  production version tag.
+- **Alternatives considered:** A private personal-account repository cannot run
+  the required attestation flow. Using the canonical public repository risks a
+  real release. A general `--repository` production override weakens identity.
+
 ## Risks / Trade-offs
 
 - **[Risk] A tag can be pushed before its intended source is ready.** → Mitigation:
-  require an annotated canonical tag, protected-history reachability, exact-commit
-  gates, version/release-note agreement, and an immutable tag ruleset; failure
-  publishes nothing.
+  the tag-side intake has no mutation authority; protected default-branch code
+  independently requires an annotated canonical tag, protected-history
+  reachability, exact-commit gates, version/release-note agreement, and immutable
+  remote identity before publication.
 - **[Risk] GitHub-hosted runner images can change while retaining the same label.**
   → Mitigation: record the resolved runner image, pin downloaded toolchains/actions,
   require two same-run clean builds, and define runner image changes as a recorded
@@ -227,6 +279,12 @@ this change does not depend on a public diagnostic intake workflow.
 - **[Risk] GitHub may fail between publication and response.** → Mitigation: read
   back the public release and accept only the exact complete state; never delete a
   public release automatically.
+- **[Risk] A repeated tag run has different workflow/job IDs.** → Mitigation:
+  validate the retained first-run public evidence before rebuilding; never attempt
+  to regenerate a byte-identical release from second-run volatile identities.
+- **[Risk] Public rehearsal leaves transparency-log evidence after deletion.** →
+  Mitigation: use only reviewed synthetic/re-distributable inputs and document the
+  permanent public signer/subject hashes as non-sensitive evidence.
 - **[Trade-off] Two Android builds and the full suite increase release latency.** →
   Accepted because releases are infrequent and the cost replaces substantial
   manual identity/reproducibility work.
@@ -240,18 +298,24 @@ this change does not depend on a public diagnostic intake workflow.
    directory immutable.
 2. Add version-neutral release templates, canonical metadata schema, packager, and
    deterministic unit/golden tests using synthetic release inputs.
-3. Make the protected CI workflow reusable by the release workflow without changing
-   its pull-request or protected-`master` behavior.
+3. Make the protected CI workflow reusable by a protected default-branch release
+   controller without changing its pull-request or protected-`master` behavior.
 4. Add independent Android build/reproducibility jobs and artifact handoff with
    read-only permissions.
-5. Add mocked publisher tests and the final least-privilege draft/read-back/publish
-   job.
-6. Add and independently inspect the immutable `v*` tag ruleset before enabling the
-   release trigger.
-7. Rehearse the full pipeline against a disposable non-public tag/release target,
-   prove cleanup and retry behavior, then remove the rehearsal tag/release.
-8. Enable the real tag trigger only after review and protected CI pass. The next
-   approved release tag then publishes fully automatically.
+5. Add mocked and faithful-CLI publisher tests, an early existing-release verifier,
+   and the final least-privilege draft/read-back/publish job.
+6. Split the release path into a read-only tag intake and a protected
+   default-branch `workflow_run` controller; prove adversarial off-history tag code
+   receives no publication authority.
+7. Add and independently inspect the immutable `v*` tag ruleset, then apply and
+   read it back using the maintainer's bounded local credential. Do not retain a
+   high-scope release-workflow secret merely to audit bypass actors continuously.
+8. Preflight deletion and attestation support, then rehearse the full pipeline in
+   a synthetic-only public disposable repository with a narrowly transformed
+   identity. Prove successful publication, original-evidence rerun, failure
+   cleanup and destructive removal.
+9. Enable the real intake/controller pair only after review and protected CI pass.
+   The next approved release tag then publishes fully automatically.
 
 Rollback before a public release consists of disabling the tag trigger and reverting
 the workflow/tooling change. A failed unpublished transaction removes its draft and

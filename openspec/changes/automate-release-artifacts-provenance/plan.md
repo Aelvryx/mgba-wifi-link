@@ -4,7 +4,7 @@
 
 **Goal:** Make one approved annotated version tag automatically validate, reproducibly build, package, attest, verify, and publish an immutable Android ARM64 GBA Wi-Fi Link prerelease.
 
-**Architecture:** A standard-library Python package owns tag admission, canonical metadata, deterministic packaging, verification, privacy, and a mockable GitHub publisher. The protected CI workflow remains the single validation owner and is composed by a tag-triggered release workflow; all build jobs are read-only, while one final publisher consumes an immutable verified artifact, transactionally stages a private draft, and publishes it automatically.
+**Architecture:** A standard-library Python package owns tag admission, canonical metadata, deterministic packaging, existing-release verification, privacy, and a mockable GitHub publisher. A read-only tag intake wakes a separate `workflow_run` controller whose code and publication authority come from protected `master`; trusted controller tooling admits and builds the candidate source, while one controller-owned publisher consumes a sealed verified handoff, transactionally stages a private draft, and publishes it automatically.
 
 **Tech Stack:** Python 3 standard library (`dataclasses`, `hashlib`, `json`, `pathlib`, `subprocess`, `zipfile`, `unittest`), Bash, Git, GitHub Actions, GitHub CLI/API, Android NDK `27.2.12479018`, CMake/Ninja, SHA-256, GitHub artifact attestations, OpenSpec.
 
@@ -12,10 +12,11 @@
 
 - The release trigger accepts only a new annotated `vMAJOR.MINOR.PATCH` tag whose peeled commit is reachable from protected `master`; `v0.x` is always a prerelease.
 - Pushing the approved tag is the only maintainer release action. No manual dispatch, approval, asset upload, draft pause, or Publish click follows it.
+- The tag-side intake is untrusted and read-only. Only protected default-branch controller code may admit candidate source or receive release/attestation authority.
 - Identical tagged inputs must produce byte-identical core, rendered documents, manifests, checksums, and ZIP payloads; signed attestation envelopes remain outside reproducible/checksum scopes.
 - The public set has exactly seven project assets. The archive and standalone checksum scopes are those frozen in `specs/automated-release-provenance/spec.md`.
 - Validation/build/package jobs are read-only. Only the publisher gets the minimum `contents`, `attestations`, and `id-token` write permissions, and it cannot check out or build source.
-- Publication is fail-closed and immutable. Exact reruns are read-only success; conflicts fail; corrections use a new tag/version.
+- Publication is fail-closed and immutable. Exact reruns validate retained first-run public evidence before rebuilding; conflicts fail; corrections use a new tag/version.
 - Release artifacts must not contain ROM/BIOS identities, saves, raw inputs, endpoint/frontend logs, paths, addresses, device identities, commercial evidence, or secrets.
 - The historical `packaging/gba-wifi-link/v0.2.0/` tree and live v0.2.0 release are not mutated.
 - This change does not create a production version tag or publish v0.2.1.
@@ -332,7 +333,7 @@ git commit -m "release: build deterministic Android bundles"
 
 **Interfaces:**
 - Consumes: verified `ReleaseSet`, rendered release body, `ReleaseContext`, and a `GitHubClient` implementation.
-- Produces: `publish_release(client, release_set, body) -> PublishResult`, CLI subcommand `publish`, and a real `GhClient` adapter whose subprocess boundary is replaceable in tests.
+- Produces: `publish_release(client, release_set, body) -> PublishResult`, `verify_existing_release(client, admitted_tag) -> ExistingReleaseResult`, CLI subcommands `publish` and `verify-existing`, and a real `GhClient` adapter whose subprocess boundary is replaceable in tests.
 
 - [ ] **Step 1: Define the client protocol and write the failing success-sequence test**
 
@@ -364,15 +365,19 @@ Never catch and downgrade `ReleaseConflict`. On pre-publication failure, delete 
 - [ ] **Step 5: Implement `GhClient` with argument arrays, bounded JSON, and no shell interpolation**
 
 ```python
-def _run(self, *args: str) -> bytes:
-    return subprocess.run(
-        [self.gh, *args, "--repo", self.repository],
-        check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        env=self.env,
-    ).stdout
+    def _run_release(self, *args: str) -> bytes:
+        return subprocess.run(
+            [self.gh, *args, "--repo", self.repository],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env=self.env,
+        ).stdout
 ```
 
-Use `gh api`/`gh release` with explicit repository, tag, release ID, and file paths. Parse JSON with duplicate-key rejection and bounded sizes.
+Implement `_run_api(endpoint, ...)` separately: bind the repository in the REST
+endpoint path and never append `--repo` or `--output` to `gh api`. Stream a binary
+response into an already-opened no-follow regular destination. Use a parser-faithful
+fake that rejects unsupported flags and run one read-only live GET smoke before any
+external mutation. Parse JSON with duplicate-key rejection and bounded sizes.
 
 - [ ] **Step 6: Add the `publish` CLI subcommand and fake executable injection**
 
@@ -386,6 +391,15 @@ python3 -m unittest discover -s tools/gba_wifi_link_release/tests -p 'test_*.py'
 git add tools/gba_wifi_link_release
 git commit -m "release: add transactional GitHub publisher"
 ```
+
+- [ ] **Step 8: Add first-run evidence verification before rebuild**
+
+Given an existing public release, download exactly seven assets into a fresh
+directory, verify exclusive manifests/archive/provenance/body/tag/target/
+classification and exact core/archive attestations, then return read-only success.
+Use two fixture attempts with distinct run/job IDs to prove attempt two does not
+regenerate or compare volatile package bytes. Any discrepancy is a preserved
+conflict and performs zero mutations.
 
 ### Task 6: Make protected CI reusable and add policy tests
 
@@ -441,53 +455,90 @@ git add .github/workflows/gba-wifi-link-ci.yml tools/gba_wifi_link_release
 git commit -m "ci: expose protected release validation"
 ```
 
-### Task 7: Add the fully automated tag release workflow
+### Task 7: Add the untrusted intake and protected release controller
 
 **Files:**
-- Create: `.github/workflows/gba-wifi-link-release.yml`
+- Create: `.github/workflows/gba-wifi-link-release-intake.yml`
+- Create: `.github/workflows/gba-wifi-link-release-controller.yml`
+- Remove: `.github/workflows/gba-wifi-link-release.yml`
 - Modify: `tools/gba_wifi_link_release/tests/test_workflow_policy.py`
+- Modify: `tools/gba_wifi_link_release/workflow_policy.py`
 - Modify: `tools/gba_wifi_link_release/cli.py`
 - Modify: `packaging/gba-wifi-link/release/contract-v1.json`
 
 **Interfaces:**
-- Consumes: reusable protected CI, Android artifact contract, release CLI, exact tag event, and contract-v1.
-- Produces: A non-cancelling per-tag workflow that admits, validates, dual-builds, packages, attests, transactionally stages, verifies, and automatically publishes.
+- Consumes: reusable protected CI, Android artifact contract, release CLI, `workflow_run` intake metadata, and contract-v1.
+- Produces: a read-only tag intake plus a protected-default-branch controller that independently admits, checks existing state, validates, dual-builds, packages, attests, stages, verifies, and automatically publishes.
 
-- [ ] **Step 1: Extend failing policy tests for trigger, concurrency, and permissions**
+- [ ] **Step 1: Write the adversarial trust-boundary tests**
 
-Assert tags-only `v*` trigger, no `workflow_dispatch`, concurrency keyed by `github.ref` with `cancel-in-progress: false`, top-level `contents: read`, and exactly one publisher with `contents: write`, `attestations: write`, and `id-token: write`.
+Assert the intake alone has `push.tags: ["v*"]`, `contents: read`, no environment,
+secret, checkout, write permission, dispatch or publisher. Assert the controller
+alone has `workflow_run` for the exact intake name, is the sole owner of all write
+permissions, and rejects candidate-controlled event fields until it independently
+resolves the remote annotated tag and protected ancestry.
 
-- [ ] **Step 2: Add failing graph/isolation tests**
+- [ ] **Step 2: Run the policy test and retain the unsafe-single-workflow RED result**
 
-Assert validation precedes both clean builds, comparison precedes packaging, packaging precedes publisher, publisher has no checkout/build/render/download-from-network step, and every third-party action is pinned to a full commit.
+Run: `python3 -m unittest tools.gba_wifi_link_release.tests.test_workflow_policy -v`
 
-- [ ] **Step 3: Create the workflow skeleton and exact-source admission job**
+Expected: FAIL because the current tag-sourced workflow contains its own admission
+and write-capable publisher.
 
-Use full-history checkout for tag peeling/reachability, call `gba-wifi-link-release.py admit`, export only canonical JSON/artifacts, and fail before release mutation for every admission error.
+- [ ] **Step 3: Implement the read-only intake and trusted controller correlation**
 
-- [ ] **Step 4: Compose protected validation and two independent Android builds**
+The intake emits no trusted artifact; its completion is only a wake-up signal. The
+controller reads the triggering run through bounded GitHub metadata, requires
+`event=push`, exact canonical repository, canonical tag ref and one positive run
+identity, then independently fetches the remote tag and `origin/master`. Fail for
+missing, duplicate, non-tag, lightweight, moved, deleted or off-history identity
+before source checkout.
 
-One build may consume the protected Android job output; the second must start from a fresh checkout/build directory. Compare with both `sha256sum` and `cmp --silent`; write one admitted core plus both build identities.
+- [ ] **Step 4: Separate control and source trees**
 
-- [ ] **Step 5: Add deterministic package and self-verification jobs**
+Checkout protected controller tools/contracts at the controller commit into
+`control/`. Only after admission, checkout the peeled source into `source/`.
+Execute release Python from `control/`; pass `source/` only as build input and
+validated release-note/template data. Record actual intake event `push`, source
+tag/commit, controller workflow/ref/commit and first-run run/job IDs.
 
-Run `build` in two clean directories, compare recursively, run `verify` on both, and upload one canonical release directory as the sole publisher input.
+- [ ] **Step 5: Add early existing-release verification**
 
-- [ ] **Step 6: Add attestation and automatic publisher job**
+Before protected CI or builds, use the trusted control tool to inspect the tag's
+release. Absence continues. A complete public release is downloaded and verified
+against retained manifests/provenance/body/attestations and exits read-only.
+Draft/conflicting/malformed state fails without mutation. Do not generate new
+package bytes from the rerun's job IDs.
 
-Download only the canonical workflow artifact, run `verify`, recheck remote tag object/commit, attest the core/archive, run `publish`, and finally re-download/verify the public seven-asset set. Do not rebuild or render in this job.
+- [ ] **Step 6: Compose protected validation and two independent Android builds**
 
-- [ ] **Step 7: Add failure fixtures and static assertions**
+Call the protected reusable workflow against the peeled source commit from the
+trusted controller. Run a second clean build, compare `sha256sum` and bytes, and
+record exact source/controller/build identities before admitting one core.
 
-Test missing gate, mismatched build, tag movement, package corruption, attestation failure, conflicting release, and absence of a second human gate. Ensure no failure path invokes public publication.
+- [ ] **Step 7: Seal packaging, attestation and publication**
 
-- [ ] **Step 8: Run workflow/tool tests and commit**
+Build twice from trusted tooling plus admitted source/data, verify recursive byte
+identity, and seal one canonical handoff. The controller-owned publisher downloads
+only that handoff, verifies it, rechecks tag identity, issues/verifies core and
+archive attestations, transactionally publishes, and re-downloads the seven-asset
+public set. It performs no checkout, render or build.
+
+- [ ] **Step 8: Add mutation-resistant failure and rerun fixtures**
+
+Test a malicious off-history tag that replaces the intake with a publisher;
+missing/forged workflow-run fields; moved tag; missing gate; mismatched build;
+package corruption; attestation failure; conflicting release; and an exact second
+attempt with different job IDs. Prove only trusted controller code can mutate and
+there is no second human gate.
+
+- [ ] **Step 9: Run workflow/tool tests and commit**
 
 ```bash
 python3 -m unittest tools.gba_wifi_link_release.tests.test_workflow_policy -v
 python3 -m unittest discover -s tools/gba_wifi_link_release/tests -p 'test_*.py' -v
-git add .github/workflows/gba-wifi-link-release.yml packaging/gba-wifi-link/release tools/gba_wifi_link_release
-git commit -m "ci: publish releases from approved tags"
+git add .github/workflows packaging/gba-wifi-link/release tools/gba_wifi_link_release
+git commit -m "ci: publish from a protected release controller"
 ```
 
 ### Task 8: Protect release tags and document the maintainer contract
@@ -524,9 +575,15 @@ decision, set `release_tag` to the reviewed concrete version, set
 push that tag, and then observe automation only. Explain failure, rerun,
 immutable correction, and no production tag during this implementation.
 
-- [ ] **Step 5: Add read-only live-policy verification to the CLI and CI policy job**
+- [ ] **Step 5: Add exact local live-policy verification without a retained high-scope secret**
 
-Use `gh api repos/Aelvryx/mgba-wifi-link/rulesets`; select by exact tracked name and target, validate it, and fail on missing/duplicate/drifted state.
+Use command-specific read-only `gh api` list-then-detail requests; select by exact
+tracked name, source and target, require visible `bypass_actors`, and fail on
+missing/duplicate/drifted state. The focused Task 11 application uses the
+maintainer's authenticated, repository-authorized local credential for exact
+read-back. Do not store a ruleset-write-visible token in tag or release workflow
+secrets merely to perform continuous bypass auditing. Source/fixture policy tests
+remain the permanent CI guard.
 
 - [ ] **Step 6: Run tag-policy tests and commit before applying external settings**
 
@@ -645,71 +702,147 @@ Run: `pr_number="$(gh pr view --repo Aelvryx/mgba-wifi-link --json number --jq .
 
 Record run/job IDs and exact head SHA; keep the PR draft.
 
-### Task 11: Review and rehearse the real remote transaction in isolation
+### Task 11: Correct the pre-mutation trust, retry and adapter blockers
 
 **Files:**
-- Create: `docs/automated-release-rehearsal.md`
-- Modify: `.github/rulesets/gba-wifi-link-release-tags.json` only if review proves a policy defect
-- Modify: release implementation/tests only for reviewed findings
+- Create: `.github/workflows/gba-wifi-link-release-intake.yml`
+- Create: `.github/workflows/gba-wifi-link-release-controller.yml`
+- Remove: `.github/workflows/gba-wifi-link-release.yml`
+- Remove: `.github/workflows/gba-wifi-link-release-governance.yml`
+- Modify: `packaging/gba-wifi-link/release/contract-v1.json`
+- Modify: `tools/gba_wifi_link_release/{admission,cli,github,model,provenance,publisher,render,workflow_policy}.py`
+- Modify: `tools/gba_wifi_link_release/tests/`
+- Modify: `docs/gba-wifi-link-release.md`
 
 **Interfaces:**
-- Consumes: Green exact-head draft PR, reviewed ruleset/publisher, full GitHub authorization.
-- Produces: Live tag ruleset verification, private disposable end-to-end evidence, independent review, and complete cleanup.
+- Consumes: completed deterministic package/publisher units and the Task 11 HOLD review.
+- Produces: supported GitHub CLI commands, first-run existing-release verification, protected-controller publication, and a clean new pre-mutation review.
 
-- [ ] **Step 1: Obtain focused independent review before external mutation**
+- [ ] **Step 1: Commit the reviewed OpenSpec correction before code**
 
-Review exact packager bytes, checksum/provenance DAG, privacy canaries, workflow graph, action pins, privilege separation, tag ruleset, publisher failure semantics, and protected run. Address Critical/Important findings before continuing.
+Run strict validation and record the review blockers: tag-sourced privilege,
+volatile rerun IDs, unsupported `gh api` flags, infeasible private rehearsal, and
+unsafe persistent governance credential.
 
-- [ ] **Step 2: Apply and read back the production `v*` tag ruleset**
+- [ ] **Step 2: Fix the real GitHub adapter test-first**
 
-Resolve the exact repository/ruleset target read-only, create or update only the named tracked ruleset through `gh api`, then run `gba-wifi-link-release.py verify-tag-policy`. Do not create a production release tag.
+Add a parser-faithful fake that rejects `gh api --repo` and `--output`, plus a
+read-only live GET smoke. Split REST/release/attestation command construction and
+stream downloads to safe open destinations. Run publisher-focused and full tool
+suites; commit this independent correction.
 
-- [ ] **Step 3: Create an explicitly scoped private disposable repository**
+- [ ] **Step 3: Add read-only existing-release verification test-first**
 
-```bash
-rehearsal_run_id="$(gh run list --repo Aelvryx/mgba-wifi-link --branch agent/automate-release-artifacts-provenance --limit 1 --json databaseId --jq '.[0].databaseId')"
-rehearsal_repo="Aelvryx/mgba-wifi-link-release-rehearsal-${rehearsal_run_id}"
-gh repo create "$rehearsal_repo" --private --disable-issues --disable-wiki
-```
+Create two full attempt fixtures whose source/tag are identical but run/job IDs
+differ. Require attempt two to download and validate attempt one's seven assets,
+body, provenance and exact attestations before any build or mutation. Test every
+conflict and missing-evidence path; commit the verifier.
 
-Require `rehearsal_run_id` to be a non-empty decimal value, then read back
-owner/name/visibility and refuse any target not matching `rehearsal_repo`
-exactly.
+- [ ] **Step 4: Replace the tag-sourced publisher with intake/controller workflows**
 
-- [ ] **Step 4: Exercise successful automatic publication and independent download**
+Write adversarial policy tests first, then implement the read-only intake and
+default-branch `workflow_run` controller, separate `control/` from `source/`, and
+move every write permission into the controller. Delete the unsafe single
+workflow and the high-scope governance-secret workflow. Commit the trust-boundary
+unit.
 
-Push only reviewed synthetic/re-distributable rehearsal content and an annotated synthetic version tag. Let the workflow publish automatically. Download all seven assets into a fresh directory; verify external/internal manifests, archive members, build/release provenance, attestations, tag object/commit, body, target, and prerelease state.
+- [ ] **Step 5: Bind controller/source provenance and exact attestations**
 
-- [ ] **Step 5: Exercise idempotent rerun and isolated failures**
+Record actual intake event `push`, released source/tag, protected controller
+workflow/ref/commit, first-run jobs and exact signer/source digest. Update schema,
+golden vectors, body rendering, handoff verification and attestation checks as one
+reviewable commit.
 
-Rerun the same tag and prove zero mutations. Use the fake/isolated controls to exercise partial upload, conflicting metadata/hash, ambiguous publish response, failed attestation, and draft cleanup. Attempt tag update/deletion only in the disposable repository and confirm its rules prevent them where configured.
+- [ ] **Step 6: Run complete local and protected validation on the corrected head**
 
-- [ ] **Step 6: Record bounded evidence and audit privacy**
+Run release suites, boundary/audit, strict OpenSpec, syntax, two clean packages,
+no-runtime diff, helpers/analyzers, then push the same draft PR and require all six
+protected jobs on its exact head. The release workflows remain disabled from any
+production tag because no new production tag is created.
 
-Write only repository/run IDs, public synthetic hashes, state transitions, conclusions, and cleanup identifiers to `docs/automated-release-rehearsal.md`. Scan the evidence and Actions artifacts for every prohibited canary category.
+- [ ] **Step 7: Obtain a fresh whole-boundary pre-mutation review**
 
-- [ ] **Step 7: Delete the exact disposable target and verify absence**
+Review tag-source adversarial behavior, controller ownership, real CLI adapter,
+existing-release rerun, package/provenance DAG, privacy, handoff, attestation,
+ruleset, exact protected evidence and rehearsal generator design. Address every
+Critical/Important finding before any live setting or repository mutation.
 
-```bash
-gh repo delete "$rehearsal_repo" --yes
-gh repo view "$rehearsal_repo"
-```
+### Task 12: Apply policy and rehearse the remote transaction in isolation
 
-Expected: deletion succeeds; subsequent view fails. Record that the rehearsal release/tag/repository were destroyed and are unrecoverable.
+**Files:**
+- Create: `tools/gba_wifi_link_release/rehearsal.py`
+- Create: `tools/gba_wifi_link_release/tests/test_rehearsal.py`
+- Create: `docs/automated-release-rehearsal.md`
+- Modify: release implementation/tests only for reviewed rehearsal findings
 
-- [ ] **Step 8: Address final review findings and rerun affected evidence**
+**Interfaces:**
+- Consumes: clean pre-mutation review, corrected draft-PR head, local authenticated GitHub authority.
+- Produces: exact production tag-ruleset read-back, synthetic public disposable end-to-end evidence, and verified destructive cleanup.
 
-Repeat only tests/rehearsal paths whose semantics changed. Push the correction to the same draft PR and require all six protected jobs on the new exact head.
+- [ ] **Step 1: Apply and read back only the production `v*` tag ruleset**
 
-- [ ] **Step 9: Commit rehearsal evidence**
+Resolve repository and current rulesets read-only. Create/update only the exact
+tracked ruleset, then validate list and detail with the authenticated local
+credential including visible empty bypass actors. Do not store that credential in
+Actions and do not create a production release tag.
 
-```bash
-git add docs/automated-release-rehearsal.md .github tools packaging openspec/changes/automate-release-artifacts-provenance
-git commit -m "docs: record automated release rehearsal"
-git push
-```
+- [ ] **Step 2: Preflight public rehearsal and destructive cleanup authority**
 
-### Task 12: Verify, archive, land, and close issue #21
+Confirm the owner is `Aelvryx`, public repositories support the pinned attestation
+action, the local credential can delete an exactly named repository, and no target
+already exists. Derive a non-empty decimal protected-run ID and exact name
+`Aelvryx/mgba-wifi-link-release-rehearsal-${rehearsal_run_id}`. Stop before
+creation if any precondition is unproved.
+
+- [ ] **Step 3: Generate and independently review the rehearsal-only tree**
+
+Test-first, copy a clean tracked tree and replace only allow-listed canonical
+repository/signer/policy values for the exact disposable name. Install tracked
+synthetic `v9.8.7` notes, retain strict tag syntax, assert the generated diff path
+and token counts, and prove the production tree still rejects all noncanonical
+repository overrides.
+
+- [ ] **Step 4: Create and protect the exact public disposable repository**
+
+Create it with issues/wiki disabled, initialize explicit `master`, read back
+owner/name/public visibility/default branch, apply the transformed immutable tag
+ruleset, and verify emptiness/protection before pushing the reviewed tree.
+
+- [ ] **Step 5: Exercise automatic publication and independent download**
+
+Push the transformed protected master, then one annotated synthetic `v9.8.7` tag.
+Let intake/controller automation run. Download all seven assets freshly and verify
+manifests, archive, source/controller provenance, attestations, tag/commit, body,
+target and prerelease state.
+
+- [ ] **Step 6: Prove new-ID rerun idempotence and isolated failures**
+
+Rerun the intake/controller for the immutable tag and prove the second run exits
+through original-evidence verification with zero mutation. Exercise fake/isolated
+partial upload, conflicting body/hash, ambiguous publish response, failed
+attestation and safe draft cleanup. Attempt update/deletion only on the disposable
+tag and confirm its rules reject them.
+
+- [ ] **Step 7: Record bounded evidence and privacy/transparency consequences**
+
+Record only disposable repository/run IDs, public synthetic hashes, transitions,
+conclusions and cleanup identifiers. Scan repository, artifacts, attestations and
+release for every prohibited canary. State that synthetic attestation transparency
+entries may remain public after repository deletion.
+
+- [ ] **Step 8: Delete and prove absence of the exact target**
+
+Re-resolve owner/name/visibility immediately before deletion, delete that exact
+repository, and require subsequent repository/release/tag reads to return absent.
+Record destructive unrecoverable cleanup; do not use wildcards or environment-
+expanded destructive targets.
+
+- [ ] **Step 9: Commit rehearsal evidence and rerun protected checks**
+
+Commit only bounded evidence and any reviewed corrections, push the same draft
+PR, and require all six protected jobs on the new exact head.
+
+### Task 13: Verify, archive, land, and close issue #21
 
 **Files:**
 - Create: `openspec/changes/automate-release-artifacts-provenance/verify.md`

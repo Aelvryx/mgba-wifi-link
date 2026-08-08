@@ -4,11 +4,13 @@
 
 The project SHALL treat creation and push of a new annotated tag in the
 canonical `vMAJOR.MINOR.PATCH` form as the maintainer's release decision. The
-tag-triggered workflow MUST validate the annotated tag object, peel it to one
-commit reachable from protected `master`, validate the version and tracked
-release-notes inputs, and then perform every remaining validation, build,
-package, provenance, staging, verification, and publication step without a
-human approval pause.
+tag-triggered intake MUST be read-only and unprivileged. A separate controller
+whose workflow definition and release authority are loaded from protected
+default-branch code MUST independently validate the annotated tag object, peel
+it to one commit reachable from protected `master`, validate the version and
+tracked release-notes inputs, and then perform every remaining validation,
+build, package, provenance, staging, verification, and publication step without
+a human approval pause.
 
 #### Scenario: Approved tag is pushed
 - **WHEN** a new canonical annotated tag points to reviewed protected history and
@@ -23,12 +25,34 @@ human approval pause.
 - **THEN** the workflow fails before building a publishable set and no public
   release is created or changed
 
+### Requirement: Candidate tag code cannot grant publication authority
+
+The project MUST treat every workflow and executable file reachable only from
+the candidate tag as untrusted until protected default-branch controller code
+has independently admitted the tag's peeled commit. The tag intake SHALL have no
+release secret, environment, attestation, identity-token, contents-write, or
+publication authority. Only protected-controller code MAY request release-write
+permissions, and it MUST keep trusted release tooling separate from the admitted
+source tree used as build and reviewed-data input.
+
+#### Scenario: Off-history tag rewrites its workflow
+- **WHEN** a canonical-looking tag points off protected history and its commit
+  replaces or omits the intake checks or adds a privileged publisher
+- **THEN** no protected controller admission succeeds and the tag-controlled run
+  receives no project release credential or mutation authority
+
+#### Scenario: Protected-history tag reaches the controller
+- **WHEN** the read-only intake for an approved tag completes
+- **THEN** protected default-branch controller code independently resolves and
+  admits the remote tag before checking out or executing the admitted source
+
 ### Requirement: Release evidence belongs to the exact tagged source
 
-The release workflow MUST execute the same protected normal, ASan/UBSan, TSan,
+The protected controller MUST execute the same protected normal, ASan/UBSan, TSan,
 complete-suite, fixture/tooling, and Android/binary-boundary gates against the
 peeled tag commit. It SHALL record the workflow, run, job, source, and conclusion
-identities in provenance and SHALL NOT satisfy a tag using an ambiguous or older
+identities in provenance, SHALL separately record the protected controller
+workflow and commit, and SHALL NOT satisfy a tag using an ambiguous or older
 branch run.
 
 #### Scenario: Every exact-source gate passes
@@ -127,10 +151,11 @@ last and cover all six other project assets while excluding itself.
 
 Build and release provenance SHALL use explicit schema versions and canonical
 serialization. Together they MUST record repository, annotated tag object,
-peeled commit, workflow/run/job identities, resolved runner image, pinned action
-and toolchain identities, build configuration, deterministic epoch, required
-gate conclusions, and the applicable file names, sizes, and SHA-256 values. The
-human source notice and release body SHALL derive identity fields from that model.
+peeled source commit, protected controller workflow/commit, first-run workflow/
+run/job identities, resolved runner image, pinned action and toolchain identities,
+build configuration, deterministic epoch, required gate conclusions, and the
+applicable file names, sizes, and SHA-256 values. The human source notice and
+release body SHALL derive identity fields from that model.
 
 #### Scenario: Provenance consumers compare release surfaces
 - **WHEN** a verifier compares the machine manifests, human notice, release body,
@@ -183,11 +208,12 @@ privacy canaries SHALL exercise every prohibited category.
 
 ### Requirement: Build and publication privileges are separated
 
-Every validation, test, build, reproducibility, and packaging job SHALL run with
-read-only repository permissions and without release credentials. Only the final
-publisher MAY receive the minimum `contents`, `attestations`, and `id-token` write
-permissions, and that job MUST consume and re-verify the canonical workflow
-artifact without checking out source or rebuilding assets.
+The tag intake and every validation, test, build, reproducibility, and packaging
+job SHALL run with read-only repository permissions and without release
+credentials. Only a final publisher defined by protected default-branch
+controller code MAY receive the minimum `contents`, `attestations`, and
+`id-token` write permissions, and that job MUST consume and re-verify the
+canonical workflow artifact without checking out source or rebuilding assets.
 
 #### Scenario: Canonical artifacts reach the publisher
 - **WHEN** all unprivileged jobs succeed and transfer the canonical release set
@@ -226,17 +252,22 @@ automatically in the same workflow only after every comparison succeeds.
 
 ### Requirement: Release retries are idempotent and immutable
 
-The release workflow SHALL serialize runs per tag without cancellation. A rerun
-after successful publication MUST treat an exact byte-identical public release
-as success without mutation and MUST fail on any conflict. Published assets,
-metadata, tags, and target commits SHALL NOT be replaced in place; corrections
-use a new version and tag.
+The release controller SHALL serialize runs per tag without cancellation. Before
+starting protected gates or builds, it MUST inspect any existing release. A rerun
+after successful publication MUST download and validate the original seven
+assets, exclusive checksum scopes, package/provenance schemas, source/tag/
+controller identities, release body, classification and attestations as one
+coherent first-run record. That exact record SHALL be read-only success even
+though the rerun has different workflow/job identities. Any conflict MUST fail.
+Published assets, metadata, tags, and target commits SHALL NOT be replaced in
+place; corrections use a new version and tag.
 
 #### Scenario: Exact release workflow is rerun
 - **WHEN** the immutable tag already has a complete public release matching every
   canonical identity and asset
-- **THEN** the rerun verifies it read-only and exits successfully without upload,
-  deletion, or metadata mutation
+- **THEN** the rerun verifies the retained first-run evidence before rebuilding
+  and exits successfully without upload, deletion, metadata mutation, or use of
+  the rerun's new job identities in regenerated package bytes
 
 #### Scenario: Existing release conflicts
 - **WHEN** the tag has a draft or public release with a different target, body,
@@ -260,6 +291,26 @@ tag does not still resolve to both identities immediately before publication.
 - **WHEN** the release tag is moved, replaced, deleted, or resolves differently at
   the final pre-publication check
 - **THEN** publication aborts and any private draft is cleaned up safely
+
+### Requirement: GitHub operations use supported bounded interfaces
+
+The production GitHub adapter MUST construct command-specific invocations for
+REST, release, and attestation operations. Repository REST endpoints SHALL bind
+the repository in the endpoint path and MUST NOT receive unsupported `gh api`
+options. Binary responses MUST be streamed to an explicitly opened safe regular
+destination. Tests SHALL exercise a faithful CLI parser boundary, and a read-only
+live GET smoke MUST pass before external mutation is enabled.
+
+#### Scenario: Real read-only REST operation is parsed
+- **WHEN** the adapter requests canonical release or ruleset metadata through the
+  installed supported GitHub CLI
+- **THEN** the command uses only supported options, returns bounded validated
+  data, and performs no mutation
+
+#### Scenario: Unsupported or unsafe command shape is introduced
+- **WHEN** an API invocation gains an unsupported repository/output option,
+  shell interpolation, an unbounded response, or an unsafe download destination
+- **THEN** faithful adapter tests reject the change before rehearsal or release
 
 ### Requirement: Release notes are reviewed tracked inputs
 
@@ -301,20 +352,34 @@ or evidence reference without embedding private raw evidence.
 
 ### Requirement: Publication behavior is rehearsed without risking a real release
 
-Before enabling the production `v*` trigger, the project MUST exercise tag
-admission, exact-source validation, packaging, privilege separation, draft
-staging, remote verification, automatic publication, rerun, failure cleanup, and
-deletion through a disposable non-public target or equivalent isolated GitHub
-release fixture. The rehearsal SHALL use no production release tag or commercial
-content.
+Before enabling the production `v*` intake/controller pair, the project MUST
+exercise tag admission, protected-controller ownership, exact-source validation,
+packaging, privilege separation, draft staging, remote verification, automatic
+publication, original-evidence rerun, failure cleanup, and deletion through one
+exact disposable public repository containing synthetic/re-distributable inputs
+only. A reviewed rehearsal generator MUST change only an allow-listed set of
+canonical repository, signer, policy and synthetic-note identities for the exact
+disposable name; production tooling SHALL retain no general repository override.
+The project MUST preflight attestation availability and repository deletion
+authority before creating the target and MUST document that public attestation
+transparency entries may outlive repository deletion. The rehearsal SHALL use no
+production release tag or commercial content.
 
 #### Scenario: Isolated rehearsal succeeds
 - **WHEN** the complete workflow is run against the approved disposable target
 - **THEN** every intended state transition and remote verification is recorded and
-  the temporary published result and tag are removed after inspection
+  the temporary published result, tag, and exact repository are removed after
+  inspection while the bounded public transparency consequence is recorded
 
 #### Scenario: Rehearsal fault is injected
 - **WHEN** upload, checksum, metadata, publish-response, retry, or cleanup failure
   is simulated
 - **THEN** the workflow demonstrates the same fail-closed and idempotent semantics
   required for production without altering a real release
+
+#### Scenario: Rehearsal identity transformation escapes its allow-list
+- **WHEN** the generated rehearsal tree changes a runtime file, production
+  identity outside the exact disposable target, package contract, or undeclared
+  path
+- **THEN** rehearsal generation fails before repository creation or push and the
+  canonical production tree remains unchanged

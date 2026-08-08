@@ -39,6 +39,9 @@
   rendering from reviewed prose plus canonical generated facts.
 - [x] 2.8 Expose a non-publishing CLI entry point that emits canonical admitted
   metadata or a bounded machine-readable failure without mutating GitHub.
+- [ ] 2.9 Extend admission metadata to distinguish the actual tag `push` intake,
+  protected controller workflow/commit, and released source commit; reject any
+  ambiguous workflow-run/tag correlation before candidate execution.
 
 ## 3. Implement deterministic package construction test-first
 
@@ -64,6 +67,9 @@
   byte-identical rendered documents, provenance, checksums, and archive bytes.
 - [x] 3.10 Add a regression proving that changing any declared input changes the
   intended dependent output while leaving unrelated immutable payloads untouched.
+- [ ] 3.11 Add protected-controller identity to canonical provenance and golden
+  fixtures while retaining first-run run/job identities as immutable published
+  evidence rather than reproducible rerun inputs.
 
 ## 4. Enforce release privacy and provenance boundaries
 
@@ -108,8 +114,17 @@
 - [x] 5.9 Add a policy test proving the publisher input is the verified workflow
   artifact and that the privileged path cannot check out source, compile, render,
   download undeclared inputs, or substitute files.
+- [ ] 5.10 Replace the generic GitHub subprocess builder with command-specific
+  `gh api`, `gh release`, and `gh attestation` invocations; add faithful parser
+  fixtures and a read-only live GET smoke that reject unsupported flags.
+- [ ] 5.11 Add an early existing-public-release verifier that downloads the
+  original seven assets and validates inventory, manifests, provenance, body,
+  tag/target/classification, and exact attestations without rebuilding.
+- [ ] 5.12 Add a two-attempt regression with different workflow/run/job IDs proving
+  an exact published first attempt makes the second attempt read-only success,
+  while any retained-evidence conflict fails without mutation.
 
-## 6. Compose protected CI and the tag-triggered release workflow
+## 6. Compose protected CI and the trusted release controller
 
 - [x] 6.1 Pin every third-party action used by the privileged or artifact-producing
   release path to a reviewed full commit SHA and record the human-readable action
@@ -125,22 +140,23 @@
   permissions.
 - [x] 6.5 Add a second independent clean Android build job with the same pinned
   NDK/configuration and compare both core bytes and hashes before admission.
-- [x] 6.6 Add the `v*` tag-triggered release workflow with per-tag non-cancelling
-  concurrency, read-only default permissions, annotated-tag admission, reusable
-  protected validation, dual-build admission, packaging, and canonical artifact
-  upload.
-- [x] 6.7 Add the final publisher job with only the required `contents: write`,
-  `attestations: write`, and `id-token: write` permissions and no build/source
-  steps.
-- [x] 6.8 Issue and verify GitHub build-provenance attestations for the exact
+- [ ] 6.6 Split release execution into a read-only tag-intake workflow and a
+  protected-default-branch `workflow_run` controller that independently resolves
+  and admits the remote annotated tag before candidate checkout or execution.
+- [ ] 6.7 Separate trusted controller tooling from admitted source/build data and
+  place the final publisher only in controller-owned code with the required
+  `contents: write`, `attestations: write`, and `id-token: write` permissions.
+- [ ] 6.8 Issue and verify GitHub build-provenance attestations for the exact
   admitted core and deterministic archive while keeping envelopes outside package
-  checksum scopes.
-- [x] 6.9 Add workflow-policy tests for triggers, concurrency, permissions, job
-  dependencies, immutable artifact handoff, pinned actions, publisher isolation,
-  and absence of a manual publication gate.
-- [x] 6.10 Add workflow failure-path tests or fixtures proving that missing gates,
-  mismatched builds, failed packaging, failed attestation, tag movement, and remote
-  conflict cannot reach public publication.
+  checksum scopes and binding both released source and protected controller
+  workflow identities.
+- [ ] 6.9 Add workflow-policy tests for intake/controller triggers, default-branch
+  authority, concurrency, permissions, job dependencies, immutable handoff, pinned
+  actions, publisher isolation, and absence of a manual publication gate.
+- [ ] 6.10 Add adversarial failure fixtures proving an off-history tag can rewrite
+  its intake yet cannot obtain release authority, and that missing gates,
+  mismatched builds, failed packaging/attestation, tag movement, or remote conflict
+  cannot reach publication.
 
 ## 7. Establish immutable tag policy and current project guidance
 
@@ -175,20 +191,20 @@
 
 ## 8. Run local, sanitizer, and protected validation
 
-- [x] 8.1 Run tag-admission, metadata, packager, privacy, provenance, publisher,
+- [ ] 8.1 Run tag-admission, metadata, packager, privacy, provenance, publisher,
   workflow-policy, tag-ruleset, and boundary unit/golden tests locally.
-- [x] 8.2 Run deterministic packaging twice in separate clean temporary directories
+- [ ] 8.2 Run deterministic packaging twice in separate clean temporary directories
   and compare every synthetic release byte, manifest, archive member, and rendered
   identity.
-- [x] 8.3 Run Python/shell syntax checks and applicable linters for every new tool,
+- [ ] 8.3 Run Python/shell syntax checks and applicable linters for every new tool,
   workflow, template, policy fixture, and test.
-- [x] 8.4 Run strict OpenSpec validation and verify the delta requirements, scenarios,
+- [ ] 8.4 Run strict OpenSpec validation and verify the delta requirements, scenarios,
   task ledger, and implementation plan remain coherent with the implemented
   fully-automated boundary.
-- [x] 8.5 Run the focused normal, ASan/UBSan with leak detection, and TSan suites.
-- [x] 8.6 Run the complete applicable mGBA suite and separately confirm any unchanged
+- [ ] 8.5 Run the focused normal, ASan/UBSan with leak detection, and TSan suites.
+- [ ] 8.6 Run the complete applicable mGBA suite and separately confirm any unchanged
   pinned upstream exception.
-- [x] 8.7 Rebuild the redistributable fixtures byte-identically and run structured
+- [ ] 8.7 Rebuild the redistributable fixtures byte-identically and run structured
   analyzers, qualification-helper tests, and the permanent product-boundary audit.
 - [ ] 8.8 Build the Android ARM64 core twice from the exact review head and prove
   byte identity, ELF/embedded identities, toolchain provenance, and package
@@ -199,36 +215,46 @@
 - [x] 8.10 Create one reviewable implementation commit, push it, and open the single
   working draft PR required for protected CI and external rehearsal; keep that PR
   draft through verification, retrospective, and archive.
-- [x] 8.11 Require all protected jobs to pass on the exact draft-PR head and record
+- [ ] 8.11 Require all protected jobs to pass on the exact draft-PR head and record
   their run/job identities for independent review.
 
 ## 9. Rehearse the complete remote transaction safely
 
-- [ ] 9.1 Provision one explicitly named private disposable rehearsal repository or
-  equivalent isolated GitHub target after focused review; verify its owner,
-  visibility, emptiness, and deletion scope before use.
-- [ ] 9.2 Run the full tag-triggered flow with synthetic/re-distributable inputs,
-  including exact-source gates, dual builds, deterministic packaging, attestations,
-  private staging, remote read-back, and automatic publication.
-- [ ] 9.3 Independently download the rehearsal release into a clean directory and
+- [ ] 9.1 Before remote creation, verify public-repository attestation support and
+  exact repository-deletion authority, then derive one bounded decimal run ID and
+  exact disposable public repository name.
+- [ ] 9.2 Add a reviewed rehearsal generator that copies the release tree and changes
+  only allow-listed canonical repository/signer/policy identities for that exact
+  disposable name, installs tracked synthetic notes, and proves production retains
+  no general repository override.
+- [ ] 9.3 Provision the exact empty public disposable repository with explicit
+  protected `master`, apply/read back its immutable tag ruleset, and refuse any
+  owner/name/visibility/default-branch mismatch before pushing content.
+- [ ] 9.4 Run the complete read-only-intake/protected-controller flow with only
+  synthetic/re-distributable inputs, including exact-source gates, dual builds,
+  deterministic packaging, attestations, private staging, read-back, and automatic
+  publication.
+- [ ] 9.5 Independently download the rehearsal release into a clean directory and
   verify its seven-asset inventory, standalone manifest, archive membership,
   internal manifest, machine provenance, attestations, tag object, peeled commit,
   prerelease state, and release body.
-- [ ] 9.4 Rerun the same immutable tag and prove read-only idempotent success with no
-  asset, metadata, tag, or release mutation.
-- [ ] 9.5 Exercise isolated partial-upload, remote hash/body conflict, ambiguous
+- [ ] 9.6 Rerun the same immutable tag with new workflow/job IDs and prove the
+  original public evidence is verified before rebuild and no asset, metadata, tag,
+  release, attestation, or body mutation occurs.
+- [ ] 9.7 Exercise isolated partial-upload, remote hash/body conflict, ambiguous
   publish response, tag movement/deletion attempt, and safe private-draft cleanup
   paths without altering a production tag or release.
-- [ ] 9.6 Record bounded public-safe rehearsal evidence and confirm no endpoint log,
+- [ ] 9.8 Record bounded public-safe rehearsal evidence and confirm no endpoint log,
   commercial content, private path/address, device identity, save, input, or secret
-  entered the repository, workflow artifact, attestation, or release.
-- [ ] 9.7 Delete the disposable rehearsal release, tag, and repository/target using
+  entered the repository, workflow artifact, attestation, or release; disclose that
+  synthetic public attestation transparency entries may remain after deletion.
+- [ ] 9.9 Delete the disposable rehearsal release, tag, and repository using
   exact validated identifiers; verify they are absent and record that the cleanup
   was destructive and unrecoverable.
-- [ ] 9.8 Obtain independent implementation review covering packager bytes,
+- [ ] 9.10 Obtain independent implementation review covering packager bytes,
   provenance/checksum DAG, privacy, workflow privilege separation, tag policy,
   remote transaction semantics, rerun behavior, and exact protected evidence.
-- [ ] 9.9 Address every Critical or Important review finding, rerun affected tests,
+- [ ] 9.11 Address every Critical or Important review finding, rerun affected tests,
   and repeat only the rehearsal portions whose behavior or evidence changed.
 
 ## 10. Verify, archive, and land without publishing a production release

@@ -12,9 +12,10 @@ without creating a feedback programme or changing emulator behaviour.
 **Release trigger and publication**
 - From: A maintainer builds, assembles, checks, uploads, and publishes release
   assets through a largely manual procedure.
-- To: Pushing a new approved annotated semantic-version tag automatically runs
-  every validation, reproducibility, packaging, provenance, remote verification,
-  and publication step.
+- To: Pushing a new approved annotated semantic-version tag starts a read-only
+  intake; protected default-branch workflow code independently admits that tag
+  and automatically runs every validation, reproducibility, packaging,
+  provenance, remote verification, and publication step.
 - Reason: The tag is a sufficiently explicit release decision; every mechanical
   step after it should be deterministic and fail-closed.
 - Impact: Non-breaking release-engineering change; no runtime or wire change.
@@ -38,6 +39,18 @@ without creating a feedback programme or changing emulator behaviour.
 - Reason: Full automation must not create mixed or partially public releases.
 - Impact: Tag and release immutability become enforced project policy.
 
+**Retry and rehearsal safety**
+- From: A repeated workflow rebuilds volatile run/job provenance, and the planned
+  private disposable repository cannot exercise canonical identity or public
+  GitHub attestations.
+- To: An existing-release rerun validates retained first-run bytes and
+  attestations before any rebuild, while rehearsal uses a reviewed synthetic-only
+  public disposable repository with a narrowly fixed rehearsal identity and
+  destructive cleanup.
+- Reason: Idempotence must survive new workflow IDs, and rehearsal must exercise
+  the real GitHub boundary without adding a production repository override.
+- Impact: No change to the one-tag human action or the production identity.
+
 The change also updates the roadmap from a feedback-oriented “supportable alpha”
 to the approved neutral-feedback “maintainable alpha” direction and defers the
 diagnostic-bundle issue without forbidding unsolicited reports.
@@ -58,8 +71,9 @@ diagnostic-bundle issue without forbidding unsolicited reports.
 
 ## Impact
 
-- Adds a tag-triggered GitHub Actions release workflow with a narrowly privileged
-  publication job and pinned third-party actions/toolchains.
+- Adds a read-only tag-intake workflow and a protected-default-branch release
+  controller with a narrowly privileged publication job and pinned third-party
+  actions/toolchains.
 - Adds deterministic release-building and validation tooling with mocked
   publication tests.
 - Adds tracked, version-aware release metadata/templates and a machine-readable

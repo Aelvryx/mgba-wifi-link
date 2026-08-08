@@ -12,7 +12,6 @@ from tools.gba_wifi_link_release.workflow_policy import (
     lex_workflow_yaml,
     normalize_workflow,
     validate_release_workflow_policy,
-    validate_ruleset_governance_workflow_policy,
     validate_workflow_policy,
 )
 
@@ -265,29 +264,6 @@ jobs:
                 1,
             )
         )
-
-    def test_default_branch_governance_owns_the_fail_closed_ruleset_audit(self):
-        validate_ruleset_governance_workflow_policy(ROOT)
-        source = (ROOT / ".github/workflows/gba-wifi-link-release-governance.yml").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("branches:\n      - master", source)
-        self.assertIn("schedule:", source)
-        self.assertNotIn("tags:", source)
-        self.assertIn("environment: gba-wifi-link-release-governance", source)
-        self.assertIn("test -n \"$GBA_WIFI_LINK_RULESET_AUDIT_TOKEN\"", source)
-        self.assertIn("verify-tag-policy", source)
-        with self.copy_policy_repo() as temporary:
-            repo = Path(temporary)
-            governance = repo / ".github/workflows/gba-wifi-link-release-governance.yml"
-            governance.write_text(
-                governance.read_text(encoding="utf-8").replace(
-                    "          test -n \"$GBA_WIFI_LINK_RULESET_AUDIT_TOKEN\"\n", "", 1
-                ),
-                encoding="utf-8",
-            )
-            with self.assertRaises(WorkflowPolicyError):
-                validate_ruleset_governance_workflow_policy(repo)
 
     def test_release_workflow_has_two_post_validation_clean_compile_jobs(self):
         source = (ROOT / ".github/workflows/gba-wifi-link-release.yml").read_text(encoding="utf-8")

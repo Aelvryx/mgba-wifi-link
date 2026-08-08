@@ -22,7 +22,7 @@
   them before publication.
 - [x] 2.5 Prevent reviewed notes from overriding generated source, artifact,
   checksum, provenance, workflow, or compatibility identities.
-- [ ] 2.6 Remove controller/intake correlation fields and tests; retain the actual
+- [x] 2.6 Remove controller/intake correlation fields and tests; retain the actual
   trusted tag `push` event and exact tagged-source evidence only.
 
 ## 3. Build deterministic artifacts and provenance
@@ -80,7 +80,7 @@
   exact handoff, and verify it before publication.
 - [ ] 6.4 Give read-only jobs read permissions and only the final publisher
   `contents: write`; remove `id-token` and `attestations` permissions.
-- [ ] 6.5 Remove the governance workflow, tracked tag ruleset, ruleset fixtures,
+- [x] 6.5 Remove the governance workflow, tracked tag ruleset, ruleset fixtures,
   audit credential/environment instructions, and tag-policy module/tests.
 - [ ] 6.6 Replace adversarial controller policy tests with concise checks for the
   tag trigger, exact-source gates, dual builds, handoff, publisher isolation,

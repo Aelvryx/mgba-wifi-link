@@ -21,14 +21,11 @@ from .packager import PackageInputs, build_release
 from .render import render_release_body
 from .publisher import publish_release
 from .provenance import bind_actual_builds
-from .tag_policy import (load_tag_policy, verify_live_tag_policy,
-                         RULESET_AUDIT_TOKEN_ENV)
 from .verifier import verify_release
 
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "tools/gba_wifi_link_release/fixtures/synthetic"
-TAG_POLICY = ROOT / ".github/rulesets/gba-wifi-link-release-tags.json"
 _AT_FDCWD = -100
 _RENAME_NOREPLACE = 1
 
@@ -294,7 +291,6 @@ def _parser() -> argparse.ArgumentParser:
     bind_builds = commands.add_parser("bind-builds")
     bind_builds.add_argument("--context", required=True)
     bind_builds.add_argument("--identities", required=True)
-    commands.add_parser("verify-tag-policy")
     return parser
 
 
@@ -333,13 +329,6 @@ def main(argv: list[str] | None = None) -> int:
             bound = bind_actual_builds(context, identities)
             sys.stdout.write(json.dumps(_context_dict(bound), sort_keys=True,
                                         separators=(",", ":")) + "\n")
-        elif args.command == "verify-tag-policy":
-            expected = load_tag_policy(TAG_POLICY)
-            verify_live_tag_policy(
-                CANONICAL_REPOSITORY, expected,
-                audit_token=os.environ.get(RULESET_AUDIT_TOKEN_ENV),
-            )
-            sys.stdout.write("tag policy verified\n")
         elif args.command == "github-smoke":
             if args.repository != CANONICAL_REPOSITORY:
                 raise ValueError("CLI_REPOSITORY")

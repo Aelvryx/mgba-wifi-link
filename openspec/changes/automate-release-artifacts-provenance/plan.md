@@ -20,14 +20,14 @@ Android NDK, existing mGBA test and boundary tooling.
 
 ## Task 1: Remove the invented trust-controller scope
 
-- [ ] Delete `.github/workflows/gba-wifi-link-release-governance.yml` and
+- [x] Delete `.github/workflows/gba-wifi-link-release-governance.yml` and
   `.github/rulesets/gba-wifi-link-release-tags.json`.
-- [ ] Delete `tag_policy.py`, its tests, and ruleset fixtures.
-- [ ] Remove controller/intake, ruleset credential/environment, disposable public
+- [x] Delete `tag_policy.py`, its tests, and ruleset fixtures.
+- [x] Remove controller/intake, ruleset credential/environment, disposable public
   rehearsal, and hostile-tag policy from release documentation and tooling.
-- [ ] Confirm no production tag, release, environment, secret, or ruleset is
+- [x] Confirm no production tag, release, environment, secret, or ruleset is
   mutated.
-- [ ] Commit the scope correction as one reviewable deletion-heavy unit.
+- [x] Commit the scope correction as one reviewable deletion-heavy unit.
 
 ## Task 2: Simplify provenance to the requested boundary
 

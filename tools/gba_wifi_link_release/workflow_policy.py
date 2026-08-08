@@ -13,7 +13,6 @@ import re
 
 _WORKFLOW = Path(".github/workflows/gba-wifi-link-ci.yml")
 _RELEASE_WORKFLOW = Path(".github/workflows/gba-wifi-link-release.yml")
-_GOVERNANCE_WORKFLOW = Path(".github/workflows/gba-wifi-link-release-governance.yml")
 _RELEASE_CONTRACT = Path("packaging/gba-wifi-link/release/contract-v1.json")
 _HISTORY = Path("tools/gba_wifi_link_release/fixtures/v0.2.0-history.json")
 _SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -393,51 +392,6 @@ def _read_release_workflow(repo: Path) -> tuple[str, dict[str, object]]:
     if not isinstance(workflow, dict):
         raise WorkflowPolicyError("RELEASE_WORKFLOW_CONTRACT")
     return text, workflow
-
-
-def validate_ruleset_governance_workflow_policy(repo: Path) -> None:
-    """Require the audit credential to remain on default-branch-only code.
-
-    A tag push evaluates the workflow source from the tag itself.  Giving that
-    source an audit credential with bypass visibility would let an off-history
-    tag rewrite the job before its dependencies run.  The governance workflow
-    is deliberately a master/schedule-only source contract instead.
-    """
-    try:
-        text = (repo / _GOVERNANCE_WORKFLOW).read_text(encoding="utf-8")
-    except OSError as error:
-        raise WorkflowPolicyError("RULESET_GOVERNANCE_INPUT") from error
-    expected = (
-        "name: GBA Wi-Fi Link release governance\n\n"
-        "on:\n"
-        "  push:\n"
-        "    branches:\n"
-        "      - master\n"
-        "  schedule:\n"
-        "    - cron: '17 */6 * * *'\n\n"
-        "permissions:\n"
-        "  contents: read\n\n"
-        "jobs:\n"
-        "  ruleset-audit:\n"
-        "    name: Audit immutable release-tag policy\n"
-        "    runs-on: ubuntu-24.04\n"
-        "    environment: gba-wifi-link-release-governance\n"
-        "    steps:\n"
-        "      - name: Check out protected governance source\n"
-        "        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6\n"
-        "        with:\n"
-        "          fetch-depth: 1\n"
-        "          ref: ${{ github.sha }}\n\n"
-        "      - name: Read the complete immutable ruleset\n"
-        "        env:\n"
-        "          GBA_WIFI_LINK_RULESET_AUDIT_TOKEN: ${{ secrets.GBA_WIFI_LINK_RULESET_AUDIT_TOKEN }}\n"
-        "        run: |\n"
-        "          set -euo pipefail\n"
-        "          test -n \"$GBA_WIFI_LINK_RULESET_AUDIT_TOKEN\"\n"
-        "          python3 tools/gba-wifi-link-release.py verify-tag-policy\n"
-    )
-    if text != expected:
-        raise WorkflowPolicyError("RULESET_GOVERNANCE_CONTRACT")
 
 
 def _release_required(text: str, fragment: str, category: str) -> None:

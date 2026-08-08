@@ -3,8 +3,8 @@
 This repository publishes a future GBA Wi-Fi Link Android release from one
 deliberate maintainer action: pushing an approved annotated `vMAJOR.MINOR.PATCH`
 tag. The tag-triggered workflow performs the protected validation, two clean
-Android builds, byte comparison, deterministic packaging, provenance
-attestation, draft staging, remote verification, and publication. There is no
+Android builds, byte comparison, deterministic packaging, generated provenance,
+draft staging, remote verification, and publication. There is no
 second approval, dispatch, or **Publish** click.
 
 This document describes future releases. It does not create a production tag or
@@ -39,12 +39,11 @@ publish a draft.
 ## Failure and rerun
 
 Automation publishes only after every required check, independent build,
-package verification, tag recheck, and attestation succeeds. A failure leaves
+package verification, and tag recheck succeeds. A failure leaves
 evidence in the workflow and does not turn an uncertain artifact into a public
 release.
 
-The `v*` ruleset permits a new tag to be created but blocks changing or deleting
-it afterwards. Never force-push, retarget, or delete a release tag. If a
+Never force-push, retarget, or delete a release tag. If a
 published release is wrong, retain the immutable evidence and prepare a new,
 reviewed version and annotated tag. If an exact run is retried after publication,
 automation verifies the existing release read-only and succeeds only when every
@@ -55,48 +54,14 @@ source or notes on `master`, wait for protected validation, then use a new
 version tag. Do not treat rerunning a failed tag or modifying remote state as a
 correction path.
 
-## Recovery and policy checks
+## Recovery
 
-The tracked policy is
-`.github/rulesets/gba-wifi-link-release-tags.json`. GitHub's ruleset list API
-returns summaries; the complete ruleset endpoint exposes `bypass_actors` only
-to a caller with write access to that ruleset. See GitHub's [ruleset REST
-documentation](https://docs.github.com/en/rest/repos/rules?apiVersion=2022-11-28).
+The deliberately pushed annotated tag is the release instruction. If a run fails
+before publication, inspect the failed job and fix the reviewed source or notes
+on `master`; publish a corrected candidate under a new version tag. If GitHub
+reports an uncertain final publication response, rerun the same tag workflow:
+the publisher verifies an exact existing public release read-only and rejects any
+partial or conflicting state.
 
-Create the `gba-wifi-link-release-governance` GitHub Environment with deployment
-branches restricted to protected `master` only (no tag pattern and no manual
-reviewer gate), then store `GBA_WIFI_LINK_RULESET_AUDIT_TOKEN` as an
-**environment secret** there. The credential must be repository-limited and
-have ruleset visibility. It may need write-capable ruleset access solely because
-GitHub withholds the field from read-only callers. The audit code uses it for two
-`GET` requests only, never prints it, and rejects missing or withheld
-`bypass_actors` fail-closed. Do not use a broader personal credential when a
-repository-limited credential is available.
-GitHub documents that environment secrets are available only to jobs referencing
-the environment and only after its protection rules pass; see [deployment
-environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
-
-The `GBA Wi-Fi Link release governance` workflow runs only from protected
-`master` and on its schedule. It owns that credential and checks the live policy
-there. The tag-triggered release workflow deliberately never receives it: a
-workflow triggered by a tag is evaluated from that tag's source and must not be
-able to rewrite a secret-bearing audit step. A master-only environment secret
-also prevents a tag workflow from referencing the credential directly. The tag
-ruleset itself remains the release precondition; the governance audit
-continuously detects policy drift.
-
-For a local, read-only audit, provide the same credential through the
-environment rather than placing it in a command line or log:
-
-```sh
-export GBA_WIFI_LINK_RULESET_AUDIT_TOKEN='…'
-python3 tools/gba-wifi-link-release.py verify-tag-policy
-```
-
-That command first selects exactly one canonical summary by name and repository,
-then reads and validates its complete detail by ID. It requires an active tag
-ruleset on `Aelvryx/mgba-wifi-link`, covering `refs/tags/v*`, with no bypass
-actors and with deletion and force-update protection. During implementation or
-rehearsal, do not create a real version tag or publish a release; only the
-dedicated, reviewed release workflow and a later approved tag perform
-publication.
+During implementation, do not create a real version tag or publish a release.
+The first later maintainer-approved tag is the first live use of this automation.

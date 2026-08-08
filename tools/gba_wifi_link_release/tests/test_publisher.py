@@ -7,6 +7,7 @@ import hashlib
 from io import StringIO
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -485,6 +486,33 @@ class PublisherTest(unittest.TestCase):
             self.assertEqual(state["calls"], [[
                 "api", "--method", "DELETE", "repos/Aelvryx/mgba-wifi-link/releases/7",
             ]])
+
+    def test_parser_faithful_fake_rejects_equals_forms_for_unsupported_api_flags(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state_path = root / "gh-state.json"
+            release = {
+                "assets": [], "body": "Synthetic public release.\n", "draft": False,
+                "id": 7, "prerelease": True, "tag_name": "v0.2.0",
+                "target_commitish": "a" * 40,
+            }
+            for index, option in enumerate((
+                "--repo=Aelvryx/mgba-wifi-link", "--output=" + str(root / "asset.bin"),
+            )):
+                with self.subTest(option=option):
+                    state_path.write_text(json.dumps({"calls": [], "release": release}),
+                                          encoding="utf-8")
+                    completed = subprocess.run(
+                        [str(FAKE_GH), "api",
+                         "repos/Aelvryx/mgba-wifi-link/releases/tags/v0.2.0", option],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        env={"GBA_WIFI_LINK_FAKE_GH_STATE": str(state_path)}, check=False,
+                    )
+                    self.assertEqual(completed.returncode, 2)
+                    self.assertIn(b"unknown flag for gh api", completed.stderr)
+                    self.assertEqual(json.loads(state_path.read_text(encoding="utf-8"))["calls"], [[
+                        "api", "repos/Aelvryx/mgba-wifi-link/releases/tags/v0.2.0", option,
+                    ]])
 
     def test_gh_client_rejects_and_removes_a_mismatched_streamed_asset(self):
         with tempfile.TemporaryDirectory() as directory:

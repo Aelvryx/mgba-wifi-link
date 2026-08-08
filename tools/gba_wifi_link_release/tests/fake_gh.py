@@ -50,7 +50,8 @@ def main() -> None:
     # deliberately parser-faithful so an adapter cannot accidentally test a
     # command line that the installed CLI would reject.
     if arguments[:1] == ["api"] and any(
-        option in arguments for option in ("--repo", "--output")
+        argument == option or argument.startswith(option + "=")
+        for argument in arguments for option in ("--repo", "--output")
     ):
         _save(state)
         print("unknown flag for gh api", file=sys.stderr)

@@ -38,7 +38,7 @@
 - [x] 3.6 Generate release provenance and standalone `SHA256SUMS` in acyclic order.
 - [x] 3.7 Verify clean extracted/archive and standalone scopes and prove two
   synthetic builds produce byte-identical output.
-- [ ] 3.8 Remove protected-controller and signed-attestation identities from the
+- [x] 3.8 Remove protected-controller and signed-attestation identities from the
   provenance contract, goldens, renderers, and retained-release parser.
 
 ## 4. Preserve privacy and bounded parsing

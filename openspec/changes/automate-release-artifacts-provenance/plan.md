@@ -31,16 +31,16 @@ Android NDK, existing mGBA test and boundary tooling.
 
 ## Task 2: Simplify provenance to the requested boundary
 
-- [ ] Add failing tests showing build/release provenance records the trusted tag
+- [x] Add failing tests showing build/release provenance records the trusted tag
   event, exact source, first-run gates/builds, toolchain, configuration, and assets
   without controller or signed-attestation fields.
-- [ ] Remove controller/signer/attestation fields from the contract, model,
+- [x] Remove controller/signer/attestation fields from the contract, model,
   canonical JSON, body/source rendering, privacy allow-list, and retained parser.
-- [ ] Regenerate golden fixtures deliberately and prove package inventories,
+- [x] Regenerate golden fixtures deliberately and prove package inventories,
   checksum scopes, and deterministic bytes remain exact.
-- [ ] Run admission, contract, packager, provenance, render, privacy, resource, and
+- [x] Run admission, contract, packager, provenance, render, privacy, resource, and
   verifier suites.
-- [ ] Commit the provenance simplification.
+- [x] Commit the provenance simplification.
 
 ## Task 3: Simplify the GitHub publication boundary
 

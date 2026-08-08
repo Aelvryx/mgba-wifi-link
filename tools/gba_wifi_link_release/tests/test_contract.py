@@ -14,6 +14,20 @@ CONTRACT = (
 
 
 class ContractTest(unittest.TestCase):
+    def test_generated_provenance_is_self_contained_without_signed_attestations(self):
+        raw = json.loads(CONTRACT.read_text(encoding="utf-8"))
+        workflow = raw["release_workflow"]
+        self.assertEqual(
+            set(workflow["action_pins"]),
+            {"actions/checkout", "actions/download-artifact", "actions/upload-artifact"},
+        )
+        self.assertEqual(set(workflow["action_versions"]), set(workflow["action_pins"]))
+        source_template = (
+            CONTRACT.parent / "templates/SOURCE-AND-PROVENANCE.md.in"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("attestation", source_template.casefold())
+        self.assertIn("BUILD-PROVENANCE.json", source_template)
+
     def test_contract_freezes_public_and_archive_members(self):
         contract = load_contract(CONTRACT)
         self.assertEqual(contract.schema, 1)

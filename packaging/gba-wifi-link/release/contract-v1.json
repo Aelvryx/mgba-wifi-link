@@ -77,13 +77,11 @@
   },
   "release_workflow": {
     "action_pins": {
-      "actions/attest-build-provenance": "977bb373ede98d70efdf65b84cb5f73e068dcc2a",
       "actions/checkout": "d23441a48e516b6c34aea4fa41551a30e30af803",
       "actions/download-artifact": "634f93cb2916e3fdff6788551b99b062d0335ce0",
       "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02"
     },
     "action_versions": {
-      "actions/attest-build-provenance": "v3",
       "actions/checkout": "v6",
       "actions/download-artifact": "v5",
       "actions/upload-artifact": "v4"

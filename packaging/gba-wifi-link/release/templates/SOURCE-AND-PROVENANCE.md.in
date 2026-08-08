@@ -7,5 +7,6 @@ This release was built from `{{repository}}`.
 - Peeled commit: `{{commit}}`
 - Source date epoch: `{{source_date_epoch}}`
 
-`BUILD-PROVENANCE.json` records the reproducible archive build. GitHub
-attestations are external to the archive and its checksum scope.
+`BUILD-PROVENANCE.json` records the reproducible archive build, including the
+exact source, validation jobs, toolchain, configuration, and two matching build
+identities. The checksum manifests bind those records to the packaged files.

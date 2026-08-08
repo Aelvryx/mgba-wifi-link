@@ -5,9 +5,7 @@
 Define how an experimental GBA Wi-Fi Link alpha is packaged, verified,
 corrected, and shared with a limited audience while preserving executable
 identity, privacy, provenance, and honest support boundaries.
-
 ## Requirements
-
 ### Requirement: Public alpha artifacts have one coherent identity
 
 The published v0.2.0 Android ARM64 prerelease SHALL identify one source tag and
@@ -129,58 +127,80 @@ unadvertised until one coherent set is available.
 - **THEN** the preserved original release can be restored and users are not
   intentionally directed to a mixed artifact set
 
-### Requirement: Onboarding feedback is proportionate to limited alpha sharing
-
-The project SHALL NOT require a separately staged cold-reader exercise before
-limited experimental-alpha sharing when the public guide has been reviewed, the
-published artifacts have been independently verified, and existing playtesting
-has already demonstrated working sessions through the documented path. Real
-limited-alpha use SHALL provide the onboarding signal, and reproducible
-documentation friction SHALL be handled through the repository's normal issue
-and documentation-correction process.
-
-#### Scenario: Verified alpha begins limited sharing
-- **WHEN** the corrected public guide and artifacts pass review and independent
-  verification and existing playtesting covers the documented connection path
-- **THEN** limited sharing may begin without a contrived pre-sharing reader gate
-
-#### Scenario: Instructions omit a necessary step
-- **WHEN** a limited-alpha user reports that a necessary step is absent or
-  materially ambiguous in the public material
-- **THEN** the report is treated as a documentation defect, the tracked guide is
-  corrected, and affected release documentation is republished transparently
-
-#### Scenario: Gameplay qualification is proposed
-- **WHEN** existing playtesting already demonstrates that the published
-  installation and connection path works
-- **THEN** this change does not add another commercial playthrough or
-  performance soak merely to authorize sharing
-
 ### Requirement: Sharing scope remains honest and tiered
 
-After the artifact gate passes and the proportionate onboarding-feedback policy
-is recorded, the repository MAY be linked to friends, enthusiasts, and
-technically comfortable testers as an experimental Android ARM64 two-player
-Multi-Pak alpha. Shared wording MUST retain the trusted local-network
-assumption, same-effective-ROM requirement, unsupported-feature list, privacy
-guidance, and upstream-independence statement. A broad campaign that actively
-solicits support reports from strangers SHALL wait for the sanitized
-diagnostic-bundle outcome tracked separately in issue #20.
+After the artifact gate passes, the repository and prerelease MAY be linked
+publicly as an experimental Android ARM64 two-player Multi-Pak alpha. Shared
+wording MUST retain the trusted local-network assumption, same-effective-ROM
+requirement, unsupported-feature list, privacy guidance, upstream-independence
+statement, and absence of a support promise. Public availability SHALL neither
+solicit nor prohibit feedback. Any future organized feedback, telemetry, or
+support programme MUST be proposed and reviewed separately rather than inferred
+from the existence of issue templates or a public release.
 
 #### Scenario: Limited alpha sharing begins
-- **WHEN** the corrected assets pass and the limited-alpha feedback path is
-  recorded while v0.2.1 issues #20 through #23 remain incomplete
-- **THEN** limited public-alpha sharing may begin without claiming the later
-  supportable-alpha milestone
+- **WHEN** verified release assets are publicly available while later roadmap
+  work remains incomplete
+- **THEN** anyone may access them without the project claiming stability,
+  universal compatibility, active support, or a feedback campaign
 
 #### Scenario: Broad report campaign is considered
-- **WHEN** the project plans to solicit troubleshooting reports from a broad
-  unfamiliar audience
-- **THEN** it first provides the separately reviewed sanitized diagnostic-bundle
-  workflow or explicitly narrows the campaign back to limited alpha sharing
+- **WHEN** the project considers actively soliciting or systematically processing
+  reports from a broad audience
+- **THEN** that programme requires its own explicit scope, privacy boundary, and
+  maintainer decision rather than becoming an implicit alpha obligation
 
 #### Scenario: Stable or universal claim is proposed
 - **WHEN** publication wording suggests general stability, internet-safe hostile
   peer handling, or universal Multi-Pak compatibility
 - **THEN** the wording is rejected because those outcomes are not established by
-  this change
+  public availability
+
+### Requirement: Limited alpha sharing is neutral toward feedback
+
+The project SHALL NOT require a separately staged cold-reader exercise before
+limited experimental-alpha sharing when the public guide has been reviewed, the
+published artifacts have been independently verified, and existing playtesting
+has already demonstrated working sessions through the documented path. Sharing
+the repository or release MUST NOT be presented as a feedback campaign, support
+commitment, or request for reports. Existing issue channels SHALL remain available
+for unsolicited use without promising a response, and the project SHALL NOT
+forbid feedback that a person independently chooses to provide.
+
+#### Scenario: Verified alpha begins limited sharing
+- **WHEN** the public guide and artifacts pass review and independent verification
+  and existing playtesting covers the documented connection path
+- **THEN** sharing may begin without a contrived reader gate or an invitation to
+  join a feedback programme
+
+#### Scenario: Instructions omit a necessary step
+- **WHEN** a person independently reports a reproducible omission or ambiguity
+  through an existing issue channel
+- **THEN** the report may be considered through normal project judgment without a
+  service-level promise and without requiring a diagnostic intake system
+
+#### Scenario: Gameplay qualification is proposed
+- **WHEN** existing playtesting already demonstrates that the published
+  installation and connection path works
+- **THEN** this capability does not add another commercial playthrough or
+  performance soak merely to authorize sharing
+
+### Requirement: Future alpha releases use immutable automated publication
+
+After the automated release-provenance capability is enabled, every new public
+Android alpha release SHALL be generated and published by the trusted tag
+workflow from its approved annotated tag. The special v0.2.0 in-place
+documentation correction SHALL remain historical and MUST NOT authorize future
+asset replacement under an existing tag.
+
+#### Scenario: A future alpha is released
+- **WHEN** a maintainer pushes an approved new release tag after the automated
+  capability is enabled
+- **THEN** the exact validated, reproducible, privacy-safe set is published
+  automatically and remains immutable
+
+#### Scenario: A published future alpha needs correction
+- **WHEN** documentation, metadata, executable, fixture, or provenance is found to
+  be wrong after publication
+- **THEN** the correction uses a newly reviewed version and tag rather than
+  replacing assets or moving the original tag

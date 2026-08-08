@@ -114,7 +114,7 @@
 - [x] 5.9 Add a policy test proving the publisher input is the verified workflow
   artifact and that the privileged path cannot check out source, compile, render,
   download undeclared inputs, or substitute files.
-- [ ] 5.10 Replace the generic GitHub subprocess builder with command-specific
+- [x] 5.10 Replace the generic GitHub subprocess builder with command-specific
   `gh api`, `gh release`, and `gh attestation` invocations; add faithful parser
   fixtures and a read-only live GET smoke that reject unsupported flags.
 - [ ] 5.11 Add an early existing-public-release verifier that downloads the

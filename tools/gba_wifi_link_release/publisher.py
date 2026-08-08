@@ -9,7 +9,8 @@ import stat
 import tempfile
 from typing import Iterator
 
-from .github import AttestationSubject, GitHubClient, RemoteAsset, RemoteRelease
+from .github import (AttestationSubject, CANONICAL_SIGNER_WORKFLOW, GitHubClient,
+                     RemoteAsset, RemoteRelease)
 from .model import ReleaseAsset, ReleaseSet
 from .verifier import VerificationError, verify_release
 
@@ -167,10 +168,16 @@ def _publish_verified(client: GitHubClient, release_set: ReleaseSet,
         if existing.draft:
             raise ReleaseConflict("RELEASE_CONFLICT")
         _verify_remote(client, release_set, body, existing, draft=False, conflict=True)
-        client.verify_attestations(subjects)
+        client.verify_attestations(
+            subjects, source_digest=release_set.context.commit,
+            signer_workflow=CANONICAL_SIGNER_WORKFLOW,
+        )
         return PublishResult(existing.id, True, True)
 
-    client.verify_attestations(subjects)
+    client.verify_attestations(
+        subjects, source_digest=release_set.context.commit,
+        signer_workflow=CANONICAL_SIGNER_WORKFLOW,
+    )
 
     created: RemoteRelease | None = None
     try:

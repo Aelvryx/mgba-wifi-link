@@ -85,7 +85,7 @@ class FakeClient:
         for name, data in self.files.items():
             (output / name).write_bytes(data)
 
-    def verify_attestations(self, subjects: tuple[AttestationSubject, ...]) -> None:
+    def verify_attestations(self, subjects: tuple[AttestationSubject, ...], **identity) -> None:
         self.calls.append(("verify-attestations", *(subject.name for subject in subjects)))
         if self.on_verify_attestations is not None:
             self.on_verify_attestations(subjects)

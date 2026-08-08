@@ -67,7 +67,9 @@ class GitHubClient(Protocol):
     def create_draft(self, context: ReleaseContext, body: bytes) -> RemoteRelease: ...
     def upload(self, release_id: int, path: Path) -> RemoteAsset: ...
     def download_assets(self, release_id: int, output: Path) -> None: ...
-    def verify_attestations(self, subjects: tuple[AttestationSubject, ...]) -> None: ...
+    def verify_attestations(self, subjects: tuple[AttestationSubject, ...], *,
+                            source_digest: str,
+                            signer_workflow: str) -> None: ...
     def publish(self, release_id: int) -> None: ...
     def delete_draft(self, release_id: int) -> None: ...
 
@@ -395,13 +397,21 @@ class GhClient:
                     pass
                 raise
 
-    def verify_attestations(self, subjects: tuple[AttestationSubject, ...]) -> None:
+    def verify_attestations(self, subjects: tuple[AttestationSubject, ...], *,
+                            source_digest: str | None = None,
+                            signer_workflow: str | None = None) -> None:
         """Verify existing provenance attestations for exact immutable subjects."""
+        selected_source_digest = source_digest if source_digest is not None else self.source_digest
+        selected_signer_workflow = (
+            signer_workflow if signer_workflow is not None else CANONICAL_SIGNER_WORKFLOW
+        )
         if (
             len(subjects) != 2
-            or not isinstance(self.source_digest, str)
-            or len(self.source_digest) != 40
-            or any(character not in "0123456789abcdef" for character in self.source_digest)
+            or not isinstance(selected_source_digest, str)
+            or len(selected_source_digest) != 40
+            or any(character not in "0123456789abcdef" for character in selected_source_digest)
+            or not isinstance(selected_signer_workflow, str)
+            or not selected_signer_workflow
             or any(not _valid_subject(subject) for subject in subjects)
             or len({subject.name for subject in subjects}) != len(subjects)
         ):
@@ -411,8 +421,8 @@ class GhClient:
             try:
                 evidence = _json(self._run_attestation(
                     "verify", str(subject.path), "--predicate-type",
-                    SLSA_PROVENANCE_V1, "--signer-workflow", CANONICAL_SIGNER_WORKFLOW,
-                    "--source-digest", self.source_digest, "--format", "json", "--limit", "2",
+                    SLSA_PROVENANCE_V1, "--signer-workflow", selected_signer_workflow,
+                    "--source-digest", selected_source_digest, "--format", "json", "--limit", "2",
                 ))
             except GitHubError as error:
                 raise GitHubError("GITHUB_ATTEST") from error

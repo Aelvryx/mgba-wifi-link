@@ -16,8 +16,6 @@ from tools.gba_wifi_link_release.existing_release import (
     verify_existing_public_release,
 )
 from tools.gba_wifi_link_release.github import (
-    AttestationSubject,
-    CANONICAL_SIGNER_WORKFLOW,
     RemoteAsset,
     RemoteRelease,
 )
@@ -36,7 +34,6 @@ class ReadOnlyClient:
         self.release = release
         self.files = files
         self.calls: list[tuple[object, ...]] = []
-        self.attestation_failure = False
 
     def get_release(self, tag: str) -> RemoteRelease | None:
         self.calls.append(("get", tag))
@@ -48,27 +45,6 @@ class ReadOnlyClient:
             path = output / name
             path.write_bytes(data)
             path.chmod(0o644)
-
-    def verify_attestations(
-        self,
-        subjects: tuple[AttestationSubject, ...],
-        *,
-        source_digest: str,
-        signer_workflow: str,
-    ) -> None:
-        self.calls.append((
-            "verify-attestations",
-            tuple(subject.name for subject in subjects),
-            source_digest,
-            signer_workflow,
-        ))
-        if self.attestation_failure:
-            raise ValueError("NO_ATTESTATION")
-        self.asserted_subjects = tuple(
-            (subject.name, subject.size, subject.sha256,
-             hashlib.sha256(subject.path.read_bytes()).hexdigest())
-            for subject in subjects
-        )
 
     def create_draft(self, *args, **kwargs):
         raise AssertionError("existing-release verification must be read-only")
@@ -159,13 +135,20 @@ class ExistingReleaseTest(unittest.TestCase):
             self.assertEqual(client.calls, [
                 ("get", "v9.8.7"),
                 ("download", 7),
-                ("verify-attestations", (
-                    "mgba_libretro_android.so",
-                    "mgba-gba-wifi-link-v9.8.7-android-arm64.zip",
-                ), first.commit, CANONICAL_SIGNER_WORKFLOW),
             ])
-            self.assertTrue(all(expected == observed
-                                for _, _, expected, observed in client.asserted_subjects))
+
+    def test_exact_retained_release_needs_no_external_attestation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            context, output = self.make_attempt(root)
+            body = render_release_body(context, NOTES.decode("utf-8"))
+            remote, files = self.remote_for(context, output, body)
+            client = ReadOnlyClient(remote, files)
+
+            result = verify_existing_public_release(client, context, NOTES)
+
+            self.assertEqual(result.status, ExistingReleaseStatus.REUSED)
+            self.assertFalse(any(call[0] == "verify-attestations" for call in client.calls))
 
     def test_draft_and_remote_metadata_conflicts_fail_without_mutation(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -208,7 +191,7 @@ class ExistingReleaseTest(unittest.TestCase):
 
             self.assertEqual(client.calls, [("get", context.tag)])
 
-    def test_malformed_or_missing_downloaded_evidence_fails_without_attestation(self):
+    def test_malformed_or_missing_downloaded_evidence_fails_read_only(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             context, output = self.make_attempt(root)
@@ -240,7 +223,8 @@ class ExistingReleaseTest(unittest.TestCase):
                     client = ReadOnlyClient(remote, downloaded)
                     with self.assertRaisesRegex(ExistingReleaseError, "^EXISTING_RELEASE_CONFLICT$"):
                         verify_existing_public_release(client, context, NOTES)
-                    self.assertFalse(any(call[0] == "verify-attestations" for call in client.calls))
+                    self.assertFalse(any(call[0] in {"create", "upload", "publish", "delete"}
+                                         for call in client.calls))
 
     def test_oversized_retained_json_is_rejected_before_path_read(self):
         from tools.gba_wifi_link_release.existing_release import _retained_context
@@ -271,21 +255,8 @@ class ExistingReleaseTest(unittest.TestCase):
             with self.assertRaisesRegex(ExistingReleaseError, "^EXISTING_RELEASE_CONFLICT$"):
                 verify_existing_public_release(client, expected, NOTES)
 
-            self.assertFalse(any(call[0] == "verify-attestations" for call in client.calls))
-
-    def test_missing_exact_attestation_fails_closed(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            context, output = self.make_attempt(root)
-            body = render_release_body(context, NOTES.decode("utf-8"))
-            remote, files = self.remote_for(context, output, body)
-            client = ReadOnlyClient(remote, files)
-            client.attestation_failure = True
-
-            with self.assertRaisesRegex(ExistingReleaseError, "^EXISTING_RELEASE_CONFLICT$"):
-                verify_existing_public_release(client, context, NOTES)
-
-            self.assertEqual(client.calls[-1][0], "verify-attestations")
+            self.assertFalse(any(call[0] in {"create", "upload", "publish", "delete"}
+                                 for call in client.calls))
 
     def test_cli_reports_absent_release_as_proceed_without_building(self):
         from tools.gba_wifi_link_release.cli import _context_dict, main

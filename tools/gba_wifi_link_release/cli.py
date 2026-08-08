@@ -352,8 +352,7 @@ def main(argv: list[str] | None = None) -> int:
             release_set = verify_release(Path(args.output), context)
             verify_remote_tag(context, args.repository)
             result = publish_release(
-                GhClient(args.repository, gh=args.gh_bin or "gh",
-                         source_digest=context.commit), release_set,
+                GhClient(args.repository, gh=args.gh_bin or "gh"), release_set,
                 Path(args.body).read_bytes(),
             )
             sys.stdout.write(json.dumps({"release_id": result.release_id, "reused": result.reused},

@@ -65,7 +65,7 @@
   first-run assets, manifests, provenance, body, target, and classification.
 - [x] 5.5 Test two attempts with different run/job IDs: exact retained state is
   read-only success and every conflict performs zero mutation.
-- [ ] 5.6 Remove mandatory GitHub attestation creation/verification from the
+- [x] 5.6 Remove mandatory GitHub attestation creation/verification from the
   client, publisher, retained-release path, tests, and workflow.
 - [ ] 5.7 Re-run publisher and rerun tests against the simplified provenance-only
   transaction and preserve no-replace semantics.

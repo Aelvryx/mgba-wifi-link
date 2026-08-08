@@ -10,12 +10,7 @@ from typing import NoReturn
 import zipfile
 
 from .admission import REQUIRED_GATES, REQUIRED_WORKFLOW
-from .github import (
-    AttestationSubject,
-    CANONICAL_SIGNER_WORKFLOW,
-    GitHubClient,
-    RemoteRelease,
-)
+from .github import GitHubClient, RemoteRelease
 from .model import (
     ActualBuildEvidence,
     BuildEvidence,
@@ -268,19 +263,6 @@ def verify_existing_public_release(
                 or remote.body != render_release_body(retained, notes_text)
             ):
                 _fail()
-            archive = next(asset for asset in verified.assets if asset.name.endswith(".zip"))
-            core = next(asset for asset in verified.assets
-                        if asset.name == "mgba_libretro_android.so")
-            subjects = tuple(
-                AttestationSubject(asset.name, directory / asset.name,
-                                   asset.size, asset.sha256)
-                for asset in (core, archive)
-            )
-            client.verify_attestations(
-                subjects,
-                source_digest=retained.commit,
-                signer_workflow=CANONICAL_SIGNER_WORKFLOW,
-            )
             return ExistingReleaseResult(
                 ExistingReleaseStatus.REUSED, remote.id, retained,
             )

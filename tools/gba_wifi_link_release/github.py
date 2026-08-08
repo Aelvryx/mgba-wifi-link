@@ -19,12 +19,6 @@ from .resource_limits import (ResourceLimitError, public_asset_max_bytes,
 MAX_JSON_BYTES = 1 << 20
 MAX_JSON_DEPTH = 20
 MAX_ASSETS = 32
-CANONICAL_SIGNER_WORKFLOW = (
-    "Aelvryx/mgba-wifi-link/.github/workflows/gba-wifi-link-release.yml"
-)
-SLSA_PROVENANCE_V1 = "https://slsa.dev/provenance/v1"
-
-
 class GitHubError(ValueError):
     """A bounded GitHub client failure category."""
 
@@ -54,24 +48,11 @@ class RemoteRelease:
     assets: tuple[RemoteAsset, ...]
 
 
-@dataclass(frozen=True)
-class AttestationSubject:
-    """An immutable local subject and the digest the attestation must bind."""
-
-    name: str
-    path: Path
-    size: int
-    sha256: str
-
-
 class GitHubClient(Protocol):
     def get_release(self, tag: str) -> RemoteRelease | None: ...
     def create_draft(self, context: ReleaseContext, body: bytes) -> RemoteRelease: ...
     def upload(self, release_id: int, path: Path) -> RemoteAsset: ...
     def download_assets(self, release_id: int, output: Path) -> None: ...
-    def verify_attestations(self, subjects: tuple[AttestationSubject, ...], *,
-                            source_digest: str,
-                            signer_workflow: str) -> None: ...
     def publish(self, release_id: int) -> None: ...
     def delete_draft(self, release_id: int) -> None: ...
 
@@ -178,77 +159,15 @@ def _remote_release(value: object) -> RemoteRelease:
     )
 
 
-def _valid_subject(subject: AttestationSubject) -> bool:
-    return (
-        isinstance(subject, AttestationSubject)
-        and isinstance(subject.name, str)
-        and Path(subject.name).name == subject.name
-        and isinstance(subject.path, Path)
-        and type(subject.size) is int
-        and subject.size >= 0
-        and isinstance(subject.sha256, str)
-        and len(subject.sha256) == 64
-        and all(character in "0123456789abcdef" for character in subject.sha256)
-    )
-
-
-def _subject_digest(subject: AttestationSubject) -> str:
-    if not _valid_subject(subject):
-        raise GitHubError("GITHUB_ATTEST")
-    try:
-        with subject.path.open("rb") as source:
-            digest = hashlib.file_digest(source, "sha256").hexdigest()
-        if subject.path.stat().st_size != subject.size or digest != subject.sha256:
-            raise GitHubError("GITHUB_ATTEST")
-    except GitHubError:
-        raise
-    except OSError as error:
-        raise GitHubError("GITHUB_ATTEST") from error
-    return digest
-
-
-def _evidence_binds_subject(value: object, subject: AttestationSubject) -> bool:
-    if not isinstance(value, list) or not value or len(value) > MAX_ASSETS:
-        return False
-    for evidence in value:
-        if not isinstance(evidence, Mapping):
-            continue
-        verified = evidence.get("verificationResult")
-        if not isinstance(verified, Mapping):
-            continue
-        statement = verified.get("statement")
-        if (
-            not isinstance(statement, Mapping)
-            or statement.get("predicateType") != SLSA_PROVENANCE_V1
-        ):
-            continue
-        subjects = statement.get("subject")
-        if not isinstance(subjects, list) or len(subjects) > MAX_ASSETS:
-            continue
-        for candidate in subjects:
-            if not isinstance(candidate, Mapping):
-                continue
-            digest = candidate.get("digest")
-            if (
-                candidate.get("name") == subject.name
-                and isinstance(digest, Mapping)
-                and digest.get("sha256") == subject.sha256
-            ):
-                return True
-    return False
-
-
 class GhClient:
     """GitHub CLI implementation with no shell parsing or implicit repository."""
 
     def __init__(self, repository: str, *, gh: str = "gh",
-                 env: Mapping[str, str] | None = None,
-                 source_digest: str | None = None):
+                 env: Mapping[str, str] | None = None):
         if not isinstance(repository, str) or not repository:
             raise GitHubError("GITHUB_REPOSITORY")
         self.repository = repository
         self.gh = gh
-        self.source_digest = source_digest
         self.env = os.environ.copy()
         if env is not None:
             self.env.update(env)
@@ -278,10 +197,6 @@ class GhClient:
     def _run_release(self, *args: str) -> bytes:
         """Run a release-family operation with its supported repository option."""
         return self._run_bytes("release", *args, "--repo", self.repository)
-
-    def _run_attestation(self, *args: str) -> bytes:
-        """Run an attestation-family operation with its supported repository option."""
-        return self._run_bytes("attestation", *args, "--repo", self.repository)
 
     def _stream_api_download(self, *args: str, destination: Path,
                              maximum_bytes: int) -> None:
@@ -432,38 +347,6 @@ class GhClient:
                 except OSError:
                     pass
                 raise
-
-    def verify_attestations(self, subjects: tuple[AttestationSubject, ...], *,
-                            source_digest: str | None = None,
-                            signer_workflow: str | None = None) -> None:
-        """Verify existing provenance attestations for exact immutable subjects."""
-        selected_source_digest = source_digest if source_digest is not None else self.source_digest
-        selected_signer_workflow = (
-            signer_workflow if signer_workflow is not None else CANONICAL_SIGNER_WORKFLOW
-        )
-        if (
-            len(subjects) != 2
-            or not isinstance(selected_source_digest, str)
-            or len(selected_source_digest) != 40
-            or any(character not in "0123456789abcdef" for character in selected_source_digest)
-            or not isinstance(selected_signer_workflow, str)
-            or not selected_signer_workflow
-            or any(not _valid_subject(subject) for subject in subjects)
-            or len({subject.name for subject in subjects}) != len(subjects)
-        ):
-            raise GitHubError("GITHUB_ATTEST")
-        for subject in subjects:
-            _subject_digest(subject)
-            try:
-                evidence = _json(self._run_attestation(
-                    "verify", str(subject.path), "--predicate-type",
-                    SLSA_PROVENANCE_V1, "--signer-workflow", selected_signer_workflow,
-                    "--source-digest", selected_source_digest, "--format", "json", "--limit", "2",
-                ))
-            except GitHubError as error:
-                raise GitHubError("GITHUB_ATTEST") from error
-            if not _evidence_binds_subject(evidence, subject):
-                raise GitHubError("GITHUB_ATTEST")
 
     def publish(self, release_id: int) -> None:
         if type(release_id) is not int or release_id <= 0:

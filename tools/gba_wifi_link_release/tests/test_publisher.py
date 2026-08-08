@@ -13,7 +13,6 @@ import unittest
 from unittest.mock import patch
 
 from tools.gba_wifi_link_release.github import (
-    AttestationSubject,
     GhClient,
     GitHubError,
     RemoteAsset,
@@ -43,9 +42,6 @@ class FakeClient:
         self.files: dict[str, bytes] = {}
         self.fail_create = False
         self.fail_upload_at: int | None = None
-        self.fail_attestation = False
-        self.on_verify_attestations = None
-        self.verified_subjects: tuple[tuple[str, Path, bytes, str], ...] = ()
         self.publish_error: Exception | None = None
         self.publish_before_error = False
         self.after_upload = None
@@ -85,20 +81,6 @@ class FakeClient:
         for name, data in self.files.items():
             (output / name).write_bytes(data)
 
-    def verify_attestations(self, subjects: tuple[AttestationSubject, ...], **identity) -> None:
-        self.calls.append(("verify-attestations", *(subject.name for subject in subjects)))
-        if self.on_verify_attestations is not None:
-            self.on_verify_attestations(subjects)
-        self.verified_subjects = tuple(
-            (subject.name, subject.path, subject.path.read_bytes(), subject.sha256)
-            for subject in subjects
-        )
-        if self.fail_attestation or any(
-            len(data) != subject.size or hashlib.sha256(data).hexdigest() != subject.sha256
-            for subject, (_, _, data, _) in zip(subjects, self.verified_subjects)
-        ):
-            raise OSError("ATTEST")
-
     def publish(self, release_id: int) -> None:
         self.calls.append(("publish", release_id))
         assert self.release is not None and self.release.id == release_id
@@ -134,7 +116,7 @@ class PublisherTest(unittest.TestCase):
         return (RemoteRelease(release_id, context.tag, context.commit, body, draft,
                               context.prerelease, assets), files)
 
-    def test_success_stages_verifies_attests_and_publishes_the_exact_set(self):
+    def test_success_stages_verifies_and_publishes_the_exact_set(self):
         with tempfile.TemporaryDirectory() as directory:
             release_set = self.make_release(Path(directory))
             client = FakeClient()
@@ -145,8 +127,6 @@ class PublisherTest(unittest.TestCase):
             self.assertFalse(result.reused)
             self.assertEqual(client.calls, [
                 ("get", "v9.8.7"),
-                ("verify-attestations", "mgba_libretro_android.so",
-                 "mgba-gba-wifi-link-v9.8.7-android-arm64.zip"),
                 ("create", "v9.8.7", "b" * 40, BODY),
                 ("upload", 100, "mgba_libretro_android.so"),
                 ("upload", 100, "gba-link-test.gba"),
@@ -161,6 +141,16 @@ class PublisherTest(unittest.TestCase):
                 ("get", "v9.8.7"),
                 ("download", 100),
             ])
+
+    def test_publication_uses_generated_provenance_without_attestation_api(self):
+        with tempfile.TemporaryDirectory() as directory:
+            release_set = self.make_release(Path(directory))
+            client = FakeClient()
+
+            result = publish_release(client, release_set, BODY)
+
+            self.assertTrue(result.published)
+            self.assertFalse(any(call[0] == "verify-attestations" for call in client.calls))
 
     def test_local_reverification_happens_before_any_github_operation(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -197,10 +187,10 @@ class PublisherTest(unittest.TestCase):
             with self.assertRaisesRegex(OSError, "^CREATE$"):
                 publish_release(client, release_set, BODY)
 
-            self.assertEqual(client.calls, [("get", "v9.8.7"),
-                                            ("verify-attestations", "mgba_libretro_android.so",
-                                             "mgba-gba-wifi-link-v9.8.7-android-arm64.zip"),
-                                            ("create", "v9.8.7", "b" * 40, BODY)])
+            self.assertEqual(client.calls, [
+                ("get", "v9.8.7"),
+                ("create", "v9.8.7", "b" * 40, BODY),
+            ])
 
     def test_draft_readback_mismatches_cleanup_the_owned_draft(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -224,45 +214,6 @@ class PublisherTest(unittest.TestCase):
 
                     self.assertEqual(client.calls[-2:], [("get", "v9.8.7"), ("delete", 100)])
                     self.assertIsNone(client.release)
-
-    def test_attestation_failure_prevents_every_release_mutation(self):
-        with tempfile.TemporaryDirectory() as directory:
-            release_set = self.make_release(Path(directory))
-            client = FakeClient()
-            client.fail_attestation = True
-
-            with self.assertRaisesRegex(OSError, "^ATTEST$"):
-                publish_release(client, release_set, BODY)
-
-            self.assertEqual(client.calls, [
-                ("get", "v9.8.7"),
-                ("verify-attestations", "mgba_libretro_android.so",
-                 "mgba-gba-wifi-link-v9.8.7-android-arm64.zip"),
-            ])
-            self.assertIsNone(client.release)
-
-    def test_attestation_verifies_immutable_subject_snapshots_despite_original_swap(self):
-        with tempfile.TemporaryDirectory() as directory:
-            release_set = self.make_release(Path(directory))
-            client = FakeClient()
-            expected = {
-                asset.name: (release_set.directory / asset.name).read_bytes()
-                for asset in release_set.assets
-                if asset.name == "mgba_libretro_android.so" or asset.name.endswith(".zip")
-            }
-
-            def swap_originals(subjects):
-                self.assertTrue(all(subject.path.parent != release_set.directory for subject in subjects))
-                (release_set.directory / "mgba_libretro_android.so").write_bytes(b"substituted")
-                (release_set.directory / "mgba-gba-wifi-link-v9.8.7-android-arm64.zip").write_bytes(b"substituted")
-
-            client.on_verify_attestations = swap_originals
-            result = publish_release(client, release_set, BODY)
-
-            self.assertTrue(result.published)
-            self.assertEqual({name: data for name, _, data, _ in client.verified_subjects}, expected)
-            self.assertTrue(all(hashlib.sha256(data).hexdigest() == digest
-                                for _, _, data, digest in client.verified_subjects))
 
     def test_untrusted_created_draft_is_not_deleted(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -306,8 +257,6 @@ class PublisherTest(unittest.TestCase):
             self.assertEqual(client.calls, [
                 ("get", "v9.8.7"),
                 ("download", 5),
-                ("verify-attestations", "mgba_libretro_android.so",
-                 "mgba-gba-wifi-link-v9.8.7-android-arm64.zip"),
             ])
 
     def test_existing_public_conflicts_are_never_mutated(self):
@@ -330,7 +279,7 @@ class PublisherTest(unittest.TestCase):
                     with self.assertRaisesRegex(ReleaseConflict, "^RELEASE_CONFLICT$"):
                         publish_release(client, release_set, BODY)
 
-                    mutations = {"create", "upload", "delete", "attest", "publish"}
+                    mutations = {"create", "upload", "delete", "publish"}
                     self.assertFalse(any(call[0] in mutations for call in client.calls))
 
     def test_ambiguous_publish_succeeds_only_after_exact_public_readback(self):
@@ -423,10 +372,6 @@ class PublisherTest(unittest.TestCase):
                 argument.startswith("repos/Aelvryx/mgba-wifi-link/")
                 for argument in call
             ) for call in api_calls))
-            attestation_calls = [call for call in state["calls"]
-                                 if call[:2] == ["attestation", "verify"]]
-            self.assertTrue(all(call[-2:] == ["--repo", "Aelvryx/mgba-wifi-link"]
-                                for call in attestation_calls))
             self.assertTrue(any(
                 "/releases/1/assets?name=mgba_libretro_android.so" in argument
                 for call in state["calls"] for argument in call
@@ -656,125 +601,10 @@ class PublisherTest(unittest.TestCase):
             state_path = Path(directory) / "gh-state.json"
             state_path.write_text(json.dumps({"calls": [], "malformed_json": True}), encoding="utf-8")
             client = GhClient("Aelvryx/mgba-wifi-link", gh=str(FAKE_GH),
-                              env={"GBA_WIFI_LINK_FAKE_GH_STATE": str(state_path)},
-                              source_digest="b" * 40)
+                              env={"GBA_WIFI_LINK_FAKE_GH_STATE": str(state_path)})
 
             with self.assertRaisesRegex(GitHubError, "^GITHUB_JSON_DUPLICATE$"):
                 client.get_release("v9.8.7")
-
-    def test_gh_client_verifies_existing_exact_attestations_without_create_command(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            core_path = root / "mgba_libretro_android.so"
-            archive_path = root / "mgba-gba-wifi-link-v9.8.7-android-arm64.zip"
-            core_path.write_bytes(b"core subject bytes\n")
-            archive_path.write_bytes(b"archive subject bytes\n")
-            state_path = root / "gh-state.json"
-            state_path.write_text(json.dumps({"calls": []}), encoding="utf-8")
-            subjects = tuple(
-                AttestationSubject(
-                    path.name, path, path.stat().st_size,
-                    hashlib.sha256(path.read_bytes()).hexdigest(),
-                )
-                for path in (core_path, archive_path)
-            )
-            client = GhClient("Aelvryx/mgba-wifi-link", gh=str(FAKE_GH),
-                              env={"GBA_WIFI_LINK_FAKE_GH_STATE": str(state_path)},
-                              source_digest="b" * 40)
-
-            client.verify_attestations(subjects)
-
-            calls = json.loads(state_path.read_text(encoding="utf-8"))["calls"]
-            verify_calls = [call for call in calls if call[:2] == ["attestation", "verify"]]
-            self.assertEqual(len(verify_calls), 2)
-            for subject, verify_call in zip(subjects, verify_calls):
-                self.assertIn(str(subject.path), verify_call)
-                self.assertIn("--format", verify_call)
-                self.assertIn("json", verify_call)
-                self.assertIn("--limit", verify_call)
-                self.assertIn("2", verify_call)
-                self.assertIn("--predicate-type", verify_call)
-                self.assertIn("--signer-workflow", verify_call)
-                self.assertIn(
-                    "Aelvryx/mgba-wifi-link/.github/workflows/gba-wifi-link-release.yml",
-                    verify_call,
-                )
-                self.assertIn("--source-digest", verify_call)
-                self.assertIn("b" * 40, verify_call)
-                self.assertEqual(verify_call[-2:], ["--repo", "Aelvryx/mgba-wifi-link"])
-            self.assertTrue(all("create" not in call for call in calls))
-
-    def test_gh_client_rejects_missing_or_invalid_attestation_evidence(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            core_path = root / "mgba_libretro_android.so"
-            archive_path = root / "mgba-gba-wifi-link-v9.8.7-android-arm64.zip"
-            core_path.write_bytes(b"core subject bytes\n")
-            archive_path.write_bytes(b"archive subject bytes\n")
-            subjects = tuple(
-                AttestationSubject(
-                    path.name, path, path.stat().st_size,
-                    hashlib.sha256(path.read_bytes()).hexdigest(),
-                )
-                for path in (core_path, archive_path)
-            )
-            for target in subjects:
-                for mode in ("missing", "invalid"):
-                    with self.subTest(subject=target.name, mode=mode):
-                        state_path = root / f"gh-state-{target.name}-{mode}.json"
-                        state_path.write_text(json.dumps({
-                            "calls": [], "attestation_mode": {target.name: mode},
-                        }), encoding="utf-8")
-                        client = GhClient("Aelvryx/mgba-wifi-link", gh=str(FAKE_GH),
-                                          env={"GBA_WIFI_LINK_FAKE_GH_STATE": str(state_path)},
-                                          source_digest="b" * 40)
-
-                        with self.assertRaisesRegex(GitHubError, "^GITHUB_ATTEST$"):
-                            client.verify_attestations(subjects)
-
-    def test_gh_client_rejects_wrong_signer_workflow_or_source_digest(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            paths = (
-                root / "mgba_libretro_android.so",
-                root / "mgba-gba-wifi-link-v9.8.7-android-arm64.zip",
-            )
-            for path in paths:
-                path.write_bytes(path.name.encode("utf-8"))
-            subjects = tuple(
-                AttestationSubject(
-                    path.name, path, path.stat().st_size,
-                    hashlib.sha256(path.read_bytes()).hexdigest(),
-                )
-                for path in paths
-            )
-            expected = {
-                "signer_workflow": (
-                    "Aelvryx/mgba-wifi-link/.github/workflows/gba-wifi-link-release.yml"
-                ),
-                "source_digest": "b" * 40,
-            }
-            for case in ("signer", "source"):
-                with self.subTest(case=case):
-                    state_path = root / f"gh-state-wrong-{case}.json"
-                    state_path.write_text(json.dumps({
-                        "attestation_expected": expected, "calls": [],
-                    }), encoding="utf-8")
-                    client = GhClient(
-                        "Aelvryx/mgba-wifi-link", gh=str(FAKE_GH),
-                        env={"GBA_WIFI_LINK_FAKE_GH_STATE": str(state_path)},
-                        source_digest=("c" * 40 if case == "source" else "b" * 40),
-                    )
-                    signer_patch = patch(
-                        "tools.gba_wifi_link_release.github.CANONICAL_SIGNER_WORKFLOW",
-                        "evil/example/.github/workflows/release.yml",
-                    ) if case == "signer" else patch(
-                        "tools.gba_wifi_link_release.github.CANONICAL_SIGNER_WORKFLOW",
-                        expected["signer_workflow"],
-                    )
-                    with signer_patch, self.assertRaisesRegex(GitHubError, "^GITHUB_ATTEST$"):
-                        client.verify_attestations(subjects)
-
 
 if __name__ == "__main__":
     unittest.main()

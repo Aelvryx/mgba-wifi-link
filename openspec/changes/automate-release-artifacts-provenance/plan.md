@@ -44,15 +44,15 @@ Android NDK, existing mGBA test and boundary tooling.
 
 ## Task 3: Simplify the GitHub publication boundary
 
-- [ ] Add failing tests for publication and exact rerun without any attestation
+- [x] Add failing tests for publication and exact rerun without any attestation
   API call or signed evidence.
-- [ ] Remove attestation types/commands/verification from the GitHub client,
+- [x] Remove attestation types/commands/verification from the GitHub client,
   publisher, existing-release verifier, CLI, fake, and tests.
-- [ ] Preserve supported command-specific `gh api`/`gh release` syntax, bounded
+- [x] Preserve supported command-specific `gh api`/`gh release` syntax, bounded
   duplicate-safe JSON, streaming no-follow downloads, exact remote read-back,
   private-draft cleanup, ambiguous-response handling, and no public replacement.
 - [ ] Run focused publisher/rerun tests and the full release-tool suite.
-- [ ] Commit the publication simplification.
+- [x] Commit the publication simplification.
 
 ## Task 4: Reduce the workflow to one trusted tag path
 

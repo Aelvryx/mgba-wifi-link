@@ -9,8 +9,7 @@ import stat
 import tempfile
 from typing import Iterator
 
-from .github import (AttestationSubject, CANONICAL_SIGNER_WORKFLOW, GitHubClient,
-                     RemoteAsset, RemoteRelease)
+from .github import GitHubClient, RemoteAsset, RemoteRelease
 from .model import ReleaseAsset, ReleaseSet
 from .verifier import VerificationError, verify_release
 
@@ -103,7 +102,7 @@ def _verified_local(release_set: ReleaseSet) -> ReleaseSet:
     return verified
 
 
-def _snapshot_subject(source: Path, destination: Path, asset: ReleaseAsset) -> AttestationSubject:
+def _snapshot_asset(source: Path, destination: Path, asset: ReleaseAsset) -> None:
     """Capture one regular source through a no-follow descriptor into a private file."""
     if not hasattr(os, "O_NOFOLLOW"):
         raise PublishError("PUBLISH_SUBJECT")
@@ -138,46 +137,26 @@ def _snapshot_subject(source: Path, destination: Path, asset: ReleaseAsset) -> A
         os.close(descriptor)
     if size != asset.size or digest.hexdigest() != asset.sha256:
         raise PublishError("PUBLISH_SUBJECT")
-    return AttestationSubject(asset.name, destination, size, digest.hexdigest())
 
 
 @contextmanager
-def _snapshot_release(release_set: ReleaseSet) -> Iterator[tuple[ReleaseSet, tuple[AttestationSubject, ...]]]:
+def _snapshot_release(release_set: ReleaseSet) -> Iterator[ReleaseSet]:
     assert release_set.directory is not None
     with tempfile.TemporaryDirectory(prefix="gba-wifi-link-release-subject-") as directory:
         root = Path(directory)
-        snapshots = {
-            asset.name: _snapshot_subject(
-                release_set.directory / asset.name, root / asset.name, asset,
-            )
-            for asset in release_set.assets
-        }
-        archives = [asset for asset in release_set.assets if asset.name.endswith(".zip")]
-        if "mgba_libretro_android.so" not in snapshots or len(archives) != 1:
-            raise PublishError("PUBLISH_INPUT")
-        yield (
-            ReleaseSet(release_set.context, release_set.assets, root),
-            (snapshots["mgba_libretro_android.so"], snapshots[archives[0].name]),
-        )
+        for asset in release_set.assets:
+            _snapshot_asset(release_set.directory / asset.name, root / asset.name, asset)
+        yield ReleaseSet(release_set.context, release_set.assets, root)
 
 
 def _publish_verified(client: GitHubClient, release_set: ReleaseSet,
-                      subjects: tuple[AttestationSubject, ...], body: bytes) -> PublishResult:
+                      body: bytes) -> PublishResult:
     existing = client.get_release(release_set.context.tag)
     if existing is not None:
         if existing.draft:
             raise ReleaseConflict("RELEASE_CONFLICT")
         _verify_remote(client, release_set, body, existing, draft=False, conflict=True)
-        client.verify_attestations(
-            subjects, source_digest=release_set.context.commit,
-            signer_workflow=CANONICAL_SIGNER_WORKFLOW,
-        )
         return PublishResult(existing.id, True, True)
-
-    client.verify_attestations(
-        subjects, source_digest=release_set.context.commit,
-        signer_workflow=CANONICAL_SIGNER_WORKFLOW,
-    )
 
     created: RemoteRelease | None = None
     try:
@@ -219,5 +198,5 @@ def publish_release(client: GitHubClient, release_set: ReleaseSet, body: bytes) 
     if not isinstance(body, bytes):
         raise PublishError("PUBLISH_BODY")
     release_set = _verified_local(release_set)
-    with _snapshot_release(release_set) as (snapshot, subjects):
-        return _publish_verified(client, snapshot, subjects, body)
+    with _snapshot_release(release_set) as snapshot:
+        return _publish_verified(client, snapshot, body)

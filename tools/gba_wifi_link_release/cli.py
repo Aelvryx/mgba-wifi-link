@@ -253,7 +253,6 @@ def _parser() -> argparse.ArgumentParser:
     admit.add_argument("--repo", required=True)
     admit.add_argument("--tag", required=True)
     admit.add_argument("--evidence", required=True)
-    admit.add_argument("--allow-existing-release", action="store_true")
     for name in ("build", "verify", "render-body"):
         command = commands.add_parser(name)
         command.add_argument("--fixture", choices=("synthetic",))
@@ -291,9 +290,10 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         if args.command == "admit":
-            context = admit_release(Path(args.repo), args.tag,
-                                    json.loads(Path(args.evidence).read_text(encoding="utf-8")),
-                                    allow_existing_release=args.allow_existing_release)
+            context = admit_release(
+                Path(args.repo), args.tag,
+                json.loads(Path(args.evidence).read_text(encoding="utf-8")),
+            )
             sys.stdout.write(json.dumps(_context_dict(context), sort_keys=True,
                                         separators=(",", ":")) + "\n")
         elif args.command == "build":

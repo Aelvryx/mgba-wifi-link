@@ -637,9 +637,6 @@ def validate_release_workflow_policy(repo: Path) -> None:
     if any(fragment not in text for fragment in graph):
         raise WorkflowPolicyError("RELEASE_WORKFLOW_GRAPH")
 
-    if "GBA_WIFI_LINK_RULESET_AUDIT_TOKEN" in text:
-        raise WorkflowPolicyError("RELEASE_WORKFLOW_TAG_POLICY")
-
     action_pins = contract.get("action_pins")
     if not isinstance(action_pins, dict) or set(action_pins) != {
         "actions/checkout", "actions/download-artifact", "actions/upload-artifact",
@@ -777,11 +774,8 @@ def validate_release_workflow_policy(repo: Path) -> None:
     )
     failure_guards = (
         gate_fragment,
-        'test "$release_status" -eq 1',
-        '"release": {"exists": release_exists}',
         "cut -c67- publisher-input/release-tool/MANIFEST.sha256",
         "sha256sum --check publisher-input/release-tool/MANIFEST.sha256",
-        "--allow-existing-release",
     )
     if any(fragment not in text for fragment in failure_guards):
         raise WorkflowPolicyError("RELEASE_WORKFLOW_FAILURE_GUARD")

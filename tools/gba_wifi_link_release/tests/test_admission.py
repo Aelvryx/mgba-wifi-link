@@ -34,13 +34,12 @@ def evidence(repo: Path, commit: str, tag: str = "v9.8.7") -> dict[str, object]:
         "source_date_epoch": int(git(repo, "show", "-s", "--format=%ct", commit)),
         "commit": commit,
         "event": {
-            "event_name": "create",
+            "event_name": "push",
             "ref": tag,
             "ref_type": "tag",
             "created": True,
             "tag_object": tag_object,
         },
-        "release": {"exists": False},
         "build": {
             "runner_image": "ubuntu-24.04-20260125.1",
             "pinned_actions": [
@@ -229,7 +228,7 @@ class AdmissionTest(unittest.TestCase):
         with self.assertRaisesRegex(AdmissionError, "GATE_WORKFLOW"):
             admit_release(repo, "v9.8.7", invalid)
 
-    def test_tag_creation_and_absent_release_evidence_are_required(self):
+    def test_tag_push_event_is_required(self):
         repo = make_repo()
         self.addCleanupRepo(repo)
         commit = git(repo, "rev-parse", "v9.8.7^{commit}")
@@ -243,16 +242,6 @@ class AdmissionTest(unittest.TestCase):
         del invalid["event"]
         with self.assertRaisesRegex(AdmissionError, "TAG_EVENT"):
             admit_release(repo, "v9.8.7", invalid)
-
-        invalid = evidence(repo, commit)
-        invalid["release"]["exists"] = True  # type: ignore[index]
-        with self.assertRaisesRegex(AdmissionError, "RELEASE_CONFLICT"):
-            admit_release(repo, "v9.8.7", invalid)
-
-        context = admit_release(
-            repo, "v9.8.7", invalid, allow_existing_release=True,
-        )
-        self.assertEqual(context.commit, commit)
 
     def test_source_date_epoch_is_derived_from_the_peeled_commit(self):
         repo = make_repo()

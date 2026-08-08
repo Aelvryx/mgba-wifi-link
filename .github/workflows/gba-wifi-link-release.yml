@@ -83,18 +83,7 @@ jobs:
           set -euo pipefail
           git fetch --no-tags origin master:refs/remotes/origin/master
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" > current-jobs.json
-          set +e
-          gh api --include "repos/${GITHUB_REPOSITORY}/releases/tags/${EXPECTED_TAG}" > release-response.txt 2>&1
-          release_status=$?
-          set -e
-          if test "$release_status" -eq 0; then
-            release_exists=true
-          else
-            grep --extended-regexp '^HTTP/[^ ]+ 404 ' release-response.txt
-            test "$release_status" -eq 1
-            release_exists=false
-          fi
-          RELEASE_EXISTS="$release_exists" python3 - <<'PY'
+          python3 - <<'PY'
           import json
           import os
           from pathlib import Path
@@ -138,7 +127,6 @@ jobs:
               ("git", "show", "-s", "--format=%ct", commit),
               check=True, stdout=subprocess.PIPE, text=True,
           ).stdout.strip())
-          release_exists = os.environ["RELEASE_EXISTS"] == "true"
           evidence = {
               "build": {
                   "configuration": {"android_abi": "arm64-v8a", "android_api": "21"},
@@ -151,13 +139,12 @@ jobs:
               "commit": commit,
               "event": {
                   "created": True,
-                  "event_name": "create",
+                  "event_name": "push",
                   "ref": os.environ["EXPECTED_TAG"],
                   "ref_type": "tag",
                   "tag_object": os.environ["EXPECTED_TAG_OBJECT"],
               },
               "gates": gates,
-              "release": {"exists": release_exists},
               "repository": os.environ["GITHUB_REPOSITORY"],
               "source_date_epoch": source_date_epoch,
           }
@@ -175,7 +162,6 @@ jobs:
           mkdir admitted
           python3 tools/gba-wifi-link-release.py admit \
             --repo . --tag "$EXPECTED_TAG" --evidence release-evidence.json \
-            --allow-existing-release \
             > admitted/release-context.json
 
       - name: Upload canonical admitted context

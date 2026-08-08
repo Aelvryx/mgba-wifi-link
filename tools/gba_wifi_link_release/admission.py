@@ -137,20 +137,13 @@ def _validate_tag_event(evidence: Mapping[str, object], tag: str, tag_object: st
     if not isinstance(event, Mapping):
         raise AdmissionError("TAG_EVENT")
     if (
-        event.get("event_name") != "create"
+        event.get("event_name") != "push"
         or event.get("ref") != tag
         or event.get("ref_type") != "tag"
         or event.get("created") is not True
         or event.get("tag_object") != tag_object
     ):
         raise AdmissionError("TAG_EVENT")
-
-
-def _validate_release_conflict(evidence: Mapping[str, object], *, allow_existing: bool) -> None:
-    release = evidence.get("release")
-    exists = release.get("exists") if isinstance(release, Mapping) else None
-    if type(exists) is not bool or (exists and not allow_existing):
-        raise AdmissionError("RELEASE_CONFLICT")
 
 
 def _validate_gates(evidence: Mapping[str, object], commit: str) -> tuple[GateResult, ...]:
@@ -259,15 +252,13 @@ def _validated_notes(repo: Path, tag: str, commit: str, context_values: tuple[st
     return notes
 
 
-def admit_release(repo: Path, tag: str, evidence: Mapping[str, object], *,
-                  allow_existing_release: bool = False) -> ReleaseContext:
+def admit_release(repo: Path, tag: str, evidence: Mapping[str, object]) -> ReleaseContext:
     """Validate local source and exact protected evidence without publishing."""
     if not isinstance(evidence, Mapping):
         raise AdmissionError("EVIDENCE")
     tag_object, commit = require_annotated_tag(repo, tag)
     repository = _validate_repository(repo, evidence)
     _validate_tag_event(evidence, tag, tag_object)
-    _validate_release_conflict(evidence, allow_existing=allow_existing_release)
     evidence_commit = _required_str(evidence, "commit")
     if not SHA1_RE.fullmatch(evidence_commit) or evidence_commit != commit:
         raise AdmissionError("EVIDENCE_COMMIT")

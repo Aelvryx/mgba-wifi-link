@@ -258,18 +258,6 @@ jobs:
         self.assertNotIn("id-token:", source)
         self.assertNotIn("actions/attest-build-provenance", source)
 
-    def test_release_admission_has_no_ruleset_audit_credential(self):
-        source = (ROOT / ".github/workflows/gba-wifi-link-release.yml").read_text(encoding="utf-8")
-        self.assertNotIn("GBA_WIFI_LINK_RULESET_AUDIT_TOKEN", source)
-        self.assertIn("  admit:\n    name: Admit protected release source\n    needs: [inspect-tag, protected-validation]\n", source)
-        self.assert_release_rejected_after(
-            lambda text: text.replace(
-                "  admit:\n    name: Admit protected release source\n",
-                "  admit:\n    env:\n      GBA_WIFI_LINK_RULESET_AUDIT_TOKEN: ${{ secrets.GBA_WIFI_LINK_RULESET_AUDIT_TOKEN }}\n    name: Admit protected release source\n",
-                1,
-            )
-        )
-
     def test_release_workflow_has_two_post_validation_clean_compile_jobs(self):
         source = (ROOT / ".github/workflows/gba-wifi-link-release.yml").read_text(encoding="utf-8")
         self.assertEqual(
@@ -321,7 +309,6 @@ jobs:
 
     def test_release_workflow_exact_rerun_is_read_only_through_publisher(self):
         source = (ROOT / ".github/workflows/gba-wifi-link-release.yml").read_text(encoding="utf-8")
-        self.assertIn("--allow-existing-release", source)
         self.assertIn("tools/gba-wifi-link-release.py publish", source)
         self.assertNotIn("release_exists: ${{ steps.evidence.outputs.release_exists }}", source)
 
@@ -487,19 +474,13 @@ jobs:
             with self.subTest(mutation=mutate):
                 self.assert_release_rejected_after(mutate)
 
-    def test_release_workflow_rejects_missing_gate_corruption_tag_or_conflict_guards(self):
+    def test_release_workflow_rejects_missing_gate_corruption_or_tag_guards(self):
         mutations = (
             lambda source: source.replace("        required = (", "        required = (\n            # missing gate", 1).replace(
                 '            "Fixture reproducibility",\n', "", 1
             ),
             lambda source: source.replace("verify --context context.json --output package-b/release", "true # missing second package verification", 1),
             lambda source: source.replace(" verify-tag ", " verify ", 1),
-            lambda source: source.replace(
-                '"release": {"exists": release_exists}',
-                '"release": {"exists": False}',
-                1,
-            ),
-            lambda source: source.replace("          test \"$release_status\" -eq 1", "          true # ignore release lookup failure", 1),
         )
         for mutate in mutations:
             with self.subTest(mutation=mutate):

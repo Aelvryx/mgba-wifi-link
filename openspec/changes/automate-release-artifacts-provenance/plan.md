@@ -67,7 +67,7 @@ Android NDK, existing mGBA test and boundary tooling.
 - [x] Run mutation tests for missing gates, mismatched source/build/package,
   corrupted handoff, moved tag, conflicting release, and manual-gate introduction.
 - [x] Run workflow-policy and full release-tool suites.
-- [ ] Commit the trusted-tag workflow.
+- [x] Commit the trusted-tag workflow.
 
 ## Task 5: Align current documentation and project tracking
 
@@ -79,7 +79,7 @@ Android NDK, existing mGBA test and boundary tooling.
 - [x] Keep README/ROADMAP/SUPPORT/issue forms neutral toward feedback and avoid a
   support promise.
 - [x] Update boundary-policy expectations and negative documentation tests.
-- [ ] After the implementation is locally green, update issue #21/milestone once.
+- [x] After the implementation is locally green, update issue #21/milestone once.
 - [ ] Commit documentation and tracking changes.
 
 ## Task 6: Run complete local verification

@@ -97,7 +97,7 @@
   rehearsal-repository, and signed-attestation language from current guidance.
 - [x] 7.3 Preserve neutral feedback language, passive issue forms, privacy
   guidance, upstream independence, and the maintainable-alpha roadmap direction.
-- [ ] 7.4 Update issue #21 and its milestone to describe the final trusted-tag
+- [x] 7.4 Update issue #21 and its milestone to describe the final trusted-tag
   automation after the implementation is green.
 
 ## 8. Verify and land

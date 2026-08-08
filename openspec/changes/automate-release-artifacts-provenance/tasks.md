@@ -48,8 +48,9 @@
   commercial evidence, tokens, and secrets.
 - [x] 4.2 Validate safe regular files, paths, modes, exclusive membership, and
   bounded category-only diagnostics.
-- [x] 4.3 Add contract-owned public-asset, JSON, ZIP member, aggregate, and
-  decompression limits with streaming download ceilings and partial cleanup.
+- [x] 4.3 Add bounded duplicate-safe GitHub JSON parsing plus contract-owned
+  public-asset, ZIP member, aggregate, and decompression limits with streaming
+  download ceilings and partial cleanup.
 - [x] 4.4 Extend the permanent product-boundary audit for release tooling without
   changing runtime product identities.
 
@@ -107,15 +108,17 @@
 - [x] 8.2 Build the synthetic release twice in clean directories and compare every
   byte; verify both archive and standalone scopes.
 - [x] 8.3 Run Python/shell/YAML/JSON syntax checks and strict OpenSpec validation.
-- [ ] 8.4 Run focused normal, ASan/UBSan, TSan, complete suite, fixture/analyzer/
+- [x] 8.4 Run focused normal, ASan/UBSan, TSan, complete suite, fixture/analyzer/
   helper checks, and Android ARM64 build on the exact draft-PR head.
 - [x] 8.5 Confirm no GBA runtime, protocol, input, RTC, persistence, scheduling,
   audio, video, or teardown behavior changed; no physical replay is required.
 - [x] 8.6 Perform one inline self-review against the approved trusted-maintainer
   threat model; findings outside that model require user/spec approval.
-- [ ] 8.7 Produce `verify.md`, write the retrospective including this scope
-  correction, sync/archive the specs, and push the final commits to PR #31.
-- [ ] 8.8 Mark PR #31 ready and merge only after the exact final head is green.
+
+After these implementation tasks are complete, the schema lifecycle produces
+`verify.md` and the retrospective, syncs/archives the specs, pushes the final
+artifact commit to PR #31, requires the exact final head to be green, and only
+then marks the PR ready and merges it.
 
 No new production tag or release is created by this change. The first future
 approved tag is the first real use of the automation.

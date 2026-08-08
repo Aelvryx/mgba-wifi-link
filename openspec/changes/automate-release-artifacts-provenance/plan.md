@@ -104,12 +104,12 @@ Android NDK, existing mGBA test and boundary tooling.
 
 ## Task 7: Run protected validation on PR #31
 
-- [ ] Push the simplified commits to the existing draft PR #31.
-- [ ] Require all six protected checks on the exact head: focused normal,
+- [x] Push the simplified commits to the existing draft PR #31.
+- [x] Require all six protected checks on the exact head: focused normal,
   ASan/UBSan, TSan, complete suite, fixture/tooling, and Android ARM64 build.
-- [ ] If a check fails, inspect its exact log and fix only a demonstrated defect;
+- [x] If a check fails, inspect its exact log and fix only a demonstrated defect;
   do not add requirements outside this specification.
-- [ ] Perform one inline diff/self-review covering tag admission, dual builds,
+- [x] Perform one inline diff/self-review covering tag admission, dual builds,
   deterministic package, privacy, transaction/rerun, workflow permissions, and
   no-runtime-change proof.
 

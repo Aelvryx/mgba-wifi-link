@@ -104,9 +104,6 @@ class ReleaseContract:
     archive_compressed_aggregate_max_bytes: int
     archive_uncompressed_aggregate_max_bytes: int
     archive_max_compression_ratio: int
-    json_max_bytes: int
-    json_max_depth: int
-    json_max_nodes: int
     file_mode: str
     license_sha256: str
     zip_compression: str
@@ -129,7 +126,6 @@ def load_contract(path: Path) -> ReleaseContract:
             "archive_central_directory_max_bytes",
             "archive_compressed_aggregate_max_bytes", "archive_max_compression_ratio",
             "archive_member_max_bytes", "archive_uncompressed_aggregate_max_bytes",
-            "json_max_bytes", "json_max_depth", "json_max_nodes",
             "public_aggregate_max_bytes", "public_asset_max_bytes",
         }
         or not all(type(value) is int and value > 0 for key, value in resource_limits.items()
@@ -148,7 +144,6 @@ def load_contract(path: Path) -> ReleaseContract:
         "public_aggregate_max_bytes", "archive_central_directory_max_bytes",
         "archive_compressed_aggregate_max_bytes",
         "archive_uncompressed_aggregate_max_bytes", "archive_max_compression_ratio",
-        "json_max_bytes", "json_max_depth", "json_max_nodes",
     )
     if any(type(resource_limits[name]) is not int or resource_limits[name] <= 0
            for name in scalar_limits):
@@ -170,9 +165,6 @@ def load_contract(path: Path) -> ReleaseContract:
         archive_compressed_aggregate_max_bytes=resource_limits["archive_compressed_aggregate_max_bytes"],
         archive_uncompressed_aggregate_max_bytes=resource_limits["archive_uncompressed_aggregate_max_bytes"],
         archive_max_compression_ratio=resource_limits["archive_max_compression_ratio"],
-        json_max_bytes=resource_limits["json_max_bytes"],
-        json_max_depth=resource_limits["json_max_depth"],
-        json_max_nodes=resource_limits["json_max_nodes"],
         file_mode=data["file_mode"],
         license_sha256=data["license_sha256"],
         zip_compression=data["zip"]["compression"],

@@ -45,7 +45,7 @@ class RenderTest(unittest.TestCase):
         self.assertLess(body.index(b"Annotated tag object:"), body.index(b"Peeled commit:"))
         self.assertIn(b"## Workflow evidence\n", body)
         self.assertIn(
-            b"- `Complete normal mGBA suite`: workflow `GBA Wi-Fi Link`, run `100`, job `200`, conclusion `success`\n",
+            b"- `Complete normal mGBA suite`: workflow `GBA Wi-Fi Link`, conclusion `success`\n",
             body,
         )
         self.assertIn(b"## Release assets\n", body)

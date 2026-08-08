@@ -151,15 +151,16 @@ Public releases MUST NOT be automatically deleted or overwritten.
 
 ### Requirement: Release reruns are read-only and immutable
 
-Before rebuilding, the workflow SHALL inspect any existing release for the tag.
-An exact public release MUST be validated from its retained first-run assets,
-manifests, provenance, body, target, and classification and returned as read-only
-success. Any draft or conflict MUST fail. Published assets and tags SHALL NOT be
-replaced in place; corrections use a new version and tag.
+Before creating or replacing public state, the workflow SHALL inspect any
+existing release for the tag. An exact public release MUST be validated from its
+retained first-run assets, manifests, provenance, body, target, and
+classification and returned as read-only success. Any draft or conflict MUST
+fail. Published assets and tags SHALL NOT be replaced in place; corrections use
+a new version and tag.
 
 #### Scenario: Exact release is rerun
 - **WHEN** the tag already has a complete coherent public release
-- **THEN** the workflow exits successfully before builds or mutation despite new
+- **THEN** the publisher exits successfully without public mutation despite new
   workflow/job IDs
 
 #### Scenario: Existing release conflicts

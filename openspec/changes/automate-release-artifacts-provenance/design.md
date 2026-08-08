@@ -102,13 +102,15 @@ remain in scope.
   never replaced or deleted automatically.
 - **Reason:** GitHub has no atomic multi-asset publication operation.
 
-### D8: Reruns validate retained evidence before rebuilding
+### D8: Reruns validate retained evidence at the publication boundary
 
 - **Choice:** If the tag already has a public release, download and verify its
   retained first-run assets, manifests, provenance, body, tag, target, and
-  classification. Exact state is read-only success; drafts or conflicts fail.
-- **Reason:** GitHub reruns receive new run/job IDs, so regenerating provenance
-  cannot be byte-identical to the original publication.
+  classification before any new public mutation. Exact state is read-only
+  success; drafts or conflicts fail.
+- **Reason:** Retrying an exact tag must never replace a coherent publication;
+  volatile workflow run/job IDs are deliberately excluded from public bytes so
+  an equivalent retry remains reproducible.
 
 ### D9: Validation remains proportionate
 

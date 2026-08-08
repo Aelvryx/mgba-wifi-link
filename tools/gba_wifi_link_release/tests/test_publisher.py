@@ -98,9 +98,9 @@ class FakeClient:
 
 
 class PublisherTest(unittest.TestCase):
-    def make_release(self, root: Path):
+    def make_release(self, root: Path, context=None):
         maker = package_tests.PackageTest()
-        context = package_tests.context()
+        context = context or package_tests.context()
         output = root / "release"
         build_release(context, maker.make_inputs(root), output)
         return verify_release(output, context)
@@ -246,9 +246,31 @@ class PublisherTest(unittest.TestCase):
 
     def test_exact_public_rerun_is_read_only(self):
         with tempfile.TemporaryDirectory() as directory:
-            release_set = self.make_release(Path(directory))
+            root = Path(directory)
+            first_context = package_tests.context()
+            assert first_context.build is not None
+            second_context = replace(
+                first_context,
+                gates=tuple(
+                    replace(gate, run_id=gate.run_id + 10_000,
+                            job_id=gate.job_id + 20_000)
+                    for gate in first_context.gates
+                ),
+                build=replace(
+                    first_context.build,
+                    actual_builds=tuple(
+                        replace(build, run_id=build.run_id + 30_000,
+                                job_id=build.job_id + 40_000)
+                        for build in first_context.build.actual_builds
+                    ),
+                ),
+            )
+            (root / "first").mkdir()
+            (root / "second").mkdir()
+            first_release = self.make_release(root / "first", first_context)
+            release_set = self.make_release(root / "second", second_context)
             client = FakeClient()
-            client.release, client.files = self.exact_remote(release_set, BODY)
+            client.release, client.files = self.exact_remote(first_release, BODY)
 
             result = publish_release(client, release_set, BODY)
 

@@ -99,7 +99,7 @@ class ContractTest(unittest.TestCase):
         self.assertEqual(len(contract.standalone_sha256_assets), 6)
         self.assertEqual(contract.zip_member_order, "lexicographic")
 
-    def test_contract_owns_conservative_public_archive_and_json_resource_budgets(self):
+    def test_contract_owns_conservative_public_and_archive_resource_budgets(self):
         contract = load_contract(CONTRACT)
         self.assertEqual(dict(contract.public_asset_max_bytes), {
             "INSTALL-AND-USAGE.md": 1_048_576,
@@ -115,10 +115,6 @@ class ContractTest(unittest.TestCase):
         self.assertEqual(contract.archive_compressed_aggregate_max_bytes, 71_303_168)
         self.assertEqual(contract.archive_central_directory_max_bytes, 65_536)
         self.assertEqual(contract.archive_max_compression_ratio, 100)
-        self.assertEqual(contract.json_max_bytes, 1_048_576)
-        self.assertEqual(contract.json_max_depth, 20)
-        self.assertEqual(contract.json_max_nodes, 4096)
-
     def test_history_preserves_the_public_archive_inventory(self):
         history = Path(__file__).resolve().parents[1] / "fixtures/v0.2.0-history.json"
         data = json.loads(history.read_text(encoding="utf-8"))

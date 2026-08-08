@@ -475,7 +475,7 @@ def _expected_package(action_pins: dict[str, str], artifact_name: str) -> str:
           cp release-body-a.md publisher-input/release-body.md
           cp "$notes" publisher-input/release-notes.md
           cp tools/gba-wifi-link-release.py publisher-input/release-tool/tools/gba-wifi-link-release.py
-          for module in __init__ admission cli github model packager privacy provenance publisher render text_policy verifier; do
+          for module in __init__ admission cli github model packager privacy provenance publisher render resource_limits text_policy verifier; do
             cp "tools/gba_wifi_link_release/${module}.py" \
               "publisher-input/release-tool/tools/gba_wifi_link_release/${module}.py"
           done
@@ -539,15 +539,12 @@ def _expected_package(action_pins: dict[str, str], artifact_name: str) -> str:
 def _expected_publisher(action_pins: dict[str, str], artifact_name: str) -> str:
     """Return the only privileged job shape admitted by the release policy."""
     download = action_pins["actions/download-artifact"]
-    attest = action_pins["actions/attest-build-provenance"]
     return f"""  publish:
-    name: Attest and automatically publish
+    name: Automatically publish
     needs: [admit, package]
     runs-on: ubuntu-24.04
     permissions:
-      attestations: write
       contents: write
-      id-token: write
     steps:
       - name: Download canonical publisher input
         uses: actions/download-artifact@{download} # v5
@@ -579,18 +576,6 @@ def _expected_publisher(action_pins: dict[str, str], artifact_name: str) -> str:
             --context publisher-input/release-context.json \\
             --repository "$GITHUB_REPOSITORY"
 
-      - name: Attest admitted core
-        if: ${{{{ needs.admit.outputs.release_exists != 'true' }}}}
-        uses: actions/attest-build-provenance@{attest} # v3
-        with:
-          subject-path: publisher-input/release/mgba_libretro_android.so
-
-      - name: Attest admitted archive
-        if: ${{{{ needs.admit.outputs.release_exists != 'true' }}}}
-        uses: actions/attest-build-provenance@{attest} # v3
-        with:
-          subject-path: publisher-input/release/mgba-gba-wifi-link-*-android-arm64.zip
-
       - name: Publish transaction and final public verification
         env:
           GH_TOKEN: ${{{{ github.token }}}}
@@ -607,20 +592,6 @@ def _expected_publisher(action_pins: dict[str, str], artifact_name: str) -> str:
 def validate_release_workflow_policy(repo: Path) -> None:
     """Reject release automation that weakens the reviewed fail-closed graph."""
     text, contract = _read_release_workflow(repo)
-    expected_source_fingerprint = contract.get("yaml_source_sha256")
-    source_fingerprint = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    if (
-        not isinstance(expected_source_fingerprint, str)
-        or not _SHA256.fullmatch(expected_source_fingerprint)
-        or expected_source_fingerprint != source_fingerprint
-    ):
-        raise WorkflowPolicyError("RELEASE_WORKFLOW_SOURCE")
-    tokens = lex_workflow_yaml(text)
-    expected_fingerprint = contract.get("yaml_lexical_sha256")
-    fingerprint = hashlib.sha256(("\n".join(tokens) + "\n").encode("utf-8")).hexdigest()
-    if expected_fingerprint != fingerprint:
-        raise WorkflowPolicyError("RELEASE_WORKFLOW_YAML")
-
     trigger = "on:\n  push:\n    tags:\n      - v*\n"
     if text.count(trigger) != 1 or "workflow_dispatch" in text:
         raise WorkflowPolicyError("RELEASE_WORKFLOW_TRIGGER")
@@ -637,9 +608,7 @@ def validate_release_workflow_policy(repo: Path) -> None:
     top_permissions = "permissions:\n  actions: read\n  contents: read\n\nconcurrency:"
     publisher_permissions = (
         "    permissions:\n"
-        "      attestations: write\n"
         "      contents: write\n"
-        "      id-token: write\n"
         "    steps:"
     )
     if (
@@ -663,7 +632,7 @@ def validate_release_workflow_policy(repo: Path) -> None:
         "  independent-build:\n    name: Build independent clean Android core\n    needs: [inspect-tag, admit]\n",
         "  compare-builds:\n    name: Compare independent Android builds\n    needs: [inspect-tag, admit, protected-build, independent-build]\n",
         "  package:\n    name: Build and verify deterministic release twice\n    needs: [inspect-tag, compare-builds]\n",
-        "  publish:\n    name: Attest and automatically publish\n    needs: [admit, package]\n",
+        "  publish:\n    name: Automatically publish\n    needs: [admit, package]\n",
     )
     if any(fragment not in text for fragment in graph):
         raise WorkflowPolicyError("RELEASE_WORKFLOW_GRAPH")
@@ -673,18 +642,16 @@ def validate_release_workflow_policy(repo: Path) -> None:
 
     action_pins = contract.get("action_pins")
     if not isinstance(action_pins, dict) or set(action_pins) != {
-        "actions/attest-build-provenance", "actions/checkout",
-        "actions/download-artifact", "actions/upload-artifact",
+        "actions/checkout", "actions/download-artifact", "actions/upload-artifact",
     }:
         raise WorkflowPolicyError("RELEASE_WORKFLOW_ACTION_PIN")
     expected_actions = {
         name: f"{name}@{digest}" for name, digest in action_pins.items()
         if isinstance(name, str) and isinstance(digest, str) and _SHA.fullmatch(digest)
     }
-    if len(expected_actions) != 4:
+    if len(expected_actions) != 3:
         raise WorkflowPolicyError("RELEASE_WORKFLOW_ACTION_PIN")
     if contract.get("action_versions") != {
-        "actions/attest-build-provenance": "v3",
         "actions/checkout": "v6",
         "actions/download-artifact": "v5",
         "actions/upload-artifact": "v4",
@@ -697,7 +664,6 @@ def validate_release_workflow_policy(repo: Path) -> None:
         or third_party.count(expected_actions["actions/checkout"]) != 5
         or third_party.count(expected_actions["actions/download-artifact"]) != 6
         or third_party.count(expected_actions["actions/upload-artifact"]) != 5
-        or third_party.count(expected_actions["actions/attest-build-provenance"]) != 2
     ):
         raise WorkflowPolicyError("RELEASE_WORKFLOW_ACTION_PIN")
 
@@ -816,7 +782,6 @@ def validate_release_workflow_policy(repo: Path) -> None:
         "cut -c67- publisher-input/release-tool/MANIFEST.sha256",
         "sha256sum --check publisher-input/release-tool/MANIFEST.sha256",
         "--allow-existing-release",
-        "release_exists: ${{ steps.evidence.outputs.release_exists }}",
     )
     if any(fragment not in text for fragment in failure_guards):
         raise WorkflowPolicyError("RELEASE_WORKFLOW_FAILURE_GUARD")
@@ -831,13 +796,9 @@ def validate_release_workflow_policy(repo: Path) -> None:
     publisher = text[publisher_start:]
     if publisher[1:] != _expected_publisher(action_pins, artifact_name):
         raise WorkflowPolicyError("RELEASE_WORKFLOW_PUBLISHER_ALLOWLIST")
-    if publisher.count("if: ${{ needs.admit.outputs.release_exists != 'true' }}") != 2:
-        raise WorkflowPolicyError("RELEASE_WORKFLOW_RERUN")
     publisher_uses = _USES.findall(publisher)
     if publisher_uses != [
         expected_actions["actions/download-artifact"],
-        expected_actions["actions/attest-build-provenance"],
-        expected_actions["actions/attest-build-provenance"],
     ]:
         raise WorkflowPolicyError("RELEASE_WORKFLOW_PUBLISHER")
     forbidden = (
@@ -850,8 +811,6 @@ def validate_release_workflow_policy(repo: Path) -> None:
     order = [
         publisher.find("- name: Verify canonical release before mutation"),
         publisher.find("- name: Recheck immutable remote tag"),
-        publisher.find("- name: Attest admitted core"),
-        publisher.find("- name: Attest admitted archive"),
         publisher.find("- name: Publish transaction and final public verification"),
     ]
     if any(index < 0 for index in order) or order != sorted(order):

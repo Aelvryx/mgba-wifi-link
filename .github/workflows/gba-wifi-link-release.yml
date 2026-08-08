@@ -65,8 +65,6 @@ jobs:
   admit:
     name: Admit protected release source
     needs: [inspect-tag, protected-validation]
-    outputs:
-      release_exists: ${{ steps.evidence.outputs.release_exists }}
     runs-on: ubuntu-24.04
     steps:
       - name: Check out admitted source with complete history
@@ -76,7 +74,6 @@ jobs:
           ref: ${{ needs.inspect-tag.outputs.commit }}
 
       - name: Collect current protected evidence
-        id: evidence
         env:
           EXPECTED_COMMIT: ${{ needs.inspect-tag.outputs.commit }}
           EXPECTED_TAG: ${{ needs.inspect-tag.outputs.tag }}
@@ -97,7 +94,6 @@ jobs:
             test "$release_status" -eq 1
             release_exists=false
           fi
-          printf 'release_exists=%s\n' "$release_exists" >> "$GITHUB_OUTPUT"
           RELEASE_EXISTS="$release_exists" python3 - <<'PY'
           import json
           import os
@@ -678,7 +674,7 @@ jobs:
           cp release-body-a.md publisher-input/release-body.md
           cp "$notes" publisher-input/release-notes.md
           cp tools/gba-wifi-link-release.py publisher-input/release-tool/tools/gba-wifi-link-release.py
-          for module in __init__ admission cli github model packager privacy provenance publisher render text_policy verifier; do
+          for module in __init__ admission cli github model packager privacy provenance publisher render resource_limits text_policy verifier; do
             cp "tools/gba_wifi_link_release/${module}.py" \
               "publisher-input/release-tool/tools/gba_wifi_link_release/${module}.py"
           done
@@ -732,13 +728,11 @@ jobs:
           retention-days: 7
 
   publish:
-    name: Attest and automatically publish
+    name: Automatically publish
     needs: [admit, package]
     runs-on: ubuntu-24.04
     permissions:
-      attestations: write
       contents: write
-      id-token: write
     steps:
       - name: Download canonical publisher input
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
@@ -769,18 +763,6 @@ jobs:
           python3 publisher-input/release-tool/tools/gba-wifi-link-release.py verify-tag \
             --context publisher-input/release-context.json \
             --repository "$GITHUB_REPOSITORY"
-
-      - name: Attest admitted core
-        if: ${{ needs.admit.outputs.release_exists != 'true' }}
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
-        with:
-          subject-path: publisher-input/release/mgba_libretro_android.so
-
-      - name: Attest admitted archive
-        if: ${{ needs.admit.outputs.release_exists != 'true' }}
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
-        with:
-          subject-path: publisher-input/release/mgba-gba-wifi-link-*-android-arm64.zip
 
       - name: Publish transaction and final public verification
         env:

@@ -99,9 +99,7 @@ def _gates(gates: tuple[GateResult, ...]) -> list[dict[str, object]]:
             raise ProvenanceError("PROVENANCE_GATE")
         result.append({
             "conclusion": gate.conclusion,
-            "job_id": gate.job_id,
             "name": gate.name,
-            "run_id": gate.run_id,
             "workflow": gate.workflow,
         })
     return result
@@ -162,13 +160,11 @@ def _actual_build(identity: ActualBuildEvidence, context: ReleaseContext,
         "configuration": dict(identity.configuration),
         "core": {"name": identity.core.name, "sha256": identity.core.sha256,
                  "size": identity.core.size},
-        "job_id": identity.job_id,
         "ndk_revision": identity.ndk_revision,
         "ndk_source_properties_sha256": identity.ndk_source_properties_sha256,
         "ninja_version": identity.ninja_version,
         "pinned_actions": list(identity.pinned_actions),
         "role": identity.role,
-        "run_id": identity.run_id,
         "runner_image_os": identity.runner_image_os,
         "runner_image_version": identity.runner_image_version,
         "source_commit": identity.source_commit,

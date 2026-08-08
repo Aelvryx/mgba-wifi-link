@@ -143,8 +143,8 @@ def _validate_release_provenance(path: Path, root: Path, expected_names: tuple[s
     actual = build["actual_builds"]
     actual_fields = {
         "cmake_version", "compiler_sha256", "compiler_version", "configuration",
-        "core", "job_id", "ndk_revision", "ndk_source_properties_sha256",
-        "ninja_version", "pinned_actions", "role", "run_id", "runner_image_os",
+        "core", "ndk_revision", "ndk_source_properties_sha256",
+        "ninja_version", "pinned_actions", "role", "runner_image_os",
         "runner_image_version", "source_commit", "source_date_epoch",
     }
     if (
@@ -165,9 +165,7 @@ def _validate_release_provenance(path: Path, root: Path, expected_names: tuple[s
         ] if isinstance(actions, list) else []
         core = item["core"]
         if (
-            type(item["run_id"]) is not int or item["run_id"] <= 0
-            or type(item["job_id"]) is not int or item["job_id"] <= 0
-            or any(not isinstance(item[field], str) or not item[field]
+            any(not isinstance(item[field], str) or not item[field]
                    or "\n" in item[field] or "\r" in item[field] for field in (
                        "runner_image_os", "runner_image_version", "ndk_revision",
                        "compiler_version", "cmake_version", "ninja_version",
@@ -209,8 +207,6 @@ def _validate_release_provenance(path: Path, root: Path, expected_names: tuple[s
     )
     if (
         any(actual[0][field] != actual[1][field] for field in reproducibility_fields)
-        or actual[0]["run_id"] != actual[1]["run_id"]
-        or actual[0]["job_id"] == actual[1]["job_id"]
     ):
         raise PrivacyError("PRIVACY_FIELD")
 

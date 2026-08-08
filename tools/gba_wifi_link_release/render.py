@@ -61,8 +61,7 @@ def render_release_body(context: ReleaseContext, notes: str) -> bytes:
         "## Workflow evidence\n\n",
     ]
     facts.extend(
-        f"- `{gate.name}`: workflow `{gate.workflow}`, run `{gate.run_id}`, job `{gate.job_id}`, "
-        f"conclusion `{gate.conclusion}`\n"
+        f"- `{gate.name}`: workflow `{gate.workflow}`, conclusion `{gate.conclusion}`\n"
         for gate in context.gates
     )
     facts.append("\n## Release assets\n\n")

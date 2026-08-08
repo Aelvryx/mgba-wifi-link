@@ -14,7 +14,6 @@ import tempfile
 from .admission import (CANONICAL_REPOSITORY, REQUIRED_GATES, REQUIRED_WORKFLOW,
                         admit_release, verify_remote_tag)
 from .github import GhClient
-from .existing_release import verify_existing_public_release
 from .model import (ActualBuildEvidence, BuildEvidence, GateResult, ReleaseAsset,
                     REQUIRED_BUILD_CONFIGURATION, ReleaseContext)
 from .packager import PackageInputs, build_release
@@ -274,12 +273,6 @@ def _parser() -> argparse.ArgumentParser:
     publish.add_argument("--repository", required=True)
     publish.add_argument("--gh-bin")
     publish.add_argument("--test-mode", action="store_true", help=argparse.SUPPRESS)
-    existing = commands.add_parser("verify-existing")
-    existing.add_argument("--context", required=True)
-    existing.add_argument("--notes", required=True)
-    existing.add_argument("--repository", required=True)
-    existing.add_argument("--gh-bin")
-    existing.add_argument("--test-mode", action="store_true", help=argparse.SUPPRESS)
     smoke = commands.add_parser("github-smoke")
     smoke.add_argument("--repository", required=True)
     smoke.add_argument("--tag", required=True)
@@ -357,25 +350,6 @@ def main(argv: list[str] | None = None) -> int:
             )
             sys.stdout.write(json.dumps({"release_id": result.release_id, "reused": result.reused},
                                         sort_keys=True, separators=(",", ":")) + "\n")
-        elif args.command == "verify-existing":
-            if args.repository != CANONICAL_REPOSITORY:
-                raise ValueError("CLI_REPOSITORY")
-            if args.gh_bin and not args.test_mode:
-                raise ValueError("CLI_GH_BIN")
-            context = _context_from_dict(
-                json.loads(Path(args.context).read_text(encoding="utf-8"))
-            )
-            if context.repository != args.repository:
-                raise ValueError("CLI_REPOSITORY")
-            result = verify_existing_public_release(
-                GhClient(args.repository, gh=args.gh_bin or "gh"),
-                context,
-                Path(args.notes).read_bytes(),
-            )
-            sys.stdout.write(json.dumps({
-                "release_id": result.release_id,
-                "status": result.status.value,
-            }, sort_keys=True, separators=(",", ":")) + "\n")
         return 0
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         print(str(error) if str(error) else "CLI_ERROR", file=sys.stderr)

@@ -1,12 +1,11 @@
 """Contract-owned bounds for remote bytes, JSON, and ZIP expansion."""
 
-import json
 import os
 from pathlib import Path
 import re
 import stat
 import struct
-from typing import Iterable, Mapping
+from typing import Iterable
 import zipfile
 
 from .model import ReleaseContract, load_contract
@@ -163,89 +162,3 @@ def preflight_zip_infos(
             raise ResourceLimitError("RESOURCE_ARCHIVE_COMPRESSED")
         if uncompressed_total > selected.archive_uncompressed_aggregate_max_bytes:
             raise ResourceLimitError("RESOURCE_ARCHIVE_UNCOMPRESSED")
-
-
-def _preflight_json_depth(data: bytes, maximum: int) -> None:
-    depth = 0
-    quoted = False
-    escaped = False
-    for byte in data:
-        if quoted:
-            if escaped:
-                escaped = False
-            elif byte == 0x5C:
-                escaped = True
-            elif byte == 0x22:
-                quoted = False
-        elif byte == 0x22:
-            quoted = True
-        elif byte in (0x5B, 0x7B):
-            depth += 1
-            if depth > maximum:
-                raise ResourceLimitError("RESOURCE_JSON_DEPTH")
-        elif byte in (0x5D, 0x7D):
-            depth -= 1
-            if depth < 0:
-                raise ResourceLimitError("RESOURCE_JSON")
-    if quoted or depth != 0:
-        raise ResourceLimitError("RESOURCE_JSON")
-
-
-def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    value: dict[str, object] = {}
-    for key, item in pairs:
-        if key in value:
-            raise ResourceLimitError("RESOURCE_JSON_DUPLICATE")
-        value[key] = item
-    return value
-
-
-def _check_json_nodes(value: object, maximum_depth: int,
-                      maximum_nodes: int) -> None:
-    nodes = 0
-    pending = [(value, 0)]
-    while pending:
-        current, depth = pending.pop()
-        nodes += 1
-        if nodes > maximum_nodes:
-            raise ResourceLimitError("RESOURCE_JSON_NODES")
-        if depth > maximum_depth:
-            raise ResourceLimitError("RESOURCE_JSON_DEPTH")
-        if isinstance(current, Mapping):
-            pending.extend((child, depth + 1) for child in current.values())
-        elif isinstance(current, list):
-            pending.extend((child, depth + 1) for child in current)
-
-
-def bounded_canonical_json(
-    data: bytes,
-    *,
-    required: set[str],
-    contract: ReleaseContract | None = None,
-) -> dict[str, object]:
-    selected = _contract(contract)
-    if not isinstance(data, bytes) or len(data) > selected.json_max_bytes:
-        raise ResourceLimitError("RESOURCE_JSON_SIZE")
-    _preflight_json_depth(data, selected.json_max_depth)
-    try:
-        value = json.loads(
-            data.decode("utf-8"), object_pairs_hook=_unique_object,
-            parse_constant=lambda _: (_ for _ in ()).throw(ValueError()),
-        )
-    except ResourceLimitError:
-        raise
-    except (UnicodeDecodeError, ValueError, json.JSONDecodeError, RecursionError) as error:
-        raise ResourceLimitError("RESOURCE_JSON") from error
-    _check_json_nodes(value, selected.json_max_depth, selected.json_max_nodes)
-    if not isinstance(value, dict) or set(value) != required:
-        raise ResourceLimitError("RESOURCE_JSON_FIELDS")
-    try:
-        canonical = (json.dumps(
-            value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
-            allow_nan=False,
-        ) + "\n").encode("utf-8")
-    except (TypeError, ValueError, UnicodeEncodeError) as error:
-        raise ResourceLimitError("RESOURCE_JSON") from error
-    if canonical != data:
-        raise ResourceLimitError("RESOURCE_JSON_CANONICAL")
-    return value

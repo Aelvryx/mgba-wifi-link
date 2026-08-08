@@ -61,38 +61,39 @@
   cleanup, conflict, and ambiguous-response path.
 - [x] 5.3 Use command-specific supported `gh api`/`gh release` invocations, bounded
   JSON, safe streaming downloads, and a parser-faithful fake plus live GET smoke.
-- [x] 5.4 Implement early existing-public-release verification from retained
-  first-run assets, manifests, provenance, body, target, and classification.
-- [x] 5.5 Test two attempts with different run/job IDs: exact retained state is
-  read-only success and every conflict performs zero mutation.
+- [x] 5.4 Verify an existing public release through the ordinary publisher from
+  its assets, manifests, provenance, body, target, and classification.
+- [x] 5.5 Exclude volatile run/job IDs from public bytes; test two attempts with
+  different IDs as byte-identical, read-only success while conflicts make zero
+  mutation.
 - [x] 5.6 Remove mandatory GitHub attestation creation/verification from the
   client, publisher, retained-release path, tests, and workflow.
-- [ ] 5.7 Re-run publisher and rerun tests against the simplified provenance-only
+- [x] 5.7 Re-run publisher and rerun tests against the simplified provenance-only
   transaction and preserve no-replace semantics.
 
 ## 6. Compose one trusted tag workflow
 
-- [ ] 6.1 Simplify `.github/workflows/gba-wifi-link-release.yml` to the trusted
+- [x] 6.1 Simplify `.github/workflows/gba-wifi-link-release.yml` to the trusted
   annotated-tag model with no manual gate and no separate controller.
-- [ ] 6.2 Keep the existing six protected exact-source gates and two independent
+- [x] 6.2 Keep the existing six protected exact-source gates and two independent
   Android builds; require matching bytes and embedded identities.
-- [ ] 6.3 Run deterministic packaging twice, compare complete output, seal one
+- [x] 6.3 Run deterministic packaging twice, compare complete output, seal one
   exact handoff, and verify it before publication.
-- [ ] 6.4 Give read-only jobs read permissions and only the final publisher
+- [x] 6.4 Give read-only jobs read permissions and only the final publisher
   `contents: write`; remove `id-token` and `attestations` permissions.
 - [x] 6.5 Remove the governance workflow, tracked tag ruleset, ruleset fixtures,
   audit credential/environment instructions, and tag-policy module/tests.
-- [ ] 6.6 Replace adversarial controller policy tests with concise checks for the
+- [x] 6.6 Replace adversarial controller policy tests with concise checks for the
   tag trigger, exact-source gates, dual builds, handoff, publisher isolation,
   automatic publication, and absence of manual dispatch/approval.
-- [ ] 6.7 Ensure exact existing public releases exit before protected builds and
-  drafts/conflicts fail without public mutation.
+- [x] 6.7 Ensure exact existing public releases are verified read-only by the
+  publisher and drafts/conflicts fail without public mutation.
 
 ## 7. Align guidance with the proportionate workflow
 
-- [ ] 7.1 Update release documentation: prepare notes, create/push one annotated
+- [x] 7.1 Update release documentation: prepare notes, create/push one annotated
   tag, and let automation finish; document failure/rerun/new-version correction.
-- [ ] 7.2 Remove protected-controller, hostile-tag, governance-secret, ruleset,
+- [x] 7.2 Remove protected-controller, hostile-tag, governance-secret, ruleset,
   rehearsal-repository, and signed-attestation language from current guidance.
 - [x] 7.3 Preserve neutral feedback language, passive issue forms, privacy
   guidance, upstream independence, and the maintainable-alpha roadmap direction.

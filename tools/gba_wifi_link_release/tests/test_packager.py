@@ -28,6 +28,7 @@ from tools.gba_wifi_link_release.packager import (
     build_release,
     zip_timestamp,
 )
+from tools.gba_wifi_link_release.render import render_release_body
 from tools.gba_wifi_link_release.verifier import VerificationError
 
 
@@ -117,6 +118,47 @@ class PackageTest(unittest.TestCase):
             source_template=source_template,
             release_notes=b"Reviewed synthetic release notes.\n",
         )
+
+    def test_public_release_is_stable_across_workflow_run_and_job_ids(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = context()
+            assert first.build is not None
+            second = replace(
+                first,
+                gates=tuple(
+                    replace(gate, run_id=gate.run_id + 10_000,
+                            job_id=gate.job_id + 20_000)
+                    for gate in first.gates
+                ),
+                build=replace(
+                    first.build,
+                    actual_builds=tuple(
+                        replace(build, run_id=build.run_id + 30_000,
+                                job_id=build.job_id + 40_000)
+                        for build in first.build.actual_builds
+                    ),
+                ),
+            )
+            (root / "first").mkdir()
+            (root / "second").mkdir()
+            first_output = build_release(
+                first, self.make_inputs(root / "first"), root / "first-release"
+            )
+            second_output = build_release(
+                second, self.make_inputs(root / "second"), root / "second-release"
+            )
+
+            self.assertEqual(first_output.assets, second_output.assets)
+            for asset in first_output.assets:
+                self.assertEqual(
+                    (root / "first-release" / asset.name).read_bytes(),
+                    (root / "second-release" / asset.name).read_bytes(),
+                )
+            notes = "Reviewed synthetic release notes.\n"
+            self.assertEqual(
+                render_release_body(first, notes), render_release_body(second, notes)
+            )
 
     def test_build_emits_full_ordered_public_set_and_exact_checksum_scopes(self):
         with tempfile.TemporaryDirectory() as directory:

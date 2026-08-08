@@ -61,9 +61,6 @@
       "mgba_libretro_android.so": 67108864
     },
     "archive_uncompressed_aggregate_max_bytes": 71303168,
-    "json_max_bytes": 1048576,
-    "json_max_depth": 20,
-    "json_max_nodes": 4096,
     "public_aggregate_max_bytes": 134217728,
     "public_asset_max_bytes": {
       "INSTALL-AND-USAGE.md": 1048576,
@@ -99,9 +96,7 @@
       "release-tool"
     ],
     "artifact_name": "gba-wifi-link-release-canonical",
-    "runner_image": "ubuntu-24.04",
-    "yaml_lexical_sha256": "ef8ef0f8e194bf72cef416e15f529590551a803a54c7aa922d015d1b4b0963e5",
-    "yaml_source_sha256": "ad07f41b8b92ceaadd776beabc0461966c0526e9ab0e34ba269c06edfff817a0"
+    "runner_image": "ubuntu-24.04"
   },
   "release_provenance_assets": [
     "mgba_libretro_android.so",

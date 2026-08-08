@@ -51,34 +51,34 @@ Android NDK, existing mGBA test and boundary tooling.
 - [x] Preserve supported command-specific `gh api`/`gh release` syntax, bounded
   duplicate-safe JSON, streaming no-follow downloads, exact remote read-back,
   private-draft cleanup, ambiguous-response handling, and no public replacement.
-- [ ] Run focused publisher/rerun tests and the full release-tool suite.
+- [x] Run focused publisher/rerun tests and the full release-tool suite.
 - [x] Commit the publication simplification.
 
 ## Task 4: Reduce the workflow to one trusted tag path
 
-- [ ] First make workflow-policy tests express only the approved contract:
+- [x] First make workflow-policy tests express only the approved contract:
   canonical tag trigger; no dispatch/manual approval; exact tagged source;
   protected six-job validation; two independent matching Android builds;
   deterministic double package; sealed handoff; final automatic publisher.
-- [ ] Simplify `.github/workflows/gba-wifi-link-release.yml` accordingly.
-- [ ] Keep default/read-only permissions on non-publisher jobs and only
+- [x] Simplify `.github/workflows/gba-wifi-link-release.yml` accordingly.
+- [x] Keep default/read-only permissions on non-publisher jobs and only
   `contents: write` on the publisher. Remove `id-token`, `attestations`,
   controller correlation, governance environment, and ruleset API calls.
-- [ ] Run mutation tests for missing gates, mismatched source/build/package,
+- [x] Run mutation tests for missing gates, mismatched source/build/package,
   corrupted handoff, moved tag, conflicting release, and manual-gate introduction.
-- [ ] Run workflow-policy and full release-tool suites.
+- [x] Run workflow-policy and full release-tool suites.
 - [ ] Commit the trusted-tag workflow.
 
 ## Task 5: Align current documentation and project tracking
 
-- [ ] Update `docs/gba-wifi-link-release.md` to the complete maintainer action:
+- [x] Update `docs/gba-wifi-link-release.md` to the complete maintainer action:
   prepare exact notes, create an annotated tag on intended `master`, push it.
-- [ ] Document ordinary failures, exact read-only reruns, and correction by new
+- [x] Document ordinary failures, exact read-only reruns, and correction by new
   version/tag; do not describe hostile tags, controllers, audit secrets,
   disposable repositories, or attestations.
-- [ ] Keep README/ROADMAP/SUPPORT/issue forms neutral toward feedback and avoid a
+- [x] Keep README/ROADMAP/SUPPORT/issue forms neutral toward feedback and avoid a
   support promise.
-- [ ] Update boundary-policy expectations and negative documentation tests.
+- [x] Update boundary-policy expectations and negative documentation tests.
 - [ ] After the implementation is locally green, update issue #21/milestone once.
 - [ ] Commit documentation and tracking changes.
 

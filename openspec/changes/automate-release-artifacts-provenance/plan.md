@@ -1,903 +1,133 @@
-# Automated Release Artifacts and Provenance Implementation Plan
+# Trusted-tag Android release automation plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Executor:** Use `superpowers:executing-plans` inline. Do not dispatch
+> implementation or review agents. Use direct TDD for behavioral changes and
+> `verification-before-completion` before completion claims.
 
-**Goal:** Make one approved annotated version tag automatically validate, reproducibly build, package, attest, verify, and publish an immutable Android ARM64 GBA Wi-Fi Link prerelease.
+**Goal:** An authorized maintainer pushes one approved annotated version tag and
+the complete reproducible Android prerelease is validated, packaged, and
+published automatically.
 
-**Architecture:** A standard-library Python package owns tag admission, canonical metadata, deterministic packaging, existing-release verification, privacy, and a mockable GitHub publisher. A read-only tag intake wakes a separate `workflow_run` controller whose code and publication authority come from protected `master`; trusted controller tooling admits and builds the candidate source, while one controller-owned publisher consumes a sealed verified handoff, transactionally stages a private draft, and publishes it automatically.
+**Architecture:** One trusted tag workflow reuses protected CI, performs two
+matching clean Android builds, packages deterministic provenance/checksum assets,
+and publishes through a verified private-draft transaction. Repository maintainers
+and their deliberately pushed tags are trusted.
 
-**Tech Stack:** Python 3 standard library (`dataclasses`, `hashlib`, `json`, `pathlib`, `subprocess`, `zipfile`, `unittest`), Bash, Git, GitHub Actions, GitHub CLI/API, Android NDK `27.2.12479018`, CMake/Ninja, SHA-256, GitHub artifact attestations, OpenSpec.
-
-## Global Constraints
-
-- The release trigger accepts only a new annotated `vMAJOR.MINOR.PATCH` tag whose peeled commit is reachable from protected `master`; `v0.x` is always a prerelease.
-- Pushing the approved tag is the only maintainer release action. No manual dispatch, approval, asset upload, draft pause, or Publish click follows it.
-- The tag-side intake is untrusted and read-only. Only protected default-branch controller code may admit candidate source or receive release/attestation authority.
-- Identical tagged inputs must produce byte-identical core, rendered documents, manifests, checksums, and ZIP payloads; signed attestation envelopes remain outside reproducible/checksum scopes.
-- The public set has exactly seven project assets. The archive and standalone checksum scopes are those frozen in `specs/automated-release-provenance/spec.md`.
-- Validation/build/package jobs are read-only. Only the publisher gets the minimum `contents`, `attestations`, and `id-token` write permissions, and it cannot check out or build source.
-- Publication is fail-closed and immutable. Exact reruns validate retained first-run public evidence before rebuilding; conflicts fail; corrections use a new tag/version.
-- Release artifacts must not contain ROM/BIOS identities, saves, raw inputs, endpoint/frontend logs, paths, addresses, device identities, commercial evidence, or secrets.
-- The historical `packaging/gba-wifi-link/v0.2.0/` tree and live v0.2.0 release are not mutated.
-- This change does not create a production version tag or publish v0.2.1.
-- The repository neither solicits nor forbids unsolicited feedback and does not promise support.
+**Tech stack:** GitHub Actions, Python standard library, Git/gh CLI, CMake/Ninja,
+Android NDK, existing mGBA test and boundary tooling.
 
 ---
 
-### Task 1: Freeze the release contract and synthetic fixtures
-
-**Files:**
-- Create: `packaging/gba-wifi-link/release/contract-v1.json`
-- Create: `packaging/gba-wifi-link/release/templates/INSTALL-AND-USAGE.md.in`
-- Create: `packaging/gba-wifi-link/release/templates/SOURCE-AND-PROVENANCE.md.in`
-- Create: `packaging/gba-wifi-link/release/templates/RELEASE-BODY.md.in`
-- Create: `tools/gba_wifi_link_release/__init__.py`
-- Create: `tools/gba_wifi_link_release/model.py`
-- Create: `tools/gba_wifi_link_release/fixtures/v0.2.0-history.json`
-- Create: `tools/gba_wifi_link_release/fixtures/synthetic/release-notes/v9.8.7.md`
-- Create: `tools/gba_wifi_link_release/fixtures/synthetic/input/`
-- Create: `tools/gba_wifi_link_release/tests/test_contract.py`
-- Preserve: `packaging/gba-wifi-link/v0.2.0/`
-
-**Interfaces:**
-- Consumes: Current v0.2.0 release identities and the asset/member requirements in the delta spec.
-- Produces: `ReleaseContext`, `GateResult`, `ReleaseAsset`, `ReleaseSet`, `load_contract(path)`, and immutable synthetic/history fixtures for every later task.
-
-- [ ] **Step 1: Write the failing contract test**
-
-```python
-class ContractTest(unittest.TestCase):
-    def test_contract_freezes_public_and_archive_members(self):
-        contract = load_contract(CONTRACT)
-        self.assertEqual(contract.schema, 1)
-        self.assertEqual(len(contract.public_assets), 7)
-        self.assertEqual(contract.public_assets[-2:],
-                         ("RELEASE-PROVENANCE.json", "SHA256SUMS"))
-        self.assertEqual(set(contract.archive_members), {
-            "mgba_libretro_android.so", "gba-link-test.gba",
-            "gba-link-continuous.gba", "INSTALL-AND-USAGE.md",
-            "SOURCE-AND-PROVENANCE.md", "LICENSE",
-            "BUILD-PROVENANCE.json", "SHA256SUMS",
-        })
-```
-
-- [ ] **Step 2: Run the test and confirm the missing module/contract failure**
-
-Run: `python3 -m unittest tools.gba_wifi_link_release.tests.test_contract -v`
-
-Expected: FAIL because `model.py` and `contract-v1.json` are not implemented.
-
-- [ ] **Step 3: Add the canonical immutable model**
-
-```python
-@dataclass(frozen=True)
-class GateResult:
-    name: str
-    run_id: int
-    job_id: int
-    conclusion: str
-
-@dataclass(frozen=True)
-class ReleaseAsset:
-    name: str
-    size: int
-    sha256: str
-
-@dataclass(frozen=True)
-class ReleaseContext:
-    repository: str
-    tag: str
-    tag_object: str
-    commit: str
-    version: str
-    source_date_epoch: int
-    prerelease: bool
-    gates: tuple[GateResult, ...]
-
-@dataclass(frozen=True)
-class ReleaseSet:
-    context: ReleaseContext
-    assets: tuple[ReleaseAsset, ...]
-```
-
-- [ ] **Step 4: Write `contract-v1.json`, version-neutral templates, and public synthetic fixture bytes**
-
-Use the exact names/modes/scopes from the delta spec. Give synthetic inputs literal contents such as `synthetic core v9.8.7\n`; do not copy a commercial ROM, endpoint log, device name, address, or real save.
-
-- [ ] **Step 5: Record the live v0.2.0 historical fixture and prove the tracked tree still matches it**
-
-Run: `gh release view v0.2.0 --repo Aelvryx/mgba-wifi-link --json tagName,targetCommitish,isDraft,isPrerelease,assets`
-
-Then download into a fresh `mktemp -d`, verify standalone/internal `SHA256SUMS`, and store only public identities/hashes in `v0.2.0-history.json`.
-
-- [ ] **Step 6: Run the contract tests and historical-tree comparison**
-
-Run: `python3 -m unittest tools.gba_wifi_link_release.tests.test_contract -v`
-
-Expected: PASS; `git diff --exit-code -- packaging/gba-wifi-link/v0.2.0` is empty.
-
-- [ ] **Step 7: Commit the contract unit**
-
-```bash
-git add packaging/gba-wifi-link/release tools/gba_wifi_link_release
-git commit -m "release: freeze automated package contract"
-```
-
-### Task 2: Implement annotated-tag admission and reviewed release metadata
-
-**Files:**
-- Create: `tools/gba_wifi_link_release/admission.py`
-- Create: `tools/gba_wifi_link_release/render.py`
-- Create: `tools/gba_wifi_link_release/tests/test_admission.py`
-- Create: `tools/gba_wifi_link_release/tests/test_render.py`
-- Modify: `tools/gba_wifi_link_release/model.py`
-
-**Interfaces:**
-- Consumes: `ReleaseContext`, contract-v1, a local full Git checkout, exact workflow/gate JSON, and `packaging/gba-wifi-link/releases/{tag}/RELEASE-NOTES.md` where `{tag}` is `ReleaseContext.tag`.
-- Produces: `admit_release(repo: Path, tag: str, evidence: Mapping[str, object]) -> ReleaseContext`, `verify_remote_tag(context, repo: str) -> None`, and `render_release_body(context, notes: str) -> bytes`.
-
-- [ ] **Step 1: Write failing valid/invalid tag tests with temporary Git repositories**
-
-```python
-def test_annotated_reachable_tag_is_admitted(self):
-    repo = make_repo_with_annotated_tag("v9.8.7")
-    context = admit_release(repo, "v9.8.7", VALID_EVIDENCE)
-    self.assertEqual(context.version, "9.8.7")
-    self.assertTrue(context.prerelease)
-    self.assertNotEqual(context.tag_object, context.commit)
-```
-
-Cover lightweight tags, noncanonical names, off-master commits, missing notes, placeholders, conflicting version text, non-success gates, and tag-object/commit substitution.
-
-- [ ] **Step 2: Run admission tests and verify they fail**
-
-Run: `python3 -m unittest tools.gba_wifi_link_release.tests.test_admission -v`
-
-Expected: FAIL because `admission.py` does not exist.
-
-- [ ] **Step 3: Implement strict tag parsing and local Git verification**
-
-```python
-TAG_RE = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
-
-def require_annotated_tag(repo: Path, tag: str) -> tuple[str, str]:
-    if not TAG_RE.fullmatch(tag):
-        raise AdmissionError("TAG_FORMAT")
-    tag_object = git(repo, "rev-parse", f"refs/tags/{tag}")
-    if git(repo, "cat-file", "-t", tag_object) != "tag":
-        raise AdmissionError("TAG_NOT_ANNOTATED")
-    commit = git(repo, "rev-parse", f"refs/tags/{tag}^{{commit}}")
-    git(repo, "merge-base", "--is-ancestor", commit, "origin/master")
-    return tag_object, commit
-```
-
-- [ ] **Step 4: Implement exact protected-evidence and notes validation**
-
-Require the six canonical job names, `success` conclusions, the peeled commit, numeric run/job IDs, no unresolved `TBD`, `TODO`, angle-bracket placeholder, or generated-field override, and `v0.x => prerelease=true`.
-
-- [ ] **Step 5: Write and run release-body rendering tests**
-
-Assert UTF-8/LF output, stable identity order, exact notes preservation, generated tag/commit/workflow/asset sections, no placeholder, and no identity value supplied by notes.
-
-Run: `python3 -m unittest tools.gba_wifi_link_release.tests.test_render -v`
-
-- [ ] **Step 6: Implement deterministic rendering and remote-tag recheck inputs**
-
-`verify_remote_tag` must compare both `refs/tags/{context.tag}` and
-`refs/tags/{context.tag}^{commit}` with `context.tag_object` and
-`context.commit`; never accept only the peeled commit.
-
-- [ ] **Step 7: Run both modules and commit**
-
-```bash
-python3 -m unittest tools.gba_wifi_link_release.tests.test_admission tools.gba_wifi_link_release.tests.test_render -v
-git add tools/gba_wifi_link_release
-git commit -m "release: validate annotated release tags"
-```
-
-### Task 3: Implement canonical provenance and privacy validation
-
-**Files:**
-- Create: `tools/gba_wifi_link_release/provenance.py`
-- Create: `tools/gba_wifi_link_release/privacy.py`
-- Create: `tools/gba_wifi_link_release/tests/test_provenance.py`
-- Create: `tools/gba_wifi_link_release/tests/test_privacy.py`
-- Modify: `packaging/gba-wifi-link/release/contract-v1.json`
-
-**Interfaces:**
-- Consumes: `ReleaseContext`, declared sibling `ReleaseAsset` values, and rendered public text.
-- Produces: `canonical_json(value) -> bytes`, `build_provenance(context, siblings) -> bytes`, `release_provenance(context, payloads) -> bytes`, and `validate_public_tree(root, contract) -> None`.
-
-- [ ] **Step 1: Write failing provenance serialization tests**
-
-```python
-def test_canonical_json_is_sorted_compact_utf8_lf(self):
-    self.assertEqual(canonical_json({"z": 1, "a": "é"}),
-                     b'{"a":"\xc3\xa9","z":1}\n')
-```
-
-Assert schema `1`, exact fields, exact gate ordering, no archive self-hash in build provenance, and five payload hashes in release provenance.
-
-- [ ] **Step 2: Write failing allow-list and privacy-canary tests**
-
-Inject separate canaries for ROM/BIOS, save, raw input, log, absolute/private path, IPv4/IPv6/MAC, serial/nickname, commercial evidence, token/secret, symlink, and undeclared file. Assert only a stable category such as `PRIVACY_PATH` is returned, never the sensitive value.
-
-- [ ] **Step 3: Run both test modules and confirm failure**
-
-Run: `python3 -m unittest tools.gba_wifi_link_release.tests.test_provenance tools.gba_wifi_link_release.tests.test_privacy -v`
-
-- [ ] **Step 4: Implement canonical JSON and provenance builders**
-
-```python
-def canonical_json(value: object) -> bytes:
-    text = json.dumps(value, ensure_ascii=False, sort_keys=True,
-                      separators=(",", ":"), allow_nan=False)
-    return (text + "\n").encode("utf-8")
-```
-
-Validate lower-case 64-character SHA-256, nonnegative sizes, numeric IDs, successful required gates, and the acyclic field ownership from the spec.
-
-- [ ] **Step 5: Implement file/field allow-list privacy validation**
-
-Walk with `followlinks=False`, reject every non-regular declared file, compare the exact relative-name set, inspect only bounded UTF-8 public text/JSON, and scan binary inputs solely through declared name/type/hash checks.
-
-- [ ] **Step 6: Run all provenance/privacy tests and inspect failure messages**
-
-Run: `python3 -m unittest tools.gba_wifi_link_release.tests.test_provenance tools.gba_wifi_link_release.tests.test_privacy -v`
-
-Expected: PASS; test output contains category names but no canary value.
-
-- [ ] **Step 7: Commit the provenance/privacy unit**
-
-```bash
-git add packaging/gba-wifi-link/release/contract-v1.json tools/gba_wifi_link_release
-git commit -m "release: add canonical private-safe provenance"
-```
-
-### Task 4: Build and verify deterministic release packages
-
-**Files:**
-- Create: `tools/gba_wifi_link_release/packager.py`
-- Create: `tools/gba_wifi_link_release/verifier.py`
-- Create: `tools/gba_wifi_link_release/tests/test_packager.py`
-- Create: `tools/gba_wifi_link_release/tests/test_verifier.py`
-- Create: `tools/gba_wifi_link_release/cli.py`
-- Create: `tools/gba-wifi-link-release.py`
-
-**Interfaces:**
-- Consumes: admitted `ReleaseContext`, exact core/fixture/licence/template paths, contract-v1, and canonical gate/toolchain metadata.
-- Produces: `build_release(context, inputs, output_dir) -> ReleaseSet`, `verify_release(output_dir, context) -> ReleaseSet`, and CLI subcommands `admit`, `build`, `verify`, `render-body`.
-
-- [ ] **Step 1: Write failing package membership and normalization tests**
-
-Assert seven public assets, eight archive members, `0644` regular-file modes, lexicographic member order, commit-derived ZIP timestamp, Unix creator, no extra fields/comments, LF text, stable JSON, and exact internal/standalone checksum scopes.
-
-- [ ] **Step 2: Write failing unsafe input and clean-directory verifier tests**
-
-Cover missing/extra/duplicate/renamed entries, traversal, symlink, non-regular file, wrong mode, wrong digest, appended ZIP member, stale guide, mixed manifest, self-hash, and provenance/archive cycles.
-
-- [ ] **Step 3: Run package/verifier tests and confirm failure**
-
-Run: `python3 -m unittest tools.gba_wifi_link_release.tests.test_packager tools.gba_wifi_link_release.tests.test_verifier -v`
-
-- [ ] **Step 4: Implement deterministic ZIP writing**
-
-```python
-def zip_info(name: str, epoch: int) -> zipfile.ZipInfo:
-    stamp = time.gmtime(epoch)[:6]
-    info = zipfile.ZipInfo(name, stamp)
-    info.create_system = 3
-    info.external_attr = 0o100644 << 16
-    info.compress_type = zipfile.ZIP_DEFLATED
-    return info
-```
-
-Write members in contract order with `compresslevel=9`; reject epochs outside ZIP's representable range instead of silently clamping.
-
-- [ ] **Step 5: Implement the acyclic build order**
-
-Render guide/notice → build provenance → internal checksum → archive → release provenance over five payloads → standalone checksum over six preceding assets. Construct `ReleaseSet` only after `verify_release` succeeds.
-
-- [ ] **Step 6: Implement CLI parsing with atomic output-directory creation**
-
-Build into a sibling temporary directory created with `tempfile.mkdtemp`, verify it, then rename into a previously absent final directory. Refuse to merge with or overwrite an existing output directory.
-
-- [ ] **Step 7: Prove two clean runs are byte-identical**
-
-```bash
-tmp_a=$(mktemp -d)
-tmp_b=$(mktemp -d)
-python3 tools/gba-wifi-link-release.py build --fixture synthetic --output "$tmp_a/release"
-python3 tools/gba-wifi-link-release.py build --fixture synthetic --output "$tmp_b/release"
-diff -r --no-dereference "$tmp_a/release" "$tmp_b/release"
-```
-
-Expected: no diff; `verify` passes independently in both directories.
-
-- [ ] **Step 8: Run the complete release-tool suite and commit**
-
-```bash
-python3 -m unittest discover -s tools/gba_wifi_link_release/tests -p 'test_*.py' -v
-git add tools/gba-wifi-link-release.py tools/gba_wifi_link_release
-git commit -m "release: build deterministic Android bundles"
-```
-
-### Task 5: Implement a transactional, idempotent publisher
-
-**Files:**
-- Create: `tools/gba_wifi_link_release/github.py`
-- Create: `tools/gba_wifi_link_release/publisher.py`
-- Create: `tools/gba_wifi_link_release/tests/test_publisher.py`
-- Create: `tools/gba_wifi_link_release/tests/fake_gh.py`
-- Modify: `tools/gba_wifi_link_release/cli.py`
-
-**Interfaces:**
-- Consumes: verified `ReleaseSet`, rendered release body, `ReleaseContext`, and a `GitHubClient` implementation.
-- Produces: `publish_release(client, release_set, body) -> PublishResult`, `verify_existing_release(client, admitted_tag) -> ExistingReleaseResult`, CLI subcommands `publish` and `verify-existing`, and a real `GhClient` adapter whose subprocess boundary is replaceable in tests.
-
-- [ ] **Step 1: Define the client protocol and write the failing success-sequence test**
-
-```python
-class GitHubClient(Protocol):
-    def get_release(self, tag: str) -> RemoteRelease | None: ...
-    def create_draft(self, context: ReleaseContext, body: bytes) -> RemoteRelease: ...
-    def upload(self, release_id: int, path: Path) -> RemoteAsset: ...
-    def download_assets(self, release_id: int, output: Path) -> None: ...
-    def attest(self, paths: tuple[Path, ...]) -> None: ...
-    def publish(self, release_id: int) -> None: ...
-    def delete_draft(self, release_id: int) -> None: ...
-```
-
-Assert call order: get → create draft → seven uploads → download/read-back → attest → publish → final get/download.
-
-- [ ] **Step 2: Add failing fault and idempotency tests**
-
-Cover each upload index, metadata/hash/count mismatch, attestation failure, safe draft cleanup, ambiguous publish with exact/conflicting read-back, exact public rerun with zero mutations, conflicting public state, and an unrelated pre-existing draft.
-
-- [ ] **Step 3: Run publisher tests and confirm failure**
-
-Run: `python3 -m unittest tools.gba_wifi_link_release.tests.test_publisher -v`
-
-- [ ] **Step 4: Implement orchestration against the protocol**
-
-Never catch and downgrade `ReleaseConflict`. On pre-publication failure, delete only a draft whose ID/tag/target were created by the current operation. After an ambiguous publish result, query public state and compare the entire canonical model before returning success.
-
-- [ ] **Step 5: Implement `GhClient` with argument arrays, bounded JSON, and no shell interpolation**
-
-```python
-    def _run_release(self, *args: str) -> bytes:
-        return subprocess.run(
-            [self.gh, *args, "--repo", self.repository],
-            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            env=self.env,
-        ).stdout
-```
-
-Implement `_run_api(endpoint, ...)` separately: bind the repository in the REST
-endpoint path and never append `--repo` or `--output` to `gh api`. Stream a binary
-response into an already-opened no-follow regular destination. Use a parser-faithful
-fake that rejects unsupported flags and run one read-only live GET smoke before any
-external mutation. Parse JSON with duplicate-key rejection and bounded sizes.
-
-- [ ] **Step 6: Add the `publish` CLI subcommand and fake executable injection**
-
-Require an already verified release directory and `--repository Aelvryx/mgba-wifi-link`; accept `--gh-bin` only in test mode. Do not permit package building from the publish command.
-
-- [ ] **Step 7: Run publisher and full tool suites, then commit**
-
-```bash
-python3 -m unittest tools.gba_wifi_link_release.tests.test_publisher -v
-python3 -m unittest discover -s tools/gba_wifi_link_release/tests -p 'test_*.py' -v
-git add tools/gba_wifi_link_release
-git commit -m "release: add transactional GitHub publisher"
-```
-
-- [ ] **Step 8: Add first-run evidence verification before rebuild**
-
-Given an existing public release, download exactly seven assets into a fresh
-directory, verify exclusive manifests/archive/provenance/body/tag/target/
-classification and exact core/archive attestations, then return read-only success.
-Use two fixture attempts with distinct run/job IDs to prove attempt two does not
-regenerate or compare volatile package bytes. Any discrepancy is a preserved
-conflict and performs zero mutations.
-
-### Task 6: Make protected CI reusable and add policy tests
-
-**Files:**
-- Modify: `.github/workflows/gba-wifi-link-ci.yml`
-- Create: `tools/gba_wifi_link_release/workflow_policy.py`
-- Create: `tools/gba_wifi_link_release/tests/test_workflow_policy.py`
-- Modify: `tools/gba_wifi_link_release/fixtures/v0.2.0-history.json`
-
-**Interfaces:**
-- Consumes: Existing six-job CI behavior and release contract.
-- Produces: A reusable `workflow_call` entry that preserves `push: master` and `pull_request`, a fixed Android artifact/build-metadata handoff, and `validate_workflow_policy(repo) -> None`.
-
-- [ ] **Step 1: Write failing source-policy tests before editing YAML**
-
-Assert the original six job IDs/names/triggers remain, `workflow_call` exists, all jobs default to `contents: read`, the Android job uploads only the expected core/metadata, and third-party `uses:` entries on artifact/release paths are full 40-hex SHAs.
-
-- [ ] **Step 2: Record the current normalized CI behavioral baseline**
-
-Capture job names, CMake flags, focused targets/regex, sanitizer environments, fixture commands, NDK/toolchain versions, boundary checks, and upstream exception in the history fixture. Test that refactoring preserves this normalized baseline.
-
-- [ ] **Step 3: Run policy tests and confirm the missing reusable contract failure**
-
-Run: `python3 -m unittest tools.gba_wifi_link_release.tests.test_workflow_policy -v`
-
-- [ ] **Step 4: Add `workflow_call` without weakening existing triggers**
-
-Keep `push.branches: [master]` and `pull_request`. Add reusable inputs only for exact source/ref metadata that cannot be derived safely; do not accept arbitrary commands, build flags, runner labels, or publish permissions.
-
-- [ ] **Step 5: Upload the inspected Android core and canonical build metadata**
-
-Generate metadata after `file` and boundary checks. Upload only `mgba_libretro.so` plus canonical JSON using a reviewed full-SHA action; set a short bounded retention and `if-no-files-found: error`.
-
-- [ ] **Step 6: Resolve and record full third-party action SHAs**
-
-Resolve the selected action tags with explicit calls such as
-`gh api repos/actions/checkout/git/ref/tags/v6`,
-`gh api repos/actions/upload-artifact/git/ref/tags/v4`,
-`gh api repos/actions/download-artifact/git/ref/tags/v5`, and
-`gh api repos/actions/attest-build-provenance/git/ref/tags/v3`; peel annotated
-action tags when needed. Record the resulting commit and human version in
-contract/provenance tests; reject mutable `@vN` syntax on the
-artifact-producing or privileged path.
-
-- [ ] **Step 7: Run policy tests plus the six existing jobs locally where applicable**
-
-Run the existing configure/build/test commands from `.github/workflows/gba-wifi-link-ci.yml` without changing their target counts or expected pinned exception.
-
-- [ ] **Step 8: Commit the reusable validation unit**
-
-```bash
-git add .github/workflows/gba-wifi-link-ci.yml tools/gba_wifi_link_release
-git commit -m "ci: expose protected release validation"
-```
-
-### Task 7: Add the untrusted intake and protected release controller
-
-**Files:**
-- Create: `.github/workflows/gba-wifi-link-release-intake.yml`
-- Create: `.github/workflows/gba-wifi-link-release-controller.yml`
-- Remove: `.github/workflows/gba-wifi-link-release.yml`
-- Modify: `tools/gba_wifi_link_release/tests/test_workflow_policy.py`
-- Modify: `tools/gba_wifi_link_release/workflow_policy.py`
-- Modify: `tools/gba_wifi_link_release/cli.py`
-- Modify: `packaging/gba-wifi-link/release/contract-v1.json`
-
-**Interfaces:**
-- Consumes: reusable protected CI, Android artifact contract, release CLI, `workflow_run` intake metadata, and contract-v1.
-- Produces: a read-only tag intake plus a protected-default-branch controller that independently admits, checks existing state, validates, dual-builds, packages, attests, stages, verifies, and automatically publishes.
-
-- [ ] **Step 1: Write the adversarial trust-boundary tests**
-
-Assert the intake alone has `push.tags: ["v*"]`, `contents: read`, no environment,
-secret, checkout, write permission, dispatch or publisher. Assert the controller
-alone has `workflow_run` for the exact intake name, is the sole owner of all write
-permissions, and rejects candidate-controlled event fields until it independently
-resolves the remote annotated tag and protected ancestry.
-
-- [ ] **Step 2: Run the policy test and retain the unsafe-single-workflow RED result**
-
-Run: `python3 -m unittest tools.gba_wifi_link_release.tests.test_workflow_policy -v`
-
-Expected: FAIL because the current tag-sourced workflow contains its own admission
-and write-capable publisher.
-
-- [ ] **Step 3: Implement the read-only intake and trusted controller correlation**
-
-The intake emits no trusted artifact; its completion is only a wake-up signal. The
-controller reads the triggering run through bounded GitHub metadata, requires
-`event=push`, exact canonical repository, canonical tag ref and one positive run
-identity, then independently fetches the remote tag and `origin/master`. Fail for
-missing, duplicate, non-tag, lightweight, moved, deleted or off-history identity
-before source checkout.
-
-- [ ] **Step 4: Separate control and source trees**
-
-Checkout protected controller tools/contracts at the controller commit into
-`control/`. Only after admission, checkout the peeled source into `source/`.
-Execute release Python from `control/`; pass `source/` only as build input and
-validated release-note/template data. Record actual intake event `push`, source
-tag/commit, controller workflow/ref/commit and first-run run/job IDs.
-
-- [ ] **Step 5: Add early existing-release verification**
-
-Before protected CI or builds, use the trusted control tool to inspect the tag's
-release. Absence continues. A complete public release is downloaded and verified
-against retained manifests/provenance/body/attestations and exits read-only.
-Draft/conflicting/malformed state fails without mutation. Do not generate new
-package bytes from the rerun's job IDs.
-
-- [ ] **Step 6: Compose protected validation and two independent Android builds**
-
-Call the protected reusable workflow against the peeled source commit from the
-trusted controller. Run a second clean build, compare `sha256sum` and bytes, and
-record exact source/controller/build identities before admitting one core.
-
-- [ ] **Step 7: Seal packaging, attestation and publication**
-
-Build twice from trusted tooling plus admitted source/data, verify recursive byte
-identity, and seal one canonical handoff. The controller-owned publisher downloads
-only that handoff, verifies it, rechecks tag identity, issues/verifies core and
-archive attestations, transactionally publishes, and re-downloads the seven-asset
-public set. It performs no checkout, render or build.
-
-- [ ] **Step 8: Add mutation-resistant failure and rerun fixtures**
-
-Test a malicious off-history tag that replaces the intake with a publisher;
-missing/forged workflow-run fields; moved tag; missing gate; mismatched build;
-package corruption; attestation failure; conflicting release; and an exact second
-attempt with different job IDs. Prove only trusted controller code can mutate and
-there is no second human gate.
-
-- [ ] **Step 9: Run workflow/tool tests and commit**
-
-```bash
-python3 -m unittest tools.gba_wifi_link_release.tests.test_workflow_policy -v
-python3 -m unittest discover -s tools/gba_wifi_link_release/tests -p 'test_*.py' -v
-git add .github/workflows packaging/gba-wifi-link/release tools/gba_wifi_link_release
-git commit -m "ci: publish from a protected release controller"
-```
-
-### Task 8: Protect release tags and document the maintainer contract
-
-**Files:**
-- Create: `.github/rulesets/gba-wifi-link-release-tags.json`
-- Create: `tools/gba_wifi_link_release/tag_policy.py`
-- Create: `tools/gba_wifi_link_release/tests/test_tag_policy.py`
-- Create: `docs/gba-wifi-link-release.md`
-- Modify: `tools/gba-wifi-link-release.py`
-
-**Interfaces:**
-- Consumes: GitHub repository ruleset JSON/API and the approved immutable-tag policy.
-- Produces: `validate_tag_ruleset(actual, expected) -> None`, CLI `verify-tag-policy`, tracked exact policy JSON, and maintainer release/recovery instructions.
-
-- [ ] **Step 1: Write failing ruleset tests**
-
-Assert repository target, active enforcement, `refs/tags/v*` inclusion, no broad exclusion, creation allowed, update/deletion blocked, and an empty or explicitly minimal bypass list. Reject drift in any field.
-
-- [ ] **Step 2: Run the test and confirm the missing policy failure**
-
-Run: `python3 -m unittest tools.gba_wifi_link_release.tests.test_tag_policy -v`
-
-- [ ] **Step 3: Add exact tracked policy JSON and validator**
-
-Canonicalize only documented GitHub-generated IDs away; compare all semantic fields exactly and print a bounded JSON-pointer-style difference without dumping tokens or unrelated repository settings.
-
-- [ ] **Step 4: Write maintainer instructions**
-
-Document: prepare exact-version notes, confirm the runtime qualification
-decision, set `release_tag` to the reviewed concrete version, set
-`release_commit="$(git rev-parse origin/master)"`, create the annotated tag with
-`git tag -a "$release_tag" -m "GBA Wi-Fi Link $release_tag" "$release_commit"`,
-push that tag, and then observe automation only. Explain failure, rerun,
-immutable correction, and no production tag during this implementation.
-
-- [ ] **Step 5: Add exact local live-policy verification without a retained high-scope secret**
-
-Use command-specific read-only `gh api` list-then-detail requests; select by exact
-tracked name, source and target, require visible `bypass_actors`, and fail on
-missing/duplicate/drifted state. The focused Task 11 application uses the
-maintainer's authenticated, repository-authorized local credential for exact
-read-back. Do not store a ruleset-write-visible token in tag or release workflow
-secrets merely to perform continuous bypass auditing. Source/fixture policy tests
-remain the permanent CI guard.
-
-- [ ] **Step 6: Run tag-policy tests and commit before applying external settings**
-
-```bash
-python3 -m unittest tools.gba_wifi_link_release.tests.test_tag_policy -v
-git add .github/rulesets docs/gba-wifi-link-release.md tools/gba-wifi-link-release.py tools/gba_wifi_link_release
-git commit -m "release: define immutable tag policy"
-```
-
-Do not mutate the live ruleset until focused review approves this commit.
-
-### Task 9: Align product guidance and roadmap with maintainable-alpha policy
-
-**Files:**
-- Modify: `README.md`
-- Modify: `ROADMAP.md`
-- Modify: `SUPPORT.md`
-- Modify: `.github/ISSUE_TEMPLATE/bug.yml`
-- Modify: `.github/ISSUE_TEMPLATE/compatibility.yml`
-- Modify: `packaging/gba-wifi-link/release/templates/INSTALL-AND-USAGE.md.in`
-- Modify: `tools/gba-wifi-link-boundary-policy.json`
-- Modify: `tools/test-audit-gba-wifi-link-boundary.py`
-- Modify: `tools/audit-gba-wifi-link-boundary.py`
-
-**Interfaces:**
-- Consumes: Fully automated immutable release contract and neutral-feedback decision.
-- Produces: Current public/maintainer wording, updated roadmap/milestone direction, and permanent boundary checks.
-
-- [ ] **Step 1: Add failing documentation/boundary policy fixtures**
-
-Require “maintainable alpha,” issue #21 before #22/#23, no issue #20 release gate, no request for reports, no prohibition on feedback, no support promise, and no statement that release publication requires a manual Publish action.
-
-- [ ] **Step 2: Run boundary tests and confirm the old supportable/feedback wording fails**
-
-Run: `python3 tools/test-audit-gba-wifi-link-boundary.py`
-
-- [ ] **Step 3: Update README, roadmap, support, and issue templates**
-
-Keep issue channels available but passive. Change v0.2.1 to “Maintainable alpha,” make #21/#22/#23 its committed outcomes, defer #20 outside the exit gate, and retain honest alpha/upstream/privacy limits.
-
-- [ ] **Step 4: Update current release guidance and permanent audit policy**
-
-Describe future tag automation separately from historical v0.2.0 correction. Allow protocol-v2 terminology only in technical compatibility contexts and retain canonical GBA Wi-Fi Link product names.
-
-- [ ] **Step 5: Run docs/boundary tests and search for contradictions**
-
-```bash
-python3 tools/test-audit-gba-wifi-link-boundary.py
-python3 tools/audit-gba-wifi-link-boundary.py
-rg -n "supportable alpha|issue #20.*gate|solicit.*feedback|manual.*Publish" README.md ROADMAP.md SUPPORT.md .github packaging/gba-wifi-link/release docs
-```
-
-Expected: only explicitly historical/specification discussions remain.
-
-- [ ] **Step 6: Commit the current guidance unit**
-
-```bash
-git add README.md ROADMAP.md SUPPORT.md .github/ISSUE_TEMPLATE packaging/gba-wifi-link/release tools/gba-wifi-link-boundary-policy.json tools/audit-gba-wifi-link-boundary.py tools/test-audit-gba-wifi-link-boundary.py
-git commit -m "docs: align maintainable alpha release policy"
-```
-
-### Task 10: Run complete local validation and open the working draft PR
-
-**Files:**
-- Modify: `.github/workflows/gba-wifi-link-ci.yml` (add release-tool tests to fixture job)
-- Modify: `openspec/changes/automate-release-artifacts-provenance/tasks.md`
-- Create later: `openspec/changes/automate-release-artifacts-provenance/verify.md`
-
-**Interfaces:**
-- Consumes: Tasks 1–9 implementation.
-- Produces: One reviewable exact head, one working draft PR, protected evidence, and no runtime/production release mutation.
-
-- [ ] **Step 1: Add all release-tool suites to the fixture/reproducibility job**
-
-Run `python3 -m unittest discover -s tools/gba_wifi_link_release/tests -p 'test_*.py' -v` and two-clean-directory synthetic package comparison in protected CI.
-
-- [ ] **Step 2: Run local release/tooling verification**
-
-```bash
-python3 -m unittest discover -s tools/gba_wifi_link_release/tests -p 'test_*.py' -v
-python3 tools/test-audit-gba-wifi-link-boundary.py
-python3 tools/audit-gba-wifi-link-boundary.py
-openspec validate automate-release-artifacts-provenance --strict
-git diff --check
-```
-
-- [ ] **Step 3: Run focused normal and sanitizer suites**
-
-Execute the exact normal, ASan/UBSan with leak detection, and TSan commands from `.github/workflows/gba-wifi-link-ci.yml`; require every applicable focused executable to pass.
-
-- [ ] **Step 4: Run complete suite, fixtures, helpers, and dual Android builds**
-
-Run the complete applicable suite with the separately checked pinned upstream exception, byte-identical fixture rebuild, analyzer/helper tests, and two clean NDK `27.2.12479018` Android builds compared by `sha256sum` and `cmp`.
-
-- [ ] **Step 5: Prove no runtime source changed**
-
-```bash
-git diff --name-only "$(git merge-base HEAD origin/master)"..HEAD -- include src \
-  ':!src/platform/libretro/CMakeLists.txt'
-```
-
-Expected: no GBA/runtime implementation files. If runtime behavior changed, stop and define proportionate physical qualification before tagging or landing.
-
-- [ ] **Step 6: Commit final local corrections and open one draft PR**
-
-```bash
-git add .github/workflows/gba-wifi-link-ci.yml openspec/changes/automate-release-artifacts-provenance
-git commit -m "test: gate automated release workflow"
-git push -u origin agent/automate-release-artifacts-provenance
-gh pr create --draft --repo Aelvryx/mgba-wifi-link --base master --head agent/automate-release-artifacts-provenance
-```
-
-- [ ] **Step 7: Wait for all protected checks on the exact PR head**
-
-Run: `pr_number="$(gh pr view --repo Aelvryx/mgba-wifi-link --json number --jq .number)"; gh pr checks --watch --repo Aelvryx/mgba-wifi-link "$pr_number"`
-
-Record run/job IDs and exact head SHA; keep the PR draft.
-
-### Task 11: Correct the pre-mutation trust, retry and adapter blockers
-
-**Files:**
-- Create: `.github/workflows/gba-wifi-link-release-intake.yml`
-- Create: `.github/workflows/gba-wifi-link-release-controller.yml`
-- Remove: `.github/workflows/gba-wifi-link-release.yml`
-- Remove: `.github/workflows/gba-wifi-link-release-governance.yml`
-- Modify: `packaging/gba-wifi-link/release/contract-v1.json`
-- Modify: `tools/gba_wifi_link_release/{admission,cli,github,model,provenance,publisher,render,workflow_policy}.py`
-- Modify: `tools/gba_wifi_link_release/tests/`
-- Modify: `docs/gba-wifi-link-release.md`
-
-**Interfaces:**
-- Consumes: completed deterministic package/publisher units and the Task 11 HOLD review.
-- Produces: supported GitHub CLI commands, first-run existing-release verification, protected-controller publication, and a clean new pre-mutation review.
-
-- [ ] **Step 1: Commit the reviewed OpenSpec correction before code**
-
-Run strict validation and record the review blockers: tag-sourced privilege,
-volatile rerun IDs, unsupported `gh api` flags, infeasible private rehearsal, and
-unsafe persistent governance credential.
-
-- [ ] **Step 2: Fix the real GitHub adapter test-first**
-
-Add a parser-faithful fake that rejects `gh api --repo` and `--output`, plus a
-read-only live GET smoke. Split REST/release/attestation command construction and
-stream downloads to safe open destinations. Run publisher-focused and full tool
-suites; commit this independent correction.
-
-- [ ] **Step 3: Add read-only existing-release verification test-first**
-
-Create two full attempt fixtures whose source/tag are identical but run/job IDs
-differ. Require attempt two to download and validate attempt one's seven assets,
-body, provenance and exact attestations before any build or mutation. Test every
-conflict and missing-evidence path; commit the verifier.
-
-- [ ] **Step 4: Replace the tag-sourced publisher with intake/controller workflows**
-
-Write adversarial policy tests first, then implement the read-only intake and
-default-branch `workflow_run` controller, separate `control/` from `source/`, and
-move every write permission into the controller. Delete the unsafe single
-workflow and the high-scope governance-secret workflow. Commit the trust-boundary
-unit.
-
-- [ ] **Step 5: Bind controller/source provenance and exact attestations**
-
-Record actual intake event `push`, released source/tag, protected controller
-workflow/ref/commit, first-run jobs and exact signer/source digest. Update schema,
-golden vectors, body rendering, handoff verification and attestation checks as one
-reviewable commit.
-
-- [ ] **Step 6: Run complete local and protected validation on the corrected head**
-
-Run release suites, boundary/audit, strict OpenSpec, syntax, two clean packages,
-no-runtime diff, helpers/analyzers, then push the same draft PR and require all six
-protected jobs on its exact head. The release workflows remain disabled from any
-production tag because no new production tag is created.
-
-- [ ] **Step 7: Obtain a fresh whole-boundary pre-mutation review**
-
-Review tag-source adversarial behavior, controller ownership, real CLI adapter,
-existing-release rerun, package/provenance DAG, privacy, handoff, attestation,
-ruleset, exact protected evidence and rehearsal generator design. Address every
-Critical/Important finding before any live setting or repository mutation.
-
-### Task 12: Apply policy and rehearse the remote transaction in isolation
-
-**Files:**
-- Create: `tools/gba_wifi_link_release/rehearsal.py`
-- Create: `tools/gba_wifi_link_release/tests/test_rehearsal.py`
-- Create: `docs/automated-release-rehearsal.md`
-- Modify: release implementation/tests only for reviewed rehearsal findings
-
-**Interfaces:**
-- Consumes: clean pre-mutation review, corrected draft-PR head, local authenticated GitHub authority.
-- Produces: exact production tag-ruleset read-back, synthetic public disposable end-to-end evidence, and verified destructive cleanup.
-
-- [ ] **Step 1: Apply and read back only the production `v*` tag ruleset**
-
-Resolve repository and current rulesets read-only. Create/update only the exact
-tracked ruleset, then validate list and detail with the authenticated local
-credential including visible empty bypass actors. Do not store that credential in
-Actions and do not create a production release tag.
-
-- [ ] **Step 2: Preflight public rehearsal and destructive cleanup authority**
-
-Confirm the owner is `Aelvryx`, public repositories support the pinned attestation
-action, the local credential can delete an exactly named repository, and no target
-already exists. Derive a non-empty decimal protected-run ID and exact name
-`Aelvryx/mgba-wifi-link-release-rehearsal-${rehearsal_run_id}`. Stop before
-creation if any precondition is unproved.
-
-- [ ] **Step 3: Generate and independently review the rehearsal-only tree**
-
-Test-first, copy a clean tracked tree and replace only allow-listed canonical
-repository/signer/policy values for the exact disposable name. Install tracked
-synthetic `v9.8.7` notes, retain strict tag syntax, assert the generated diff path
-and token counts, and prove the production tree still rejects all noncanonical
-repository overrides.
-
-- [ ] **Step 4: Create and protect the exact public disposable repository**
-
-Create it with issues/wiki disabled, initialize explicit `master`, read back
-owner/name/public visibility/default branch, apply the transformed immutable tag
-ruleset, and verify emptiness/protection before pushing the reviewed tree.
-
-- [ ] **Step 5: Exercise automatic publication and independent download**
-
-Push the transformed protected master, then one annotated synthetic `v9.8.7` tag.
-Let intake/controller automation run. Download all seven assets freshly and verify
-manifests, archive, source/controller provenance, attestations, tag/commit, body,
-target and prerelease state.
-
-- [ ] **Step 6: Prove new-ID rerun idempotence and isolated failures**
-
-Rerun the intake/controller for the immutable tag and prove the second run exits
-through original-evidence verification with zero mutation. Exercise fake/isolated
-partial upload, conflicting body/hash, ambiguous publish response, failed
-attestation and safe draft cleanup. Attempt update/deletion only on the disposable
-tag and confirm its rules reject them.
-
-- [ ] **Step 7: Record bounded evidence and privacy/transparency consequences**
-
-Record only disposable repository/run IDs, public synthetic hashes, transitions,
-conclusions and cleanup identifiers. Scan repository, artifacts, attestations and
-release for every prohibited canary. State that synthetic attestation transparency
-entries may remain public after repository deletion.
-
-- [ ] **Step 8: Delete and prove absence of the exact target**
-
-Re-resolve owner/name/visibility immediately before deletion, delete that exact
-repository, and require subsequent repository/release/tag reads to return absent.
-Record destructive unrecoverable cleanup; do not use wildcards or environment-
-expanded destructive targets.
-
-- [ ] **Step 9: Commit rehearsal evidence and rerun protected checks**
-
-Commit only bounded evidence and any reviewed corrections, push the same draft
-PR, and require all six protected jobs on the new exact head.
-
-### Task 13: Verify, archive, land, and close issue #21
-
-**Files:**
-- Create: `openspec/changes/automate-release-artifacts-provenance/verify.md`
-- Create: `openspec/changes/automate-release-artifacts-provenance/retrospective.md`
-- Create through sync: `openspec/specs/automated-release-provenance/spec.md`
-- Modify through sync: `openspec/specs/public-alpha-distribution/spec.md`
-- Archive: `openspec/changes/archive/$(date -u +%F)-automate-release-artifacts-provenance/`
-
-**Interfaces:**
-- Consumes: Complete task ledger, independent review, exact protected evidence, ruleset read-back, and rehearsal record.
-- Produces: Verified/archived authoritative capabilities, merged protected master, issue #21 closure, and an enabled workflow awaiting a future approved production tag.
-
-- [ ] **Step 1: Complete formal verification**
-
-Use `$openspec-verify-change`; map every requirement/scenario to its test, workflow evidence, policy read-back, or rehearsal result. Explicitly record the no-runtime-diff proof and why no device gameplay was manufactured.
-
-- [ ] **Step 2: Complete the retrospective**
-
-Record dual-build reproducibility, remote transaction outcomes, destructive cleanup, workflow/schema friction, review findings, remaining runner/signing boundaries, and non-blocking follow-ups.
-
-- [ ] **Step 3: Sync both capability deltas**
-
-Use `$openspec-sync-specs`; verify the new `automated-release-provenance` spec and renamed/modified neutral-feedback requirements under `public-alpha-distribution` are exact.
-
-- [ ] **Step 4: Archive the change and update path-based audit policy**
-
-Use `$openspec-archive-change`, classify the archive as historical where required, and run:
-
-```bash
-openspec validate --all --strict
-python3 tools/test-audit-gba-wifi-link-boundary.py
-python3 tools/audit-gba-wifi-link-boundary.py
-git diff --check
-```
-
-- [ ] **Step 5: Push the immutable archive head and wait for exact-head checks**
-
-Keep the same PR draft. Require the six protected jobs and release-tool policy tests to pass on the archive head; obtain final review only for any post-review semantic change.
-
-- [ ] **Step 6: Verify production safety before readiness**
-
-Confirm the real `v*` trigger and tag ruleset are enabled, no production version tag/release was created, v0.2.0 is unchanged, and no disposable rehearsal repository/tag/release remains.
-
-- [ ] **Step 7: Make the existing PR ready and merge last**
-
-```bash
-pr_number="$(gh pr view --repo Aelvryx/mgba-wifi-link --json number --jq .number)"
-gh pr ready --repo Aelvryx/mgba-wifi-link "$pr_number"
-gh pr merge --repo Aelvryx/mgba-wifi-link "$pr_number" --squash --delete-branch
-```
-
-- [ ] **Step 8: Verify merged master and close issue #21**
-
-Fetch `origin/master`, confirm the merge commit/tree, rerun read-only schema/ruleset checks, and close issue #21 with the merged commit, protected run, rehearsal evidence, and the statement that the next approved annotated tag will publish fully automatically.
-
-- [ ] **Step 9: Commit-point note**
-
-No commit follows the protected merge. Any later release notes and production version tag belong to that release's own reviewed preparation, not this implementation change.
+## Task 1: Remove the invented trust-controller scope
+
+- [ ] Delete `.github/workflows/gba-wifi-link-release-governance.yml` and
+  `.github/rulesets/gba-wifi-link-release-tags.json`.
+- [ ] Delete `tag_policy.py`, its tests, and ruleset fixtures.
+- [ ] Remove controller/intake, ruleset credential/environment, disposable public
+  rehearsal, and hostile-tag policy from release documentation and tooling.
+- [ ] Confirm no production tag, release, environment, secret, or ruleset is
+  mutated.
+- [ ] Commit the scope correction as one reviewable deletion-heavy unit.
+
+## Task 2: Simplify provenance to the requested boundary
+
+- [ ] Add failing tests showing build/release provenance records the trusted tag
+  event, exact source, first-run gates/builds, toolchain, configuration, and assets
+  without controller or signed-attestation fields.
+- [ ] Remove controller/signer/attestation fields from the contract, model,
+  canonical JSON, body/source rendering, privacy allow-list, and retained parser.
+- [ ] Regenerate golden fixtures deliberately and prove package inventories,
+  checksum scopes, and deterministic bytes remain exact.
+- [ ] Run admission, contract, packager, provenance, render, privacy, resource, and
+  verifier suites.
+- [ ] Commit the provenance simplification.
+
+## Task 3: Simplify the GitHub publication boundary
+
+- [ ] Add failing tests for publication and exact rerun without any attestation
+  API call or signed evidence.
+- [ ] Remove attestation types/commands/verification from the GitHub client,
+  publisher, existing-release verifier, CLI, fake, and tests.
+- [ ] Preserve supported command-specific `gh api`/`gh release` syntax, bounded
+  duplicate-safe JSON, streaming no-follow downloads, exact remote read-back,
+  private-draft cleanup, ambiguous-response handling, and no public replacement.
+- [ ] Run focused publisher/rerun tests and the full release-tool suite.
+- [ ] Commit the publication simplification.
+
+## Task 4: Reduce the workflow to one trusted tag path
+
+- [ ] First make workflow-policy tests express only the approved contract:
+  canonical tag trigger; no dispatch/manual approval; exact tagged source;
+  protected six-job validation; two independent matching Android builds;
+  deterministic double package; sealed handoff; final automatic publisher.
+- [ ] Simplify `.github/workflows/gba-wifi-link-release.yml` accordingly.
+- [ ] Keep default/read-only permissions on non-publisher jobs and only
+  `contents: write` on the publisher. Remove `id-token`, `attestations`,
+  controller correlation, governance environment, and ruleset API calls.
+- [ ] Run mutation tests for missing gates, mismatched source/build/package,
+  corrupted handoff, moved tag, conflicting release, and manual-gate introduction.
+- [ ] Run workflow-policy and full release-tool suites.
+- [ ] Commit the trusted-tag workflow.
+
+## Task 5: Align current documentation and project tracking
+
+- [ ] Update `docs/gba-wifi-link-release.md` to the complete maintainer action:
+  prepare exact notes, create an annotated tag on intended `master`, push it.
+- [ ] Document ordinary failures, exact read-only reruns, and correction by new
+  version/tag; do not describe hostile tags, controllers, audit secrets,
+  disposable repositories, or attestations.
+- [ ] Keep README/ROADMAP/SUPPORT/issue forms neutral toward feedback and avoid a
+  support promise.
+- [ ] Update boundary-policy expectations and negative documentation tests.
+- [ ] After the implementation is locally green, update issue #21/milestone once.
+- [ ] Commit documentation and tracking changes.
+
+## Task 6: Run complete local verification
+
+- [ ] Run:
+
+  ```bash
+  python3 -m unittest discover -s tools/gba_wifi_link_release/tests -p 'test_*.py' -v
+  python3 tools/test-audit-gba-wifi-link-boundary.py
+  python3 tools/audit-gba-wifi-link-boundary.py
+  openspec validate automate-release-artifacts-provenance --strict
+  git diff --check
+  ```
+
+- [ ] Build the synthetic release twice in distinct clean temporary directories,
+  compare recursively and byte-compare the archive, then verify both sets.
+- [ ] Run Python compile checks, shell syntax checks, and JSON/YAML duplicate-safe
+  parsing for changed release surfaces.
+- [ ] Compare `origin/master...HEAD` and prove no runtime source under `include/`,
+  `src/gba/`, or product execution paths changed.
+- [ ] Record exact local evidence in the task ledger.
+
+## Task 7: Run protected validation on PR #31
+
+- [ ] Push the simplified commits to the existing draft PR #31.
+- [ ] Require all six protected checks on the exact head: focused normal,
+  ASan/UBSan, TSan, complete suite, fixture/tooling, and Android ARM64 build.
+- [ ] If a check fails, inspect its exact log and fix only a demonstrated defect;
+  do not add requirements outside this specification.
+- [ ] Perform one inline diff/self-review covering tag admission, dual builds,
+  deterministic package, privacy, transaction/rerun, workflow permissions, and
+  no-runtime-change proof.
+
+## Task 8: Close the OpenSpec cycle and merge
+
+- [ ] Run `openspec-verify-change` and write `verify.md` from fresh evidence.
+- [ ] Write `retrospective.md` while context is hot, explicitly recording the
+  discarded hostile-tag/subagent expansion and the final proportional scope.
+- [ ] Sync the delta specs, archive the change, and run strict validation again.
+- [ ] Push final artifact/archive commits to PR #31 and require the exact final
+  head checks.
+- [ ] Mark PR #31 ready and squash-merge through protected `master`.
+- [ ] Remove the worktree/branch only after merge and confirm v0.2.0 is unchanged.
+
+## Deferred dogfood equivalence
+
+No disposable public repository or production tag is created for rehearsal.
+Equivalent automated evidence is provided by the parser-faithful GitHub fake,
+publisher transaction/rerun suites, two clean synthetic packages, the protected
+workflow-policy tests, and the exact Android/protected CI jobs. The first future
+maintainer-approved tag is the first live use.

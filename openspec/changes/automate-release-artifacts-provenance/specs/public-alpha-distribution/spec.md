@@ -68,11 +68,10 @@ from the existence of issue templates or a public release.
 ### Requirement: Future alpha releases use immutable automated publication
 
 After the automated release-provenance capability is enabled, every new public
-Android alpha release SHALL be generated and published from its approved
-annotated tag through the read-only intake and protected default-branch release
-controller. The special v0.2.0 in-place documentation correction SHALL remain
-historical and MUST NOT authorize future asset replacement under an existing
-tag.
+Android alpha release SHALL be generated and published by the trusted tag
+workflow from its approved annotated tag. The special v0.2.0 in-place
+documentation correction SHALL remain historical and MUST NOT authorize future
+asset replacement under an existing tag.
 
 #### Scenario: A future alpha is released
 - **WHEN** a maintainer pushes an approved new release tag after the automated
